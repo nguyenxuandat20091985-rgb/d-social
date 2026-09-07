@@ -7,21 +7,19 @@ const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVIC
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   try {
-    const webhook = payos.webhooks.verify(req.body)
-    const data = webhook.data || webhook
+    const verified = await payos.webhooks.verify(req.body)
+    const data = verified.data || verified
     const orderCode = Number(data.orderCode)
-    const success = webhook.code === '00' || webhook.success === true
     if (!Number.isInteger(orderCode)) return res.status(400).json({ error: 'Invalid order code' })
-
+    const success = verified.code === '00' || verified.success === true || data.code === '00'
     const { data: tx, error: findError } = await admin.from('wallet_transactions').select('id,user_id,amount,type,status').eq('order_code', orderCode).maybeSingle()
     if (findError) throw findError
     if (!tx) return res.status(404).json({ error: 'Order not found' })
     if (tx.status === 'paid') return res.status(200).json({ received: true, duplicate: true })
-
     const nextStatus = success ? 'paid' : 'failed'
-    const { error: updateError } = await admin.from('wallet_transactions').update({ status: nextStatus, provider_reference: String(data.reference || data.transactionDateTime || orderCode), paid_at: success ? new Date().toISOString() : null }).eq('id', tx.id).eq('status', 'pending')
+    const { data: updated, error: updateError } = await admin.from('wallet_transactions').update({ status: nextStatus, provider_reference: String(data.reference || data.transactionDateTime || orderCode), paid_at: success ? new Date().toISOString() : null }).eq('id', tx.id).eq('status', 'pending').select('id').maybeSingle()
     if (updateError) throw updateError
-
+    if (!updated) return res.status(200).json({ received: true, duplicate: true })
     if (success && tx.type === 'vip_purchase') {
       const { data: profile, error: profileError } = await admin.from('profiles').select('vip_expires_at').eq('id', tx.user_id).single()
       if (profileError) throw profileError
