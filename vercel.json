@@ -1,9 +1,11 @@
 {
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/p/:id", "destination": "/api/og/post?id=:id" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/payos/*.js": { "maxDuration": 15 }
+    "api/payos/*.js": { "maxDuration": 15 },
+    "api/og/*.js": { "maxDuration": 10 }
   }
 }
