@@ -6,6 +6,7 @@
   ],
   "functions": {
     "api/payos/*.js": { "maxDuration": 15 },
-    "api/og/*.js": { "maxDuration": 10 }
+    "api/og/*.js": { "maxDuration": 10 },
+    "api/ai/*.js": { "maxDuration": 20 }
   }
 }
