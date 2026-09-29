@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 type Props = { onLegal: (page: 'terms' | 'privacy') => void }
@@ -11,6 +11,17 @@ export function AuthScreen({ onLegal }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
+
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search)
+      const err = q.get('error_description') || q.get('error') || q.get('message')
+      if (err) {
+        setError(decodeURIComponent(err.replace(/\+/g, ' ')))
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    } catch {}
+  }, [])
 
   if (!supabase) {
     return (
@@ -58,7 +69,7 @@ export function AuthScreen({ onLegal }: Props) {
         const { data, error } = await supabase!.auth.signUp({ email: email.trim(), password })
         if (error) setError(error.message)
         else if (data.session) setInfo('Đăng ký thành công!')
-        else setInfo('Đã gửi email xác nhận (nếu bật). Kiểm tra hộp thư hoặc đăng nhập lại.')
+        else setInfo('Đăng ký OK. Nếu không tự vào app: tắt Confirm email trong Supabase Auth, rồi đăng nhập lại.')
       }
     } finally {
       setBusy(false)
