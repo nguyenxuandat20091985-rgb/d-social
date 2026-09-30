@@ -2,7 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* D SOCIAL 2.0 — design tokens */
 :root,
 [data-theme="light"] {
   --d-bg: #F8FAFC;
@@ -82,23 +81,11 @@ body {
     @apply d-btn px-4 py-2.5 text-white;
     background: var(--d-primary);
   }
-  .d-btn-primary:hover {
-    background: var(--d-primary-hover);
-  }
+  .d-btn-primary:hover { background: var(--d-primary-hover); }
 
   .d-btn-ghost {
     @apply d-btn px-3 py-2;
     background: var(--d-surface-2);
-    color: var(--d-text);
-  }
-  .d-btn-ghost:hover {
-    filter: brightness(0.97);
-  }
-
-  .d-btn-outline {
-    @apply d-btn px-3 py-2;
-    background: transparent;
-    border: 1px solid var(--d-border);
     color: var(--d-text);
   }
 
@@ -113,9 +100,7 @@ body {
     border-color: var(--d-primary);
     box-shadow: 0 0 0 3px var(--d-primary-soft);
   }
-  .d-input::placeholder {
-    color: var(--d-muted);
-  }
+  .d-input::placeholder { color: var(--d-muted); }
 
   .d-nav-item {
     @apply flex flex-col md:flex-row items-center gap-1 md:gap-2.5 px-3 py-2 rounded-xl transition;
@@ -134,36 +119,20 @@ body {
 
   .d-tab {
     @apply flex-1 py-2.5 rounded-xl text-sm font-semibold transition;
-    color: var(--d-muted);
+    color: var(--d-text);
+    opacity: 0.75;
     min-height: 44px;
   }
   .d-tab.active {
     color: var(--d-primary);
+    opacity: 1;
     background: var(--d-primary-soft);
     border: 1px solid color-mix(in srgb, var(--d-primary) 25%, transparent);
   }
 
-  .d-chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium;
-    background: var(--d-surface-2);
-    color: var(--d-muted);
+  .d-safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
-
-  .d-skeleton {
-    background: linear-gradient(90deg, var(--d-surface-2) 25%, var(--d-border) 50%, var(--d-surface-2) 75%);
-    background-size: 200% 100%;
-    animation: d-shimmer 1.2s ease-in-out infinite;
-    border-radius: 0.75rem;
-  }
-}
-
-@keyframes d-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-.d-safe-bottom {
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
 .d-text { color: var(--d-text); }
