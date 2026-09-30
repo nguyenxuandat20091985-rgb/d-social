@@ -5,16 +5,23 @@ export default {
     extend: {
       colors: {
         d: {
-          bg: '#0b1020',
-          card: '#141b2d',
-          line: '#243049',
-          accent: '#22d3ee',
-          violet: '#a78bfa',
-          pink: '#f472b6',
+          bg: 'var(--d-bg)',
+          surface: 'var(--d-surface)',
+          text: 'var(--d-text)',
+          muted: 'var(--d-muted)',
+          border: 'var(--d-border)',
+          primary: 'var(--d-primary)',
+          success: 'var(--d-success)',
+          warning: 'var(--d-warning)',
+          danger: 'var(--d-danger)',
         },
       },
       boxShadow: {
-        glow: '0 0 40px rgba(34, 211, 238, 0.15)',
+        card: 'var(--d-shadow)',
+        'card-md': 'var(--d-shadow-md)',
+      },
+      minHeight: {
+        touch: '44px',
       },
     },
   },
