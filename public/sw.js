@@ -1,5 +1,5 @@
-const CACHE = 'd-social-v2'
-const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-192.svg']
+const CACHE = 'd-social-v3-brand'
+const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg']
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()))
 })
