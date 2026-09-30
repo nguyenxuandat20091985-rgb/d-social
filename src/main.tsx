@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import {
   Heart, MessageCircle, Send, User, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Flag, Search, Shield, Download, Sparkles, Users,
-  Bell, Plus
+  Bell, Plus, Moon, Sun
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -17,6 +17,20 @@ import './index.css'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
+
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('d_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    } catch { return 'light' }
+  })
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    try { localStorage.setItem('d_theme', theme) } catch {}
+  }, [theme])
+  const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
+  return { theme, toggle }
+}
 
 function getRoute() {
   const path = window.location.pathname
@@ -32,12 +46,12 @@ function Avatar({ src, name, size = 40, ring = false }) {
   const img = src ? (
     <img src={src} alt="" className="rounded-full object-cover bg-slate-700 shrink-0" style={{ width: size, height: size }} />
   ) : (
-    <div className="rounded-full bg-gradient-to-br from-cyan-400 to-violet-500 text-slate-950 font-black grid place-items-center shrink-0" style={{ width: size, height: size, fontSize: size * 0.42 }}>{letter}</div>
+    <div className="rounded-full font-black grid place-items-center shrink-0 text-white" style={{ background: "var(--d-primary)" }} style={{ width: size, height: size, fontSize: size * 0.42 }}>{letter}</div>
   )
   if (!ring) return img
   return (
-    <div className="rounded-full p-[2px] bg-gradient-to-br from-cyan-400 via-violet-400 to-fuchsia-400" style={{ width: size + 6, height: size + 6 }}>
-      <div className="rounded-full bg-slate-950 p-[2px] h-full w-full grid place-items-center">{img}</div>
+    <div className="rounded-full p-[2px]" style={{ background: "var(--d-primary)" }} style={{ width: size + 6, height: size + 6 }}>
+      <div className="rounded-full p-[2px] h-full w-full grid place-items-center" style={{ background: "var(--d-surface)" }}>{img}</div>
     </div>
   )
 }
@@ -61,14 +75,14 @@ function InstallBanner() {
   }, [])
   if (hidden || !deferred) return null
   return (
-    <div className="d-card mx-3 mt-3 p-3 flex items-center gap-3 border-cyan-500/30">
-      <Download size={18} className="text-cyan-300" />
+    <div className="d-card mx-3 mt-3 p-3 flex items-center gap-3 d-border-c">
+      <Download size={18} style={{ color: "var(--d-primary)" }} />
       <div className="flex-1 text-sm">
         <div className="font-bold">Cài D Social</div>
-        <div className="text-slate-400 text-xs">Dùng như app trên điện thoại</div>
+        <div className="d-muted text-xs">Dùng như app trên điện thoại</div>
       </div>
       <button className="d-btn-primary text-xs px-3 py-2" onClick={async () => { deferred.prompt(); await deferred.userChoice; setDeferred(null) }}>Cài</button>
-      <button className="text-slate-500 p-1" onClick={() => { localStorage.setItem('d_install_hide', '1'); setHidden(true) }}><X size={16} /></button>
+      <button className="d-muted p-1" onClick={() => { localStorage.setItem('d_install_hide', '1'); setHidden(true) }}><X size={16} /></button>
     </div>
   )
 }
@@ -77,7 +91,7 @@ function Legal({ kind, onBack }) {
   const isTerms = kind === 'terms'
   return (
     <main className="max-w-2xl mx-auto p-4 pb-24">
-      <button onClick={onBack} className="mb-4 text-cyan-300 text-sm">← Quay lại</button>
+      <button onClick={onBack} className="mb-4 text-sm">← Quay lại</button>
       <article className="d-card p-6 space-y-4">
         <h1 className="text-2xl font-black">{isTerms ? 'Điều khoản sử dụng' : 'Chính sách bảo mật'}</h1>
         {isTerms ? (
@@ -102,13 +116,13 @@ function StoryRail({ people, onCompose }) {
     <div className="d-card p-3 mb-3">
       <div className="flex gap-3 overflow-x-auto pb-1">
         <button onClick={onCompose} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
-          <div className="w-14 h-14 rounded-full bg-slate-800 border-2 border-dashed border-cyan-400/50 grid place-items-center text-cyan-300"><Plus size={22} /></div>
-          <span className="text-[10px] text-slate-400 truncate w-full text-center">Đăng bài</span>
+          <div className="w-14 h-14 rounded-full bg-slate-800 border-2 border-dashed border-cyan-400/50 grid place-items-center"><Plus size={22} /></div>
+          <span className="text-[10px] d-muted truncate w-full text-center">Đăng bài</span>
         </button>
         {people.slice(0, 12).map(p => (
           <div key={p.id} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
             <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring />
-            <span className="text-[10px] text-slate-400 truncate w-full text-center">{(p.full_name || p.username || 'User').split(' ').pop()}</span>
+            <span className="text-[10px] d-muted truncate w-full text-center">{(p.full_name || p.username || 'User').split(' ').pop()}</span>
           </div>
         ))}
       </div>
@@ -157,14 +171,14 @@ function Composer({ userId, onPublished, autoFocus, onClose }) {
     <section className="d-card p-4 mb-3">
       <div className="flex items-center justify-between mb-2">
         <div className="font-bold text-sm">Tạo bài viết</div>
-        {onClose && <button onClick={onClose} className="text-slate-500 p-1"><X size={16} /></button>}
+        {onClose && <button onClick={onClose} className="d-muted p-1"><X size={16} /></button>}
       </div>
-      <textarea autoFocus={autoFocus} value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px] placeholder:text-slate-500" />
-      {file && <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 text-sm mb-2"><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="text-slate-400 p-1"><X size={16} /></button></div>}
-      {error && <p className="text-rose-400 text-sm mb-2">{error}</p>}
-      <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-        <label className="flex gap-3 text-slate-400 cursor-pointer">
-          <ImageIcon size={20} className="hover:text-cyan-300" /><Video size={20} className="hover:text-violet-300" />
+      <textarea autoFocus={autoFocus} value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px] placeholder:d-muted" />
+      {file && <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 text-sm mb-2"><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
+      {error && <p className="text-sm mb-2">{error}</p>}
+      <div className="flex items-center justify-between pt-2 border-t d-border-c">
+        <label className="flex gap-3 d-muted cursor-pointer">
+          <ImageIcon size={20} className="hover:" /><Video size={20} className="hover:text-violet-300" />
           <input hidden type="file" accept="image/*,video/*" onChange={e => pick(e.target.files?.[0])} />
         </label>
         <button disabled={busy} onClick={publish} className="d-btn-primary text-sm">{busy ? 'Đang đăng...' : 'Đăng'}</button>
@@ -210,20 +224,20 @@ function PostCard({ post, userId }) {
         <Avatar src={post.profiles?.avatar_url} name={name} />
         <div className="min-w-0 flex-1">
           <div className="font-bold truncate">{name}</div>
-          <div className="text-xs text-slate-500">{timeAgo(post.created_at)}</div>
+          <div className="text-xs d-muted">{timeAgo(post.created_at)}</div>
         </div>
       </div>
       {post.content && <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{post.content}</p>}
       {post.media_url && (post.media_type === 'video' ? <video src={post.media_url} controls className="mt-3 rounded-xl w-full max-h-[520px] bg-black" /> : <img src={post.media_url} loading="lazy" alt="" className="mt-3 rounded-xl w-full max-h-[520px] object-cover" />)}
-      <div className="flex gap-5 mt-4 text-slate-400 items-center flex-wrap text-sm">
+      <div className="flex gap-5 mt-4 d-muted items-center flex-wrap text-sm">
         {userId ? (
-          <button onClick={toggleLike} className={`flex gap-1.5 items-center ${liked ? 'text-pink-400' : 'hover:text-pink-300'}`}>
+          <button onClick={toggleLike} className="flex gap-1.5 items-center" style={liked ? { color: 'var(--d-danger)' } : { color: 'var(--d-muted)' }}>
             <Heart size={18} fill={liked ? 'currentColor' : 'none'} />{count}
           </button>
         ) : (
           <span className="flex gap-1.5 items-center"><Heart size={18} />{count}</span>
         )}
-        {userId && <button onClick={() => setShow(x => !x)} className="flex gap-1.5 items-center hover:text-cyan-300"><MessageCircle size={18} />{show ? 'Ẩn' : 'Bình luận'}</button>}
+        {userId && <button onClick={() => setShow(x => !x)} className="flex gap-1.5 items-center hover:"><MessageCircle size={18} />{show ? 'Ẩn' : 'Bình luận'}</button>}
         <ShareMenu postId={post.id} text={post.content} author={post.profiles?.full_name || post.profiles?.username} />
         {userId && userId !== post.author_id && (
           <button onClick={async () => {
@@ -231,15 +245,15 @@ function PostCard({ post, userId }) {
             if (!reason || !supabase) return
             const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.slice(0, 500) })
             alert(error ? error.message : 'Đã gửi báo cáo.')
-          }} className="flex gap-1 items-center text-slate-500 hover:text-amber-400"><Flag size={16} />Báo cáo</button>
+          }} className="flex gap-1 items-center d-muted"><Flag size={16} />Báo cáo</button>
         )}
       </div>
       {show && userId && (
-        <div className="mt-4 border-t border-slate-800 pt-3 space-y-3">
+        <div className="mt-4 border-t d-border-c pt-3 space-y-3">
           {comments.map(c => (
             <div key={c.id} className="text-sm flex gap-2">
               <Avatar src={c.profiles?.avatar_url} name={c.profiles?.full_name || c.profiles?.username} size={28} />
-              <div className="bg-slate-800/70 rounded-2xl px-3 py-2 flex-1">
+              <div className="rounded-2xl px-3 py-2 flex-1" style={{ background: "var(--d-surface-2)" }}>
                 <b className="text-xs">{c.profiles?.full_name || c.profiles?.username || 'User'}</b>
                 <div className="text-slate-200">{c.content}</div>
               </div>
@@ -344,30 +358,30 @@ function Feed({ userId }) {
   return (
     <>
       <div className="d-card p-1 mb-3 flex gap-1">
-        <button type="button" onClick={() => setMode('all')} className={`flex-1 py-2 rounded-xl text-sm font-semibold transition ${mode === 'all' ? 'bg-gradient-to-r from-cyan-500/20 to-violet-500/20 text-cyan-200 border border-cyan-500/30' : 'text-slate-400'}`}>Tất cả</button>
-        <button type="button" onClick={() => setMode('following')} className={`flex-1 py-2 rounded-xl text-sm font-semibold transition ${mode === 'following' ? 'bg-gradient-to-r from-cyan-500/20 to-violet-500/20 text-cyan-200 border border-cyan-500/30' : 'text-slate-400'}`}>Đang theo dõi</button>
+        <button type="button" onClick={() => setMode('all')} className={`d-tab ${mode === 'all' ? 'active' : ''}`}>Tất cả</button>
+        <button type="button" onClick={() => setMode('following')} className={`d-tab ${mode === 'following' ? 'active' : ''}`}>Đang theo dõi</button>
       </div>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
       {showComposer ? (
         <Composer userId={userId} onPublished={() => load(true)} autoFocus onClose={() => setShowComposer(false)} />
       ) : (
-        <button onClick={() => setShowComposer(true)} className="d-card p-4 mb-3 w-full text-left flex items-center gap-3 hover:border-cyan-500/30 transition">
+        <button onClick={() => setShowComposer(true)} className="d-card p-4 mb-3 w-full text-left flex items-center gap-3 hover:d-border-c transition">
           <Avatar name="+" size={40} />
-          <span className="text-slate-400 text-sm flex-1">Bạn đang nghĩ gì?</span>
-          <ImageIcon size={18} className="text-slate-500" />
+          <span className="d-muted text-sm flex-1">Bạn đang nghĩ gì?</span>
+          <ImageIcon size={18} className="d-muted" />
         </button>
       )}
       <div className="space-y-3">
         {posts.map(p => <PostCard key={p.id} post={p} userId={userId} />)}
         {!posts.length && !loading && mode === 'following' && (
-          <div className="d-card p-10 text-center text-slate-500 text-sm">
+          <div className="d-card p-10 text-center d-muted text-sm">
             Chưa có bài từ người bạn theo dõi.<br />
-            <span className="text-cyan-300">Vào tab Bạn bè để theo dõi thêm.</span>
+            <span style={{ color: "var(--d-primary)" }}>Vào tab Bạn bè để theo dõi thêm.</span>
           </div>
         )}
-        {!posts.length && !loading && mode === 'all' && <div className="d-card p-10 text-center text-slate-500">Chưa có bài viết. Hãy chia sẻ điều tích cực!</div>}
-        {error && <div className="text-center text-rose-400 py-4">{error}</div>}
-        {loading && <div className="text-center text-slate-500 py-4 text-sm">Đang tải...</div>}
+        {!posts.length && !loading && mode === 'all' && <div className="d-card p-10 text-center d-muted">Chưa có bài viết. Hãy chia sẻ điều tích cực!</div>}
+        {error && <div className="text-center py-4" style={{ color: "var(--d-danger)" }}>{error}</div>}
+        {loading && <div className="text-center d-muted py-4 text-sm">Đang tải...</div>}
         <div ref={sentinel} className="h-6" />
       </div>
     </>
@@ -390,15 +404,15 @@ function PublicPostPage({ postId, session }) {
   }, [postId])
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b backdrop-blur" style={{ background: "var(--d-nav)", borderColor: "var(--d-border)" }}>
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <a href="/" className="font-black text-xl bg-gradient-to-r from-cyan-300 to-violet-300 bg-clip-text text-transparent">D</a>
-          <span className="text-sm text-slate-400">Bài công khai</span>
+          <span className="text-sm d-muted">Bài công khai</span>
         </div>
       </header>
       <main className="max-w-2xl mx-auto px-3 py-4">
-        {loading && <p className="text-center text-slate-500 py-12">Đang tải...</p>}
-        {err && <p className="text-center text-slate-400 py-12">{err}</p>}
+        {loading && <p className="text-center d-muted py-12">Đang tải...</p>}
+        {err && <p className="text-center d-muted py-12">{err}</p>}
         {post && <PostCard post={post} userId={session?.user?.id} />}
       </main>
     </div>
@@ -463,7 +477,7 @@ function Chat({ userId }) {
     <div className="grid md:grid-cols-[240px_1fr] gap-3 min-h-[70vh]">
       <aside className="d-card p-2 flex flex-col">
         <div className="relative mb-2">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm bạn bè..." className="d-input pl-8 py-2 text-sm" />
         </div>
         <div className="overflow-auto max-h-[60vh] space-y-1">
@@ -477,17 +491,17 @@ function Chat({ userId }) {
       </aside>
       <section className="d-card flex flex-col min-h-[50vh]">
         {!active ? (
-          <div className="m-auto text-slate-500 text-sm flex flex-col items-center gap-2 p-8"><MessageSquare size={32} className="opacity-40" />Chọn người để nhắn tin</div>
+          <div className="m-auto d-muted text-sm flex flex-col items-center gap-2 p-8"><MessageSquare size={32} className="opacity-40" />Chọn người để nhắn tin</div>
         ) : (
           <>
-            <header className="p-3 border-b border-slate-800 font-bold flex items-center gap-2">
+            <header className="p-3 border-b d-border-c font-bold flex items-center gap-2">
               <Avatar src={active.avatar_url} name={active.full_name || active.username} size={32} />
               {active.full_name || active.username}
             </header>
             <div className="flex-1 p-3 space-y-2 overflow-auto max-h-[55vh]">
               {messages.map(m => (
                 <div key={m.id} className={`flex ${m.sender_id === userId ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm ${m.sender_id === userId ? 'bg-gradient-to-r from-cyan-500/90 to-violet-500/90 text-white' : 'bg-slate-800'}`}>
+                  <div className="max-w-[80%] px-3 py-2 rounded-2xl text-sm" style={m.sender_id === userId ? { background: 'var(--d-primary)', color: '#fff' } : { background: 'var(--d-surface-2)', color: 'var(--d-text)' }}>
                     <div>{m.content}</div>
                     <div className={`text-[10px] mt-1 opacity-70 ${m.sender_id === userId ? 'text-right' : ''}`}>
                       {timeAgo(m.created_at)}{m.sender_id === userId ? (m.read_at ? ' · Đã xem' : ' · Đã gửi') : ''}
@@ -497,7 +511,7 @@ function Chat({ userId }) {
               ))}
               <div ref={bottom} />
             </div>
-            <div className="p-3 border-t border-slate-800 flex gap-2">
+            <div className="p-3 border-t d-border-c flex gap-2">
               <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') send() }} placeholder="Nhắn tin..." className="d-input flex-1 py-2.5 text-sm" />
               <button onClick={send} className="d-btn-primary px-3"><Send size={16} /></button>
             </div>
@@ -546,10 +560,10 @@ function Discover({ userId }) {
   return (
     <div className="space-y-3">
       <div className="d-card p-4">
-        <h2 className="font-black text-lg flex items-center gap-2"><Users size={18} className="text-cyan-300" /> Khám phá & Theo dõi</h2>
-        <p className="text-xs text-slate-500 mt-1">Theo dõi một chiều — xem thêm nội dung từ người bạn quan tâm.</p>
+        <h2 className="font-black text-lg flex items-center gap-2"><Users size={18} style={{ color: "var(--d-primary)" }} /> Khám phá & Theo dõi</h2>
+        <p className="text-xs d-muted mt-1">Theo dõi một chiều — xem thêm nội dung từ người bạn quan tâm.</p>
         <div className="relative mt-3">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm tên hoặc @username..." className="d-input pl-9 py-2.5 text-sm" />
         </div>
       </div>
@@ -559,29 +573,28 @@ function Discover({ userId }) {
             <Avatar src={p.avatar_url} name={p.full_name || p.username} size={48} ring />
             <div className="min-w-0 flex-1">
               <div className="font-bold truncate">{p.full_name || p.username || 'User'}</div>
-              {p.username && <div className="text-xs text-slate-500">@{p.username}</div>}
-              {p.bio && <p className="text-sm text-slate-400 mt-1 line-clamp-2">{p.bio}</p>}
+              {p.username && <div className="text-xs d-muted">@{p.username}</div>}
+              {p.bio && <p className="text-sm d-muted mt-1 line-clamp-2">{p.bio}</p>}
               <div className="flex gap-2 mt-3">
                 <button
                   type="button"
                   disabled={busyId === p.id}
                   onClick={() => toggleFollow(p.id)}
-                  className={`text-xs px-3 py-1.5 rounded-xl font-semibold border transition ${
-                    following[p.id]
-                      ? 'border-slate-600 text-slate-300 hover:border-rose-400/50 hover:text-rose-300'
-                      : 'border-cyan-500/40 bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25'
-                  }`}
+                  className="text-xs px-3 py-1.5 rounded-xl font-semibold border transition min-h-[36px]"
+                  style={following[p.id]
+                    ? { borderColor: 'var(--d-border)', color: 'var(--d-text)', background: 'var(--d-surface-2)' }
+                    : { borderColor: 'transparent', color: '#fff', background: 'var(--d-primary)' }}
                 >
                   {busyId === p.id ? '...' : following[p.id] ? 'Đang theo dõi' : 'Theo dõi'}
                 </button>
-                <button type="button" onClick={() => blockUser(p.id)} className="text-xs px-2 py-1.5 rounded-xl text-slate-500 hover:text-amber-400 border border-transparent hover:border-slate-700">
+                <button type="button" onClick={() => blockUser(p.id)} className="text-xs px-2 py-1.5 rounded-xl d-muted hover:text-amber-400 border border-transparent hover:border-slate-700">
                   Chặn
                 </button>
               </div>
             </div>
           </div>
         ))}
-        {!filtered.length && <div className="text-slate-500 text-sm p-6">Không tìm thấy thành viên.</div>}
+        {!filtered.length && <div className="d-muted text-sm p-6">Không tìm thấy thành viên.</div>}
       </div>
     </div>
   )
@@ -638,17 +651,17 @@ function Notifications({ userId }) {
     <div className="space-y-3">
       <div className="d-card p-4">
         <h2 className="font-black text-lg flex items-center gap-2"><Bell size={18} className="text-violet-300" /> Thông báo</h2>
-        <p className="text-xs text-slate-500 mt-1">Like, bình luận, theo dõi và tin nhắn mới.</p>
+        <p className="text-xs d-muted mt-1">Like, bình luận, theo dõi và tin nhắn mới.</p>
       </div>
-      {loading && <div className="text-center text-slate-500 py-8 text-sm">Đang tải...</div>}
-      {!loading && !items.length && <div className="d-card p-10 text-center text-slate-500 text-sm">Chưa có thông báo.</div>}
+      {loading && <div className="text-center d-muted py-8 text-sm">Đang tải...</div>}
+      {!loading && !items.length && <div className="d-card p-10 text-center d-muted text-sm">Chưa có thông báo.</div>}
       <div className="space-y-2">
         {items.map(n => (
           <div key={n.id} className="d-card p-3 flex gap-3 items-start">
             <Avatar src={n.avatar} name={n.name || 'D'} size={40} />
             <div className="min-w-0 flex-1">
               <p className="text-sm leading-relaxed">{n.text}</p>
-              <div className="text-[11px] text-slate-500 mt-1">{timeAgo(n.at)} · {n.type === 'like' ? 'Thích' : n.type === 'follow' ? 'Theo dõi' : n.type === 'comment' ? 'Bình luận' : 'Tin nhắn'}</div>
+              <div className="text-[11px] d-muted mt-1">{timeAgo(n.at)} · {n.type === 'like' ? 'Thích' : n.type === 'follow' ? 'Theo dõi' : n.type === 'comment' ? 'Bình luận' : 'Tin nhắn'}</div>
             </div>
           </div>
         ))}
@@ -697,12 +710,12 @@ function AdminPage({ userId }) {
       setAiResult(await r.json())
     } catch (e) { setAiResult({ error: e.message }) } finally { setBusy(false) }
   }
-  if (!ok) return <div className="p-10 text-center text-slate-400">Không có quyền admin. <a href="/" className="text-cyan-300">Về trang chủ</a></div>
+  if (!ok) return <div className="p-10 text-center d-muted">Không có quyền admin. <a href="/" style={{ color: "var(--d-primary)" }}>Về trang chủ</a></div>
   return (
     <main className="max-w-3xl mx-auto p-4 pb-20 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black flex items-center gap-2"><Sparkles className="text-violet-300" /> Admin · AI</h1>
-        <a href="/" className="text-sm text-slate-400">← App</a>
+        <a href="/" className="text-sm d-muted">← App</a>
       </div>
       <section className="d-card p-4 space-y-2">
         <textarea value={aiText} onChange={e => setAiText(e.target.value)} className="d-input min-h-24 text-sm" placeholder="Dán nội dung..." />
@@ -712,15 +725,15 @@ function AdminPage({ userId }) {
       <section className="d-card p-4">
         <h2 className="font-bold mb-2">Báo cáo ({reports.length})</h2>
         <div className="space-y-2 max-h-48 overflow-auto">
-          {reports.map(r => <div key={r.id} className="text-xs border-b border-slate-800 pb-2"><span className="text-amber-300">{r.target_type}</span> · {r.reason}</div>)}
+          {reports.map(r => <div key={r.id} className="text-xs border-b d-border-c pb-2"><span className="">{r.target_type}</span> · {r.reason}</div>)}
         </div>
       </section>
       <div className="space-y-2">
         {posts.map(p => (
           <div key={p.id} className="d-card p-4">
-            <div className="text-xs text-slate-500">{p.profiles?.full_name || p.author_id}</div>
+            <div className="text-xs d-muted">{p.profiles?.full_name || p.author_id}</div>
             <p className="mt-1 text-sm">{p.content}</p>
-            {p.is_published !== false && <button onClick={() => hide(p.id)} className="mt-2 text-sm text-amber-300">Ẩn bài</button>}
+            {p.is_published !== false && <button onClick={() => hide(p.id)} className="mt-2 text-sm font-medium" style={{ color: "var(--d-warning)" }}>Ẩn bài</button>}
           </div>
         ))}
       </div>
@@ -728,7 +741,7 @@ function AdminPage({ userId }) {
   )
 }
 
-function Shell({ tab, setTab, onLogout, children }) {
+function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
   const nav = [
     { id: 'feed', label: 'Trang chủ', icon: Home },
     { id: 'discover', label: 'Bạn bè', icon: Users },
@@ -737,45 +750,57 @@ function Shell({ tab, setTab, onLogout, children }) {
     { id: 'profile', label: 'Tôi', icon: User },
   ]
   return (
-    <div className="min-h-screen pb-24 md:pb-6">
-      <header className="sticky top-0 z-30 border-b border-slate-800/70 bg-slate-950/80 backdrop-blur-xl">
+    <div className="min-h-screen pb-24 md:pb-6" style={{ background: 'var(--d-bg)', color: 'var(--d-text)' }}>
+      <header className="sticky top-0 z-30 border-b backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--d-nav) 92%, transparent)', borderColor: 'var(--d-border)' }}>
         <div className="max-w-6xl mx-auto px-3 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-300 to-violet-400 text-slate-950 font-black grid place-items-center">D</div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl text-white font-black grid place-items-center text-sm" style={{ background: 'var(--d-primary)' }}>D</div>
             <div>
-              <div className="font-black leading-none tracking-tight">D Social</div>
-              <div className="text-[10px] text-slate-500">Cộng đồng văn minh</div>
+              <div className="font-black leading-none tracking-tight text-[15px]">D Social</div>
+              <div className="text-[10px] d-muted">Cộng đồng văn minh</div>
             </div>
           </div>
           <div className="hidden md:flex items-center gap-1">
             {nav.map(n => (
-              <button key={n.id} onClick={() => setTab(n.id)} className={`d-nav-item ${tab === n.id ? 'active' : ''}`}>
+              <button key={n.id} type="button" onClick={() => setTab(n.id)} className={`d-nav-item ${tab === n.id ? 'active' : ''}`}>
                 <n.icon size={18} /><span className="text-sm">{n.label}</span>
               </button>
             ))}
           </div>
-          <button onClick={onLogout} className="d-btn-ghost text-xs" title="Đăng xuất"><LogOut size={16} /></button>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={onToggleTheme} className="d-btn-ghost !min-h-[40px] !px-2.5" title="Đổi giao diện">
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button type="button" onClick={onLogout} className="d-btn-ghost !min-h-[40px] !px-2.5" title="Đăng xuất"><LogOut size={16} /></button>
+          </div>
         </div>
       </header>
-      <InstallBanner />
-      <div className="max-w-6xl mx-auto px-3 py-4 grid md:grid-cols-[200px_minmax(0,1fr)_220px] gap-4">
-        <aside className="hidden md:block space-y-1 sticky top-20 self-start">
-          {nav.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)} className={`d-nav-item w-full justify-start ${tab === n.id ? 'active' : ''}`}>
-              <n.icon size={18} /><span>{n.label}</span>
-            </button>
-          ))}
+
+      <div className="max-w-6xl mx-auto md:grid md:grid-cols-[200px_1fr] lg:grid-cols-[220px_1fr_260px] gap-4 px-3 pt-3">
+        <aside className="hidden md:block">
+          <nav className="d-card p-2 sticky top-[4.5rem] space-y-0.5">
+            {nav.map(n => (
+              <button key={n.id} type="button" onClick={() => setTab(n.id)} className={`d-nav-item w-full justify-start ${tab === n.id ? 'active' : ''}`}>
+                <n.icon size={18} /><span className="text-sm">{n.label}</span>
+              </button>
+            ))}
+          </nav>
         </aside>
         <main className="min-w-0">{children}</main>
-        <aside className="hidden md:block space-y-3 sticky top-20 self-start">
-          <div className="d-card p-4 text-xs text-slate-400">Đăng nội dung tích cực · Chat · Thông báo</div>
+        <aside className="hidden lg:block">
+          <div className="d-card p-4 sticky top-[4.5rem] space-y-2">
+            <div className="font-bold text-sm">Gợi ý</div>
+            <p className="text-xs d-muted leading-relaxed">Theo dõi bạn bè ở tab Bạn bè để xem feed Đang theo dõi. Core social luôn miễn phí.</p>
+          </div>
         </aside>
       </div>
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-800 bg-slate-950/95 backdrop-blur-xl">
-        <div className="max-w-lg mx-auto flex justify-around py-2">
+
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t d-safe-bottom" style={{ background: 'var(--d-nav)', borderColor: 'var(--d-border)' }}>
+        <div className="flex items-stretch justify-around px-1 pt-1.5 pb-1">
           {nav.map(n => (
-            <button key={n.id} onClick={() => setTab(n.id)} className={`flex flex-col items-center gap-0.5 text-[10px] ${tab === n.id ? 'text-cyan-300' : 'text-slate-500'}`}>
-              <n.icon size={20} />{n.label}
+            <button key={n.id} type="button" onClick={() => setTab(n.id)} className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 text-[10px] min-h-[48px] ${tab === n.id ? 'font-semibold' : 'd-muted'}`} style={tab === n.id ? { color: 'var(--d-primary)' } : undefined}>
+              <n.icon size={22} strokeWidth={tab === n.id ? 2.4 : 1.8} />
+              {n.label}
             </button>
           ))}
         </div>
@@ -790,6 +815,7 @@ function App() {
   const [tab, setTab] = useState('feed')
   const [legal, setLegal] = useState(null)
   const [route, setRoute] = useState(getRoute())
+  const { theme, toggle: toggleTheme } = useTheme()
   useEffect(() => {
     if (!supabase) { setReady(true); return }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true) })
@@ -798,15 +824,22 @@ function App() {
     window.addEventListener('popstate', onNav)
     return () => { subscription.unsubscribe(); window.removeEventListener('popstate', onNav) }
   }, [])
-  if (!ready) return <div className="min-h-screen grid place-items-center text-slate-400"><div className="text-center"><div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br from-cyan-300 to-violet-400 animate-pulse" /><p className="mt-3 text-sm">Đang tải D Social...</p></div></div>
-  if (legal) return <div className="min-h-screen"><Legal kind={legal} onBack={() => setLegal(null)} /></div>
+  if (!ready) return (
+    <div className="min-h-screen grid place-items-center" style={{ background: 'var(--d-bg)', color: 'var(--d-muted)' }}>
+      <div className="text-center">
+        <div className="w-12 h-12 mx-auto rounded-2xl animate-pulse" style={{ background: 'var(--d-primary)' }} />
+        <p className="mt-3 text-sm">Đang tải D Social...</p>
+      </div>
+    </div>
+  )
+  if (legal) return <div className="min-h-screen" style={{ background: 'var(--d-bg)' }}><Legal kind={legal} onBack={() => setLegal(null)} /></div>
   if (route.name === 'public-post' && route.postId) return <PublicPostPage postId={route.postId} session={session} />
   if (route.name === 'admin') { if (!session) return <AuthScreen onLegal={setLegal} />; return <AdminPage userId={session.user.id} /> }
   if (!session && supabase) return <AuthScreen onLegal={setLegal} />
   if (!session) return <div className="p-8 text-center">D Social</div>
   const logout = async () => { await supabase?.auth.signOut() }
   return (
-    <Shell tab={tab} setTab={setTab} onLogout={logout}>
+    <Shell tab={tab} setTab={setTab} onLogout={logout} theme={theme} onToggleTheme={toggleTheme}>
       {tab === 'feed' && <Feed userId={session.user.id} />}
       {tab === 'discover' && <Discover userId={session.user.id} />}
       {tab === 'chat' && <Chat userId={session.user.id} />}
