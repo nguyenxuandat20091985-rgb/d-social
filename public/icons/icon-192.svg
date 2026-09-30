@@ -1,5 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
-  <rect width="192" height="192" rx="40" fill="#0b1020"/>
-  <text x="96" y="128" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="110" fill="url(#g)">D</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0878ff"/><stop offset=".58" stop-color="#123bd8"/><stop offset="1" stop-color="#25136e"/></linearGradient>
+    <linearGradient id="d" x1=".12" y1="0" x2=".8" y2="1"><stop stop-color="#fff"/><stop offset=".72" stop-color="#d9f5ff"/><stop offset="1" stop-color="#91caff"/></linearGradient>
+    <linearGradient id="orbit" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#21f0e4"/><stop offset=".55" stop-color="#09a9ff"/><stop offset="1" stop-color="#6e5cff"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#061b69" flood-opacity=".42"/></filter>
+  </defs>
+  <rect width="192" height="192" rx="43" fill="url(#bg)"/>
+  <path d="M12 143C48 112 87 106 125 118c24 8 42 4 55-9v35c-26 26-65 31-101 20-25-8-45-6-67 7z" fill="#0b2cae" opacity=".34"/>
+  <path d="M47 38h48c37 0 63 23 63 58s-26 58-63 58H47V38zm24 22v72h23c23 0 38-13 38-36S117 60 94 60H71z" fill="url(#d)" filter="url(#shadow)"/>
+  <path d="M53 144c28-18 53-26 80-24 15 1 27-4 37-14-8 24-29 39-58 41-21 2-39-2-59 7z" fill="url(#orbit)"/>
+  <g fill="#fff" filter="url(#shadow)">
+    <circle cx="96" cy="81" r="10"/>
+    <circle cx="76" cy="88" r="7"/>
+    <circle cx="116" cy="88" r="7"/>
+    <path d="M77 109c0-11 8-19 19-19s19 8 19 19v8H77z"/>
+    <path d="M63 109c0-8 5-14 13-14 3 0 5 1 7 2-4 4-6 9-6 15v5H63zM109 97c2-1 4-2 7-2 8 0 13 6 13 14v8h-14v-5c0-6-2-11-6-15z" opacity=".88"/>
+  </g>
+  <path d="M137 28l4-9 4 9 9 4-9 4-4 9-4-9-9-4z" fill="#35f4e8"/>
 </svg>
