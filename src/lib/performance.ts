@@ -1,6 +1,6 @@
 export const FEED_PAGE_SIZE = 12
 export const FEED_SELECT =
-  'id,author_id,content,media_url,media_type,is_published,created_at,profiles(id,username,full_name,avatar_url,is_vip),likes(user_id)'
+  'id,author_id,content,media_url,media_type,is_published,created_at,profiles!user_id(id,username,full_name,avatar_url,is_vip),likes(user_id)'
 
 export type FeedCursor = { created_at: string; id: string }
 
