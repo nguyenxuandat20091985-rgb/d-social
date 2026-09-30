@@ -33,10 +33,10 @@ export function AuthScreen({ onLegal }: Props) {
 
   if (!supabase) {
     return (
-      <div className="min-h-screen grid place-items-center bg-slate-950 text-white p-6">
-        <div className="max-w-md w-full p-8 rounded-3xl bg-slate-900 border border-slate-800">
+      <div className="min-h-screen grid place-items-center p-6" style={{ background: 'var(--d-bg)', color: 'var(--d-text)' }}>
+        <div className="d-card max-w-md w-full p-8">
           <h1 className="text-2xl font-black">D Social</h1>
-          <p className="mt-3 text-slate-400">Thiếu cấu hình Supabase.</p>
+          <p className="mt-3 d-muted">Thiếu cấu hình Supabase.</p>
         </div>
       </div>
     )
@@ -98,164 +98,131 @@ export function AuthScreen({ onLegal }: Props) {
     }
   }
 
-  return (
-    <div className="min-h-screen relative overflow-hidden bg-slate-950 text-white">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-indigo-600/30 blur-3xl" />
-        <div className="absolute top-1/3 -right-20 w-80 h-80 rounded-full bg-violet-500/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 w-72 h-72 rounded-full bg-cyan-500/10 blur-3xl" />
-      </div>
+  const forgot = async () => {
+    if (!email.trim() || !email.includes('@')) return setError('Nhập email trước khi đặt lại mật khẩu.')
+    setBusy(true)
+    setError('')
+    setInfo('')
+    const { error } = await supabase!.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    })
+    setBusy(false)
+    if (error) setError(error.message)
+    else setInfo('Đã gửi email đặt lại mật khẩu (nếu tài khoản tồn tại).')
+  }
 
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-[420px]">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-white to-slate-200 text-slate-950 text-3xl font-black shadow-xl shadow-indigo-500/20">
-              D
-            </div>
-            <h1 className="mt-5 text-3xl font-black tracking-tight">D Social</h1>
-            <p className="mt-2 text-slate-400 text-sm leading-relaxed">Đăng nhập nhanh bằng Google</p>
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6" style={{ background: 'var(--d-bg)', color: 'var(--d-text)' }}>
+      <div className="w-full max-w-[400px]">
+        <div className="text-center mb-7">
+          <div
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl text-white text-2xl font-black"
+            style={{ background: 'var(--d-primary)' }}
+          >
+            D
+          </div>
+          <h1 className="mt-4 text-2xl font-black tracking-tight">D Social</h1>
+          <p className="mt-1.5 text-sm d-muted">Mạng xã hội văn minh · Đăng nhập nhanh</p>
+        </div>
+
+        <div className="d-card p-5 sm:p-7">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={google}
+            className="w-full flex items-center justify-center gap-3 py-3.5 rounded-xl font-bold text-[15px] border transition active:scale-[0.99] disabled:opacity-60 min-h-[48px]"
+            style={{ background: 'var(--d-surface)', borderColor: 'var(--d-border)', color: 'var(--d-text)' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden>
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.2 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.5-.4-3.5z" />
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.2 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" />
+              <path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35.1 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.2-3.5 5.7-6.4 7.2l.1.1 6.3 5.3C37.5 39.2 44 34 44 24c0-1.3-.1-2.5-.4-3.5z" />
+            </svg>
+            {busy ? 'Đang chuyển Google...' : 'Tiếp tục với Google'}
+          </button>
+
+          <p className="mt-2.5 text-center text-xs d-muted">Gmail · Một chạm · Bảo mật bởi Google</p>
+
+          <div className="flex items-center gap-3 my-5">
+            <div className="h-px flex-1" style={{ background: 'var(--d-border)' }} />
+            <button type="button" onClick={() => setShowEmail(v => !v)} className="text-xs font-medium px-2 d-muted">
+              {showEmail ? 'Ẩn email' : 'Hoặc dùng email'}
+            </button>
+            <div className="h-px flex-1" style={{ background: 'var(--d-border)' }} />
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-slate-900/80 backdrop-blur-xl shadow-2xl shadow-black/40 p-6 sm:p-8">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={google}
-              className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-white text-slate-950 font-bold text-[16px] hover:bg-slate-100 active:scale-[0.99] transition disabled:opacity-60 shadow-lg"
-            >
-              <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden>
-                <path
-                  fill="#FFC107"
-                  d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.2 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.5-.4-3.5z"
-                />
-                <path
-                  fill="#FF3D00"
-                  d="M6.3 14.7l6.6 4.8C14.7 16 19 12 24 12c3 0 5.8 1.1 7.9 3l5.7-5.7C34.2 6.1 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"
-                />
-                <path
-                  fill="#4CAF50"
-                  d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.3 35.1 26.8 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"
-                />
-                <path
-                  fill="#1976D2"
-                  d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.2-3.5 5.7-6.4 7.2l.1.1 6.3 5.3C37.5 39.2 44 34 44 24c0-1.3-.1-2.5-.4-3.5z"
-                />
-              </svg>
-              {busy ? 'Đang chuyển Google...' : 'Đăng nhập / Đăng ký với Google'}
-            </button>
-
-            <p className="mt-3 text-center text-xs text-slate-500">Dùng tài khoản Gmail · Một chạm</p>
-
-            <div className="flex items-center gap-3 my-6">
-              <div className="h-px flex-1 bg-slate-700/80" />
-              <button
-                type="button"
-                onClick={() => setShowEmail(v => !v)}
-                className="text-xs text-slate-400 hover:text-white font-medium px-2"
-              >
-                {showEmail ? 'Ẩn email' : 'Hoặc dùng email'}
-              </button>
-              <div className="h-px flex-1 bg-slate-700/80" />
-            </div>
-
-            {showEmail && (
-              <>
-                <div className="flex p-1 rounded-2xl bg-slate-800/80 mb-5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('login')
-                      setError('')
-                      setInfo('')
-                    }}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
-                      mode === 'login'
-                        ? 'bg-white text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Đăng nhập
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('signup')
-                      setError('')
-                      setInfo('')
-                    }}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
-                      mode === 'signup'
-                        ? 'bg-white text-slate-950 shadow'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    Đăng ký
-                  </button>
-                </div>
-
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">Email</label>
-                <input
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  type="email"
-                  autoComplete="email"
-                  placeholder="ban@email.com"
-                  className="w-full px-4 py-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition text-[15px]"
-                />
-
-                <label className="block text-xs font-medium text-slate-400 mb-1.5 mt-4">Mật khẩu</label>
-                <div className="relative">
-                  <input
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    type={showPw ? 'text' : 'password'}
-                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    placeholder="Tối thiểu 6 ký tự"
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') emailAuth()
-                    }}
-                    className="w-full px-4 py-3.5 pr-14 rounded-2xl bg-slate-800/90 border border-slate-700/80 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition text-[15px]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPw(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white px-2 py-1"
-                  >
-                    {showPw ? 'Ẩn' : 'Hiện'}
-                  </button>
-                </div>
-
+          {showEmail && (
+            <>
+              <div className="flex p-1 rounded-xl mb-4" style={{ background: 'var(--d-surface-2)' }}>
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={emailAuth}
-                  className="w-full mt-5 py-3.5 rounded-2xl font-bold text-[15px] bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-400 hover:to-violet-400 shadow-lg shadow-indigo-500/25 active:scale-[0.99] transition disabled:opacity-60"
+                  onClick={() => { setMode('login'); setError(''); setInfo('') }}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition min-h-[40px] ${
+                    mode === 'login' ? 'shadow-sm' : 'd-muted'
+                  }`}
+                  style={mode === 'login' ? { background: 'var(--d-surface)', color: 'var(--d-text)' } : undefined}
                 >
-                  {busy ? 'Đang xử lý...' : mode === 'login' ? 'Đăng nhập email' : 'Tạo tài khoản'}
+                  Đăng nhập
                 </button>
-              </>
-            )}
-
-            {error && (
-              <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm leading-relaxed">
-                {error}
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); setError(''); setInfo('') }}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition min-h-[40px] ${
+                    mode === 'signup' ? 'shadow-sm' : 'd-muted'
+                  }`}
+                  style={mode === 'signup' ? { background: 'var(--d-surface)', color: 'var(--d-text)' } : undefined}
+                >
+                  Đăng ký
+                </button>
               </div>
-            )}
-            {info && (
-              <div className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm">
-                {info}
-              </div>
-            )}
-          </div>
 
-          <div className="flex justify-center gap-5 mt-6 text-xs text-slate-500">
-            <button type="button" onClick={() => onLegal('terms')} className="hover:text-slate-300">
-              Điều khoản
-            </button>
-            <button type="button" onClick={() => onLegal('privacy')} className="hover:text-slate-300">
-              Chính sách bảo mật
-            </button>
-          </div>
+              <label className="block text-xs font-medium d-muted mb-1.5">Email</label>
+              <input value={email} onChange={e => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="ban@email.com" className="d-input" />
+
+              <label className="block text-xs font-medium d-muted mb-1.5 mt-3">Mật khẩu</label>
+              <div className="relative">
+                <input
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  type={showPw ? 'text' : 'password'}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  placeholder="Tối thiểu 6 ký tự"
+                  onKeyDown={e => { if (e.key === 'Enter') emailAuth() }}
+                  className="d-input pr-14"
+                />
+                <button type="button" onClick={() => setShowPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium d-muted px-2 py-1">
+                  {showPw ? 'Ẩn' : 'Hiện'}
+                </button>
+              </div>
+
+              {mode === 'login' && (
+                <button type="button" onClick={forgot} className="mt-2 text-xs font-medium" style={{ color: 'var(--d-primary)' }}>
+                  Quên mật khẩu?
+                </button>
+              )}
+
+              <button type="button" disabled={busy} onClick={emailAuth} className="d-btn-primary w-full mt-4 text-[15px]">
+                {busy ? 'Đang xử lý...' : mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+              </button>
+            </>
+          )}
+
+          {error && (
+            <div className="mt-4 p-3 rounded-xl text-sm leading-relaxed" style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.25)', color: 'var(--d-danger)' }}>
+              {error}
+            </div>
+          )}
+          {info && (
+            <div className="mt-4 p-3 rounded-xl text-sm" style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.25)', color: 'var(--d-success)' }}>
+              {info}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-center gap-5 mt-6 text-xs d-muted">
+          <button type="button" onClick={() => onLegal('terms')} className="hover:opacity-80">Điều khoản</button>
+          <button type="button" onClick={() => onLegal('privacy')} className="hover:opacity-80">Chính sách bảo mật</button>
         </div>
       </div>
     </div>
