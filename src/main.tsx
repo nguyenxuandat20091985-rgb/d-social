@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client'
 import {
   Heart, MessageCircle, Send, User, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Flag, Search, Shield, Download, Sparkles, Users,
-  Bell, Plus, Moon, Sun
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Smile, Link2, UserPlus
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -114,11 +114,18 @@ function Legal({ kind, onBack }) {
 
 function StoryRail({ people, onCompose }) {
   return (
-    <div className="d-card p-3 mb-3">
-      <div className="flex gap-3 overflow-x-auto pb-1">
+    <section className="d-card p-3 mb-3">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <div>
+          <div className="font-black text-sm">Khoảnh khắc</div>
+          <div className="text-[11px] d-muted">Khám phá mọi người trong cộng đồng</div>
+        </div>
+        <button type="button" onClick={onCompose} className="text-xs font-semibold" style={{ color: 'var(--d-primary)' }}>Tạo mới</button>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
         <button onClick={onCompose} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
-          <div className="w-14 h-14 rounded-full border-2 border-dashed grid place-items-center" style={{ borderColor: 'var(--d-primary)', background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}><Plus size={22} strokeWidth={2.5} /></div>
-          <span className="text-[10px] font-medium truncate w-full text-center" style={{ color: 'var(--d-text)' }}>Đăng bài</span>
+          <div className="w-14 h-14 rounded-full border-2 border-dashed grid place-items-center" style={{ borderColor: 'var(--d-primary)', background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}><Plus size={21} strokeWidth={2.5} /></div>
+          <span className="text-[10px] font-semibold truncate w-full text-center">Tạo</span>
         </button>
         {people.slice(0, 12).map(p => (
           <div key={p.id} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
@@ -194,12 +201,16 @@ function PostCard({ post, userId }) {
   const [show, setShow] = useState(false)
   const [comment, setComment] = useState('')
   const [count, setCount] = useState(post.likes?.length || 0)
+  const [saved, setSaved] = useState(() => { try { return localStorage.getItem('d_saved_'+post.id) === '1' } catch { return false } })
+  const [menu, setMenu] = useState(false)
+
   useEffect(() => {
     if (!supabase || !show) return
     loadComments()
-    const ch = supabase.channel(`comments-${post.id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${post.id}` }, loadComments).subscribe()
-    return () => { supabase!.removeChannel(ch) }
+    const ch = supabase.channel('comments-'+post.id).on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: 'post_id=eq.'+post.id }, loadComments).subscribe()
+    return () => { supabase.removeChannel(ch) }
   }, [show, post.id])
+
   const loadComments = async () => {
     if (!supabase) return
     const { data } = await supabase.from('comments').select('id,post_id,author_id,content,created_at,profiles(id,username,full_name,avatar_url)').eq('post_id', post.id).order('created_at', { ascending: true }).limit(50)
@@ -207,65 +218,79 @@ function PostCard({ post, userId }) {
   }
   const toggleLike = async () => {
     if (!supabase || !userId) return
-    if (liked) { await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', userId); setLiked(false); setCount(x => Math.max(0, x - 1)) }
-    else { const { error } = await supabase.from('likes').insert({ post_id: post.id, user_id: userId }); if (!error) { setLiked(true); setCount(x => x + 1) } }
+    if (liked) {
+      const { error } = await supabase.from('likes').delete().eq('post_id', post.id).eq('user_id', userId)
+      if (!error) { setLiked(false); setCount(x => Math.max(0, x - 1)) }
+    } else {
+      const { error } = await supabase.from('likes').insert({ post_id: post.id, user_id: userId })
+      if (!error) { setLiked(true); setCount(x => x + 1) }
+    }
   }
   const addComment = async () => {
-    if (!supabase || !userId) return
-    if (!commentRateLimit(userId)) return
+    if (!supabase || !userId || !comment.trim() || !commentRateLimit(userId)) return
     const mod = moderateText(comment)
-    if (!mod.allowed || !comment.trim()) return
+    if (!mod.allowed) return
     const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: comment.trim() })
     if (!error) setComment('')
   }
+  const toggleSave = () => {
+    const next = !saved
+    setSaved(next)
+    try { localStorage.setItem('d_saved_'+post.id, next ? '1' : '0') } catch {}
+  }
   const name = post.profiles?.full_name || post.profiles?.username || 'Thành viên D'
+  const username = post.profiles?.username ? '@'+post.profiles.username : ''
   return (
-    <article className="d-card p-4 sm:p-5">
-      <div className="flex gap-3 items-start">
-        <Avatar src={post.profiles?.avatar_url} name={name} />
+    <article className="d-card overflow-hidden">
+      <div className="px-4 pt-4 flex gap-3 items-start">
+        <Avatar src={post.profiles?.avatar_url} name={name} size={42} />
         <div className="min-w-0 flex-1">
-          <div className="font-bold truncate">{name}</div>
-          <div className="text-xs d-muted">{timeAgo(post.created_at)}</div>
+          <div className="font-bold truncate leading-tight">{name}</div>
+          <div className="text-xs d-muted mt-0.5">{username}{username && ' · '}{timeAgo(post.created_at)}</div>
+        </div>
+        <div className="relative">
+          <button type="button" onClick={() => setMenu(v => !v)} className="d-icon-btn" aria-label="Tùy chọn bài viết"><MoreHorizontal size={19} /></button>
+          {menu && <div className="absolute right-0 top-10 z-20 w-44 d-card p-1 shadow-xl">
+            <button type="button" onClick={toggleSave} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Bookmark size={16} />{saved ? 'Bỏ lưu bài viết' : 'Lưu bài viết'}</button>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(window.location.origin+'/p/'+post.id)} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Link2 size={16} />Sao chép liên kết</button>
+            {userId && userId !== post.author_id && <button type="button" onClick={async () => {
+              const reason = prompt('Lý do báo cáo (spam, lừa đảo, bản quyền...)')
+              if (!reason || !supabase) return
+              const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.slice(0,500) })
+              alert(error ? error.message : 'Đã gửi báo cáo.')
+              setMenu(false)
+            }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Flag size={16} />Báo cáo</button>}
+          </div>}
         </div>
       </div>
-      {post.content && <p className="mt-3 whitespace-pre-wrap break-words text-[15px] leading-relaxed">{post.content}</p>}
-      {post.media_url && (post.media_type === 'video' ? <video src={post.media_url} controls className="mt-3 rounded-xl w-full max-h-[520px] bg-black" /> : <img src={post.media_url} loading="lazy" alt="" className="mt-3 rounded-xl w-full max-h-[520px] object-cover" />)}
-      <div className="flex gap-5 mt-4 d-muted items-center flex-wrap text-sm">
-        {userId ? (
-          <button onClick={toggleLike} className="flex gap-1.5 items-center" style={liked ? { color: 'var(--d-danger)' } : { color: 'var(--d-muted)' }}>
-            <Heart size={18} fill={liked ? 'currentColor' : 'none'} />{count}
-          </button>
-        ) : (
-          <span className="flex gap-1.5 items-center"><Heart size={18} />{count}</span>
-        )}
-        {userId && <button onClick={() => setShow(x => !x)} className="flex gap-1.5 items-center hover:"><MessageCircle size={18} />{show ? 'Ẩn' : 'Bình luận'}</button>}
+      {post.content && <p className="px-4 mt-3 whitespace-pre-wrap break-words text-[15px] leading-[1.55]">{post.content}</p>}
+      {post.media_url && (post.media_type === 'video'
+        ? <video src={post.media_url} controls playsInline preload="metadata" className="mt-3 w-full max-h-[560px] bg-black object-contain" />
+        : <img src={post.media_url} loading="lazy" alt="" className="mt-3 w-full max-h-[560px] object-cover" />)}
+      <div className="px-4 pt-3 flex items-center justify-between text-xs d-muted">
+        <span>{count ? count+' lượt thích' : 'Chưa có lượt thích'}</span>
+        <button type="button" onClick={() => setShow(true)}>{comments.length ? comments.length+' bình luận' : 'Bình luận'}</button>
+      </div>
+      <div className="px-3 py-2 mt-2 border-t d-border-c grid grid-cols-3 gap-1">
+        <button type="button" onClick={toggleLike} disabled={!userId} className="d-post-action" style={liked ? { color:'var(--d-primary)', fontWeight:700 } : {}}>
+          <Heart size={18} fill={liked ? 'currentColor' : 'none'} /> Thích
+        </button>
+        <button type="button" onClick={() => setShow(v => !v)} className="d-post-action"><MessageCircle size={18} /> Bình luận</button>
         <ShareMenu postId={post.id} text={post.content} author={post.profiles?.full_name || post.profiles?.username} />
-        {userId && userId !== post.author_id && (
-          <button onClick={async () => {
-            const reason = prompt('Lý do báo cáo (spam, lừa đảo, bản quyền...)')
-            if (!reason || !supabase) return
-            const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.slice(0, 500) })
-            alert(error ? error.message : 'Đã gửi báo cáo.')
-          }} className="flex gap-1 items-center d-muted"><Flag size={16} />Báo cáo</button>
-        )}
       </div>
-      {show && userId && (
-        <div className="mt-4 border-t d-border-c pt-3 space-y-3">
-          {comments.map(c => (
-            <div key={c.id} className="text-sm flex gap-2">
-              <Avatar src={c.profiles?.avatar_url} name={c.profiles?.full_name || c.profiles?.username} size={28} />
-              <div className="rounded-2xl px-3 py-2 flex-1" style={{ background: "var(--d-surface-2)" }}>
-                <b className="text-xs">{c.profiles?.full_name || c.profiles?.username || 'User'}</b>
-                <div className="text-slate-200">{c.content}</div>
-              </div>
-            </div>
-          ))}
-          <div className="flex gap-2">
-            <input value={comment} onChange={e => setComment(e.target.value)} maxLength={1000} placeholder="Viết bình luận..." className="d-input flex-1 py-2.5 text-sm" onKeyDown={e => e.key === 'Enter' && addComment()} />
-            <button onClick={addComment} className="d-btn-primary px-3"><Send size={16} /></button>
+      {show && userId && <div className="px-4 pb-4 pt-2 border-t d-border-c space-y-3">
+        {comments.map(c => <div key={c.id} className="flex gap-2 text-sm">
+          <Avatar src={c.profiles?.avatar_url} name={c.profiles?.full_name || c.profiles?.username} size={30} />
+          <div className="rounded-2xl px-3 py-2 flex-1" style={{ background:'var(--d-surface-2)' }}>
+            <b className="text-xs">{c.profiles?.full_name || c.profiles?.username || 'User'}</b>
+            <div className="mt-0.5">{c.content}</div>
           </div>
+        </div>)}
+        <div className="flex gap-2">
+          <input value={comment} onChange={e => setComment(e.target.value)} maxLength={1000} placeholder="Viết bình luận..." className="d-input flex-1 py-2.5 text-sm" onKeyDown={e => e.key === 'Enter' && addComment()} />
+          <button type="button" onClick={addComment} className="d-btn-primary px-3"><Send size={16} /></button>
         </div>
-      )}
+      </div>}
     </article>
   )
 }
@@ -358,8 +383,16 @@ function Feed({ userId }) {
 
   return (
     <>
-      <div className="d-card p-1 mb-3 flex gap-1">
-        <button type="button" onClick={() => setMode('all')} className={`d-tab ${mode === 'all' ? 'active' : ''}`}>Tất cả</button>
+      <div className="home-welcome mb-3">
+        <div>
+          <div className="text-xs font-semibold opacity-80">D SOCIAL</div>
+          <h1 className="text-xl sm:text-2xl font-black mt-0.5">Bảng tin của bạn</h1>
+          <p className="text-xs sm:text-sm opacity-80 mt-1">Kết nối · Chia sẻ · Cùng xây dựng cộng đồng văn minh</p>
+        </div>
+        <button type="button" onClick={() => setShowComposer(true)} className="home-welcome-btn"><Plus size={17} /> Đăng bài</button>
+      </div>
+      <div className="d-card p-1 mb-3 flex gap-1 sticky top-[4.25rem] z-10">
+        <button type="button" onClick={() => setMode('all')} className={`d-tab ${mode === 'all' ? 'active' : ''}`}>Dành cho bạn</button>
         <button type="button" onClick={() => setMode('following')} className={`d-tab ${mode === 'following' ? 'active' : ''}`}>Đang theo dõi</button>
       </div>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
@@ -769,6 +802,7 @@ function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
             ))}
           </div>
           <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setTab('discover')} className="d-btn-ghost !min-h-[40px] !px-2.5 md:hidden" title="Tìm kiếm"><Search size={18} /></button>
             <button type="button" onClick={onToggleTheme} className="d-btn-ghost !min-h-[40px] !px-2.5" title="Đổi giao diện">
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
