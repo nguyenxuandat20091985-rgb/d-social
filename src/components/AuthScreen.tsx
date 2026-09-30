@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { LOGO_SRC } from '../lib/brand'
 
 type Props = { onLegal: (page: 'terms' | 'privacy') => void }
 
@@ -115,12 +116,7 @@ export function AuthScreen({ onLegal }: Props) {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6" style={{ background: 'var(--d-bg)', color: 'var(--d-text)' }}>
       <div className="w-full max-w-[400px]">
         <div className="text-center mb-7">
-          <div
-            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl text-white text-2xl font-black"
-            style={{ background: 'var(--d-primary)' }}
-          >
-            D
-          </div>
+          <img src={LOGO_SRC} alt="D Social" width={56} height={56} className="inline-block w-14 h-14 rounded-2xl shadow-md object-cover" />
           <h1 className="mt-4 text-2xl font-black tracking-tight">D Social</h1>
           <p className="mt-1.5 text-sm d-muted">Mạng xã hội văn minh · Đăng nhập nhanh</p>
         </div>
