@@ -44,14 +44,14 @@ function getRoute() {
 function Avatar({ src, name, size = 40, ring = false }) {
   const letter = (name || 'D').trim().charAt(0).toUpperCase()
   const img = src ? (
-    <img src={src} alt="" className="rounded-full object-cover bg-slate-700 shrink-0" style={{ width: size, height: size }} />
+    <img src={src} alt="" className="rounded-full object-cover shrink-0" style={{ width: size, height: size, background: 'var(--d-surface-2)' }} />
   ) : (
-    <div className="rounded-full font-black grid place-items-center shrink-0 text-white" style={{ background: "var(--d-primary)" }} style={{ width: size, height: size, fontSize: size * 0.42 }}>{letter}</div>
+    <div className="rounded-full font-black grid place-items-center shrink-0 text-white" style={{ width: size, height: size, fontSize: size * 0.42, background: 'var(--d-primary)' }}>{letter}</div>
   )
   if (!ring) return img
   return (
-    <div className="rounded-full p-[2px]" style={{ background: "var(--d-primary)" }} style={{ width: size + 6, height: size + 6 }}>
-      <div className="rounded-full p-[2px] h-full w-full grid place-items-center" style={{ background: "var(--d-surface)" }}>{img}</div>
+    <div className="rounded-full p-[2px]" style={{ width: size + 6, height: size + 6, background: 'var(--d-primary)' }}>
+      <div className="rounded-full p-[2px] h-full w-full grid place-items-center" style={{ background: 'var(--d-surface)' }}>{img}</div>
     </div>
   )
 }
@@ -96,14 +96,14 @@ function Legal({ kind, onBack }) {
         <h1 className="text-2xl font-black">{isTerms ? 'Điều khoản sử dụng' : 'Chính sách bảo mật'}</h1>
         {isTerms ? (
           <>
-            <p className="text-slate-300 text-sm leading-relaxed">D Social là mạng xã hội độc lập. Người dùng phải tuân thủ pháp luật Việt Nam; không đăng nội dung bạo lực, khiêu dâm, lừa đảo, thù hận, spam hoặc xâm phạm bản quyền / dữ liệu cá nhân.</p>
-            <p className="text-slate-300 text-sm leading-relaxed">Vi phạm có thể bị ẩn bài hoặc khóa tài khoản. Dùng nút Báo cáo trên bài viết. D Social không liên kết Meta/Facebook — giao diện và thương hiệu là thiết kế gốc.</p>
-            <p className="text-slate-300 text-sm leading-relaxed">Core social (đăng bài, like, bình luận, chat, theo dõi) miễn phí. VIP chỉ bổ sung tiện ích tùy chọn, không khóa giao tiếp cơ bản.</p>
+            <p className="text-sm leading-relaxed d-text">D Social là mạng xã hội độc lập. Người dùng phải tuân thủ pháp luật Việt Nam; không đăng nội dung bạo lực, khiêu dâm, lừa đảo, thù hận, spam hoặc xâm phạm bản quyền / dữ liệu cá nhân.</p>
+            <p className="text-sm leading-relaxed d-text">Vi phạm có thể bị ẩn bài hoặc khóa tài khoản. Dùng nút Báo cáo trên bài viết. D Social không liên kết Meta/Facebook — giao diện và thương hiệu là thiết kế gốc.</p>
+            <p className="text-sm leading-relaxed d-text">Core social (đăng bài, like, bình luận, chat, theo dõi) miễn phí. VIP chỉ bổ sung tiện ích tùy chọn, không khóa giao tiếp cơ bản.</p>
           </>
         ) : (
           <>
-            <p className="text-slate-300 text-sm leading-relaxed">Thu thập email, hồ sơ và nội dung bạn đăng để vận hành dịch vụ. Bảo vệ bằng Auth + RLS (Row Level Security). Không bán dữ liệu cá nhân.</p>
-            <p className="text-slate-300 text-sm leading-relaxed">Bạn có thể yêu cầu xóa tài khoản và dữ liệu liên quan qua email hỗ trợ hoặc tính năng xóa trong hồ sơ (khi có). Tin nhắn chỉ người gửi/nhận đọc được. Báo cáo được lưu để xử lý kiểm duyệt.</p>
+            <p className="text-sm leading-relaxed d-text">Thu thập email, hồ sơ và nội dung bạn đăng để vận hành dịch vụ. Bảo vệ bằng Auth + RLS (Row Level Security). Không bán dữ liệu cá nhân.</p>
+            <p className="text-sm leading-relaxed d-text">Bạn có thể yêu cầu xóa tài khoản và dữ liệu liên quan qua email hỗ trợ hoặc tính năng xóa trong hồ sơ (khi có). Tin nhắn chỉ người gửi/nhận đọc được. Báo cáo được lưu để xử lý kiểm duyệt.</p>
           </>
         )}
       </article>
@@ -116,13 +116,13 @@ function StoryRail({ people, onCompose }) {
     <div className="d-card p-3 mb-3">
       <div className="flex gap-3 overflow-x-auto pb-1">
         <button onClick={onCompose} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
-          <div className="w-14 h-14 rounded-full bg-slate-800 border-2 border-dashed border-cyan-400/50 grid place-items-center"><Plus size={22} /></div>
-          <span className="text-[10px] d-muted truncate w-full text-center">Đăng bài</span>
+          <div className="w-14 h-14 rounded-full border-2 border-dashed grid place-items-center" style={{ borderColor: 'var(--d-primary)', background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}><Plus size={22} strokeWidth={2.5} /></div>
+          <span className="text-[10px] font-medium truncate w-full text-center" style={{ color: 'var(--d-text)' }}>Đăng bài</span>
         </button>
         {people.slice(0, 12).map(p => (
           <div key={p.id} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
             <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring />
-            <span className="text-[10px] d-muted truncate w-full text-center">{(p.full_name || p.username || 'User').split(' ').pop()}</span>
+            <span className="text-[10px] truncate w-full text-center" style={{ color: 'var(--d-text)' }}>{(p.full_name || p.username || 'User').split(' ').pop()}</span>
           </div>
         ))}
       </div>
@@ -174,7 +174,7 @@ function Composer({ userId, onPublished, autoFocus, onClose }) {
         {onClose && <button onClick={onClose} className="d-muted p-1"><X size={16} /></button>}
       </div>
       <textarea autoFocus={autoFocus} value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px] placeholder:d-muted" />
-      {file && <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 text-sm mb-2"><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
+      {file && <div className="flex items-center justify-between p-2 rounded-xl /80 text-sm mb-2"><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
       {error && <p className="text-sm mb-2">{error}</p>}
       <div className="flex items-center justify-between pt-2 border-t d-border-c">
         <label className="flex gap-3 d-muted cursor-pointer">
@@ -367,7 +367,7 @@ function Feed({ userId }) {
       ) : (
         <button onClick={() => setShowComposer(true)} className="d-card p-4 mb-3 w-full text-left flex items-center gap-3 hover:d-border-c transition">
           <Avatar name="+" size={40} />
-          <span className="d-muted text-sm flex-1">Bạn đang nghĩ gì?</span>
+          <span className="text-sm flex-1" style={{ color: 'var(--d-muted)' }}>Bạn đang nghĩ gì?</span>
           <ImageIcon size={18} className="d-muted" />
         </button>
       )}
@@ -482,7 +482,7 @@ function Chat({ userId }) {
         </div>
         <div className="overflow-auto max-h-[60vh] space-y-1">
           {filtered.map(u => (
-            <button key={u.id} onClick={() => setActive(u)} className={`w-full text-left p-2.5 rounded-xl flex items-center gap-2 ${active?.id === u.id ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}>
+            <button key={u.id} onClick={() => setActive(u)} className={`w-full text-left p-2.5 rounded-xl flex items-center gap-2 ${active?.id === u.id ? '' : 'hover:/50'}`}>
               <Avatar src={u.avatar_url} name={u.full_name || u.username} size={36} />
               <span className="truncate text-sm font-medium">{u.full_name || u.username || 'User'}</span>
             </button>
