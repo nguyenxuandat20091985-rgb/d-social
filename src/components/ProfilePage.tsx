@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Shield, Heart, MessageCircle } from 'lucide-react'
+import { Shield, Heart, MessageCircle, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const MAX_IMAGE = 8 * 1024 * 1024
@@ -61,6 +61,8 @@ export function ProfilePage({ userId }) {
   const [myPosts, setMyPosts] = useState([])
   const [tab, setTab] = useState('posts')
   const [uploading, setUploading] = useState(false)
+  const [followers, setFollowers] = useState(0)
+  const [following, setFollowing] = useState(0)
 
   useEffect(() => {
     if (!supabase) return
@@ -80,6 +82,11 @@ export function ProfilePage({ userId }) {
       .order('created_at', { ascending: false })
       .limit(40)
       .then(({ data }) => setMyPosts(data || []))
+    // Follower / following counts (head + count)
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId)
+      .then(({ count }) => setFollowers(count || 0))
+    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId)
+      .then(({ count }) => setFollowing(count || 0))
   }, [userId])
 
   const save = async () => {
@@ -145,18 +152,22 @@ export function ProfilePage({ userId }) {
 
           {bio && !editing && <p className="mt-3 text-sm text-slate-300 leading-relaxed">{bio}</p>}
 
-          <div className="mt-4 flex gap-3 text-center">
-            <div className="flex-1 rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
               <div className="font-black text-lg">{myPosts.length}</div>
               <div className="text-[10px] text-slate-500">Bài viết</div>
             </div>
-            <div className="flex-1 rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
+            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
+              <div className="font-black text-lg">{followers}</div>
+              <div className="text-[10px] text-slate-500">Người theo dõi</div>
+            </div>
+            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
+              <div className="font-black text-lg">{following}</div>
+              <div className="text-[10px] text-slate-500">Đang theo dõi</div>
+            </div>
+            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
               <div className="font-black text-lg">{clips.length}</div>
               <div className="text-[10px] text-slate-500">Clip ngắn</div>
-            </div>
-            <div className="flex-1 rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
-              <div className="font-black text-lg">{moments.length}</div>
-              <div className="text-[10px] text-slate-500">Khoảnh khắc</div>
             </div>
           </div>
 
