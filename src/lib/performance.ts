@@ -6,7 +6,12 @@ export type FeedCursor = { created_at: string; id: string }
 
 export function buildFeedQuery(
   supabase: any,
-  opts: { cursor?: FeedCursor | null; pageSize?: number; publishedOnly?: boolean }
+  opts: {
+    cursor?: FeedCursor | null
+    pageSize?: number
+    publishedOnly?: boolean
+    authorIds?: string[] | null
+  }
 ) {
   const pageSize = opts.pageSize ?? FEED_PAGE_SIZE
   let q = supabase
@@ -18,6 +23,10 @@ export function buildFeedQuery(
 
   if (opts.publishedOnly !== false) {
     q = q.eq('is_published', true)
+  }
+
+  if (opts.authorIds && opts.authorIds.length > 0) {
+    q = q.in('author_id', opts.authorIds)
   }
 
   if (opts.cursor) {
