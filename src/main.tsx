@@ -134,7 +134,7 @@ function StoryRail({ people, onCompose }) {
           </div>
         ))}
       </div>
-    </div>
+    </section>
   )
 }
 
