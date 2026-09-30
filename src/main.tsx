@@ -12,6 +12,7 @@ import { postRateLimit, commentRateLimit, messageRateLimit } from './lib/ratelim
 import { FEED_PAGE_SIZE, buildFeedQuery } from './lib/performance'
 import { ShareMenu } from './components/ShareMenu'
 import { AuthScreen } from './components/AuthScreen'
+import { ProfilePage } from './components/ProfilePage'
 import './index.css'
 
 const MAX_IMAGE = 8 * 1024 * 1024
@@ -85,7 +86,7 @@ function Legal({ kind, onBack }) {
             <p className="text-slate-300 text-sm leading-relaxed">Vi phạm có thể bị ẩn bài hoặc khóa tài khoản. Dùng nút Báo cáo trên bài viết. D Social không liên kết Meta/Facebook — giao diện và thương hiệu là thiết kế gốc.</p>
           </>
         ) : (
-          <p className="text-slate-300 text-sm leading-relaxed">Thu thập email, hồ sơ và nội dung bạn đăng để vận hành dịch vụ. Bảo vệ bằng Auth + RLS. Không bán dữ liệu cá nhân. Có thể yêu cầu xóa tài khoản qua Admin.</p>
+          <p className="text-slate-300 text-sm leading-relaxed">Thu thập email, hồ sơ và nội dung bạn đăng để vận hành dịch vụ. Bảo vệ bằng Auth + RLS. Không bán dữ liệu cá nhân.</p>
         )}
       </article>
     </main>
@@ -143,7 +144,7 @@ function Composer({ userId, onPublished, autoFocus, onClose }) {
         media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
         media_type = file.type.startsWith('video/') ? 'video' : 'image'
       }
-      const { error } = await supabase.from('posts').insert({ author_id: userId, content: text.trim() || null, media_url, media_type, is_published: true })
+      const { error } = await supabase.from('posts').insert({ author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type, is_published: true })
       if (error) throw error
       setText(''); setFile(null); onPublished(); onClose?.()
     } catch (e) { setError(e.message || 'Không thể đăng') } finally { setBusy(false) }
@@ -154,7 +155,7 @@ function Composer({ userId, onPublished, autoFocus, onClose }) {
         <div className="font-bold text-sm">Tạo bài viết</div>
         {onClose && <button onClick={onClose} className="text-slate-500 p-1"><X size={16} /></button>}
       </div>
-      <textarea autoFocus={autoFocus} value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì? Hãy chia sẻ điều tích cực..." className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px] placeholder:text-slate-500" />
+      <textarea autoFocus={autoFocus} value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px] placeholder:text-slate-500" />
       {file && <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/80 text-sm mb-2"><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="text-slate-400 p-1"><X size={16} /></button></div>}
       {error && <p className="text-rose-400 text-sm mb-2">{error}</p>}
       <div className="flex items-center justify-between pt-2 border-t border-slate-800">
@@ -241,12 +242,11 @@ function PostCard({ post, userId }) {
             </div>
           ))}
           <div className="flex gap-2">
-            <input value={comment} onChange={e => setComment(e.target.value)} maxLength={1000} placeholder="Viết bình luận văn minh..." className="d-input flex-1 py-2.5 text-sm" onKeyDown={e => e.key === 'Enter' && addComment()} />
+            <input value={comment} onChange={e => setComment(e.target.value)} maxLength={1000} placeholder="Viết bình luận..." className="d-input flex-1 py-2.5 text-sm" onKeyDown={e => e.key === 'Enter' && addComment()} />
             <button onClick={addComment} className="d-btn-primary px-3"><Send size={16} /></button>
           </div>
         </div>
       )}
-      {!userId && <p className="mt-4 text-sm text-slate-400">Đăng nhập để tương tác. <a href="/" className="text-cyan-300 font-semibold">Đăng nhập</a></p>}
     </article>
   )
 }
@@ -302,7 +302,7 @@ function Feed({ userId }) {
       )}
       <div className="space-y-3">
         {posts.map(p => <PostCard key={p.id} post={p} userId={userId} />)}
-        {!posts.length && !loading && <div className="d-card p-10 text-center text-slate-500">Chưa có bài viết. Hãy chia sẻ điều tích cực đầu tiên!</div>}
+        {!posts.length && !loading && <div className="d-card p-10 text-center text-slate-500">Chưa có bài viết. Hãy chia sẻ điều tích cực!</div>}
         {error && <div className="text-center text-rose-400 py-4">{error}</div>}
         {loading && <div className="text-center text-slate-500 py-4 text-sm">Đang tải...</div>}
         <div ref={sentinel} className="h-6" />
@@ -318,7 +318,7 @@ function PublicPostPage({ postId, session }) {
   useEffect(() => {
     if (!supabase) { setErr('Chưa cấu hình'); setLoading(false); return }
     ;(async () => {
-      const { data, error } = await supabase.from('posts').select('id,author_id,content,media_url,media_type,created_at,profiles(id,username,full_name,avatar_url),likes(user_id)').eq('id', postId).maybeSingle()
+      const { data, error } = await supabase.from('posts').select('id,author_id,content,media_url,media_type,created_at,profiles!user_id(id,username,full_name,avatar_url),likes(user_id)').eq('id', postId).maybeSingle()
       if (error) setErr(error.message)
       else if (!data) setErr('Bài không tồn tại hoặc đã ẩn.')
       else setPost(data)
@@ -437,7 +437,6 @@ function Discover({ userId }) {
     <div className="space-y-3">
       <div className="d-card p-4">
         <h2 className="font-black text-lg flex items-center gap-2"><Users size={18} className="text-cyan-300" /> Mọi người</h2>
-        <p className="text-xs text-slate-500 mt-1">Tìm và kết nối thành viên cộng đồng</p>
         <div className="relative mt-3">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm tên hoặc @username..." className="d-input pl-9 py-2.5 text-sm" />
@@ -489,7 +488,6 @@ function Notifications({ userId }) {
     <div className="space-y-3">
       <div className="d-card p-4">
         <h2 className="font-black text-lg flex items-center gap-2"><Bell size={18} className="text-violet-300" /> Thông báo</h2>
-        <p className="text-xs text-slate-500 mt-1">Bình luận trên bài của bạn và tin nhắn đến</p>
       </div>
       {loading && <div className="text-center text-slate-500 py-8 text-sm">Đang tải...</div>}
       {!loading && !items.length && <div className="d-card p-10 text-center text-slate-500 text-sm">Chưa có thông báo.</div>}
@@ -501,53 +499,9 @@ function Notifications({ userId }) {
               <p className="text-sm leading-relaxed">{n.text}</p>
               <div className="text-[11px] text-slate-500 mt-1">{timeAgo(n.at)}</div>
             </div>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${n.type === 'message' ? 'bg-cyan-500/20 text-cyan-300' : 'bg-violet-500/20 text-violet-300'}`}>{n.type === 'message' ? 'Chat' : 'Bài viết'}</span>
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-function ProfilePage({ userId }) {
-  const [name, setName] = useState('')
-  const [username, setUsername] = useState('')
-  const [bio, setBio] = useState('')
-  const [saved, setSaved] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [myPosts, setMyPosts] = useState([])
-  useEffect(() => {
-    if (!supabase) return
-    supabase.from('profiles').select('*').eq('id', userId).single().then(({ data }) => {
-      if (data) { setName(data.full_name || ''); setUsername(data.username || ''); setBio(data.bio || ''); setIsAdmin(!!data.is_admin) }
-    })
-    supabase.from('posts').select('id,content,media_url,media_type,created_at,likes(user_id)').eq('author_id', userId).order('created_at', { ascending: false }).limit(20).then(({ data }) => setMyPosts(data || []))
-  }, [userId])
-  const save = async () => {
-    if (!supabase) return
-    const { error } = await supabase.from('profiles').update({ full_name: name.trim() || null, username: username.trim() || null, bio: bio.trim() || null }).eq('id', userId)
-    if (!error) { setSaved(true); setTimeout(() => setSaved(false), 2000) }
-  }
-  return (
-    <div className="space-y-3">
-      <section className="d-card p-5 space-y-3">
-        <div className="flex items-center gap-4">
-          <Avatar name={name || username || 'D'} size={72} ring />
-          <div>
-            <h2 className="text-xl font-black">{name || 'Hồ sơ của bạn'}</h2>
-            {username && <div className="text-sm text-slate-400">@{username}</div>}
-          </div>
-        </div>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Tên hiển thị" className="d-input" />
-        <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} placeholder="Username" className="d-input" />
-        <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Giới thiệu ngắn..." className="d-input min-h-24" />
-        <button onClick={save} className="d-btn-primary">Lưu hồ sơ</button>
-        {saved && <span className="text-emerald-400 text-sm ml-2">Đã lưu</span>}
-        {isAdmin && <p className="pt-2 text-sm"><a href="/admin" className="text-amber-300 underline flex items-center gap-1"><Shield size={14} /> Admin + AI kiểm duyệt</a></p>}
-      </section>
-      <h3 className="font-bold text-sm text-slate-400 px-1">Bài của bạn</h3>
-      {myPosts.map(p => <PostCard key={p.id} post={{ ...p, author_id: userId, profiles: { full_name: name, username, avatar_url: null } }} userId={userId} />)}
-      {!myPosts.length && <div className="d-card p-6 text-center text-slate-500 text-sm">Bạn chưa đăng bài nào.</div>}
     </div>
   )
 }
@@ -565,7 +519,7 @@ function AdminPage({ userId }) {
       const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', userId).single()
       if (!me?.is_admin) return
       setOk(true)
-      const { data } = await supabase.from('posts').select('id,author_id,content,is_published,created_at,profiles(full_name,username)').order('created_at', { ascending: false }).limit(100)
+      const { data } = await supabase.from('posts').select('id,author_id,content,is_published,created_at,profiles!user_id(full_name,username)').order('created_at', { ascending: false }).limit(100)
       if (data) setPosts(data)
       const { data: reps } = await supabase.from('reports').select('*').order('created_at', { ascending: false }).limit(50)
       if (reps) setReports(reps)
@@ -591,7 +545,6 @@ function AdminPage({ userId }) {
         <a href="/" className="text-sm text-slate-400">← App</a>
       </div>
       <section className="d-card p-4 space-y-2">
-        <h2 className="font-bold text-sm text-slate-300">AI kiểm duyệt</h2>
         <textarea value={aiText} onChange={e => setAiText(e.target.value)} className="d-input min-h-24 text-sm" placeholder="Dán nội dung..." />
         <button disabled={busy || !aiText.trim()} onClick={runAi} className="d-btn-primary text-sm">{busy ? 'Đang phân tích...' : 'Chạy AI'}</button>
         {aiResult && <pre className="text-xs bg-slate-950/80 p-3 rounded-xl overflow-auto text-cyan-100">{JSON.stringify(aiResult, null, 2)}</pre>}
@@ -600,13 +553,12 @@ function AdminPage({ userId }) {
         <h2 className="font-bold mb-2">Báo cáo ({reports.length})</h2>
         <div className="space-y-2 max-h-48 overflow-auto">
           {reports.map(r => <div key={r.id} className="text-xs border-b border-slate-800 pb-2"><span className="text-amber-300">{r.target_type}</span> · {r.reason}</div>)}
-          {!reports.length && <p className="text-slate-500 text-sm">Chưa có báo cáo.</p>}
         </div>
       </section>
       <div className="space-y-2">
         {posts.map(p => (
           <div key={p.id} className="d-card p-4">
-            <div className="text-xs text-slate-500">{p.profiles?.full_name || p.author_id} · {timeAgo(p.created_at)}</div>
+            <div className="text-xs text-slate-500">{p.profiles?.full_name || p.author_id}</div>
             <p className="mt-1 text-sm">{p.content}</p>
             {p.is_published !== false && <button onClick={() => hide(p.id)} className="mt-2 text-sm text-amber-300">Ẩn bài</button>}
           </div>
@@ -653,15 +605,10 @@ function Shell({ tab, setTab, onLogout, children }) {
               <n.icon size={18} /><span>{n.label}</span>
             </button>
           ))}
-          <div className="d-card p-3 text-xs text-slate-400 mt-4 leading-relaxed">Tôn trọng pháp luật & bản quyền. Báo cáo nội dung xấu trên bài viết.</div>
         </aside>
         <main className="min-w-0">{children}</main>
         <aside className="hidden md:block space-y-3 sticky top-20 self-start">
-          <div className="d-card p-4">
-            <div className="font-bold text-sm flex items-center gap-1"><Sparkles size={14} className="text-violet-300" /> Mẹo</div>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">Đăng nội dung tích cực, kết nối bạn bè, Chat và theo dõi Thông báo.</p>
-          </div>
-          <div className="d-card p-4 text-xs text-slate-500">Cài PWA để dùng như ứng dụng điện thoại.</div>
+          <div className="d-card p-4 text-xs text-slate-400">Đăng nội dung tích cực · Chat · Thông báo</div>
         </aside>
       </div>
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-slate-800 bg-slate-950/95 backdrop-blur-xl">
