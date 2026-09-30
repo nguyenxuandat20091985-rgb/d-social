@@ -1,23 +1,15 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Shield, Heart, MessageCircle, Users } from 'lucide-react'
+import { Shield, Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 
 function Avatar({ src, name, size = 40, ring = false }) {
   const letter = (name || 'D').trim().charAt(0).toUpperCase()
-  const img = src ? (
-    <img src={src} alt="" className="rounded-full object-cover bg-slate-700 shrink-0" style={{ width: size, height: size }} />
-  ) : (
-    <div className="rounded-full bg-gradient-to-br from-cyan-400 to-violet-500 text-slate-950 font-black grid place-items-center shrink-0" style={{ width: size, height: size, fontSize: size * 0.42 }}>{letter}</div>
-  )
+  const img = src ? <img src={src} alt="" className="rounded-full object-cover shrink-0" style={{ width: size, height: size, background: 'var(--d-surface-2)' }} /> : <div className="rounded-full font-black grid place-items-center shrink-0 text-white" style={{ width: size, height: size, fontSize: size * 0.42, background: 'var(--d-primary)' }}>{letter}</div>
   if (!ring) return img
-  return (
-    <div className="rounded-full p-[2px] bg-gradient-to-br from-cyan-400 via-violet-400 to-fuchsia-400" style={{ width: size + 6, height: size + 6 }}>
-      <div className="rounded-full bg-slate-950 p-[2px] h-full w-full grid place-items-center">{img}</div>
-    </div>
-  )
+  return <div className="rounded-full p-[2px]" style={{ width: size + 6, height: size + 6, background: 'var(--d-primary)' }}><div className="rounded-full p-[2px] h-full w-full grid place-items-center" style={{ background: 'var(--d-surface)' }}>{img}</div></div>
 }
 
 function timeAgo(iso) {
@@ -29,26 +21,22 @@ function timeAgo(iso) {
 }
 
 function MiniPost({ post, name, avatar }) {
-  return (
-    <article className="d-card p-4">
-      <div className="flex gap-3 items-start">
-        <Avatar src={avatar} name={name} size={40} />
-        <div className="min-w-0 flex-1">
-          <div className="font-bold">{name}</div>
-          <div className="text-xs text-slate-500">{timeAgo(post.created_at)}</div>
-        </div>
-      </div>
-      {post.content && <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</p>}
-      {post.media_url && (post.media_type === 'video'
-        ? <video src={post.media_url} controls className="mt-3 rounded-xl w-full max-h-[420px] bg-black" />
-        : <img src={post.media_url} alt="" className="mt-3 rounded-xl w-full max-h-[420px] object-cover" loading="lazy" />)}
-      <div className="flex gap-4 mt-3 text-slate-500 text-sm">
-        <span className="flex items-center gap-1"><Heart size={16} />{post.likes?.length || 0}</span>
-        <a href={`/p/${post.id}`} className="flex items-center gap-1 hover:text-cyan-300"><MessageCircle size={16} />Xem</a>
-      </div>
-    </article>
-  )
+  return <article className="d-card p-4">
+    <div className="flex gap-3 items-start"><Avatar src={avatar} name={name} size={40} /><div className="min-w-0 flex-1"><div className="font-bold">{name}</div><div className="text-xs d-muted">{timeAgo(post.created_at)}</div></div></div>
+    {post.content && <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed">{post.content}</p>}
+    {post.media_url && (post.media_type === 'video' ? <video src={post.media_url} controls className="mt-3 rounded-xl w-full max-h-[420px] bg-black" /> : <img src={post.media_url} alt="" className="mt-3 rounded-xl w-full max-h-[420px] object-cover" loading="lazy" />)}
+    <div className="flex gap-4 mt-3 d-muted text-sm"><span className="flex items-center gap-1"><Heart size={16} />{post.likes?.length || 0}</span><a href={`/p/${post.id}`} className="flex items-center gap-1">Xem</a></div>
+  </article>
 }
+
+function MenuRow({ icon: Icon, label, value, onClick, danger = false }) {
+  return <button type="button" onClick={onClick} className="w-full flex items-center gap-3 px-3 py-3.5 text-left rounded-xl transition hover:bg-[var(--d-surface-2)]" style={{ color: danger ? 'var(--d-danger)' : 'var(--d-text)' }}>
+    <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: danger ? 'color-mix(in srgb, var(--d-danger) 10%, transparent)' : 'var(--d-surface-2)', color: danger ? 'var(--d-danger)' : 'var(--d-primary)' }}><Icon size={18} /></span>
+    <span className="flex-1 text-sm font-semibold">{label}</span>{value && <span className="text-xs d-muted">{value}</span>}<ChevronRight size={17} className="d-muted shrink-0" />
+  </button>
+}
+
+function SectionTitle({ children }) { return <div className="px-3 pt-4 pb-1 text-xs font-bold uppercase tracking-wide d-muted">{children}</div> }
 
 export function ProfilePage({ userId }) {
   const [name, setName] = useState('')
@@ -59,47 +47,35 @@ export function ProfilePage({ userId }) {
   const [editing, setEditing] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [myPosts, setMyPosts] = useState([])
-  const [tab, setTab] = useState('posts')
-  const [uploading, setUploading] = useState(false)
   const [followers, setFollowers] = useState(0)
   const [following, setFollowing] = useState(0)
+  const [friends, setFriends] = useState(0)
+  const [view, setView] = useState('home')
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     if (!supabase) return
-    supabase.from('profiles').select('*').eq('id', userId).single().then(({ data }) => {
-      if (data) {
-        setName(data.full_name || '')
-        setUsername(data.username || '')
-        setBio(data.bio || '')
-        setAvatar(data.avatar_url || '')
-        setIsAdmin(!!data.is_admin)
-      }
-    })
-    supabase
-      .from('posts')
-      .select('id,content,media_url,media_type,created_at,likes(user_id)')
-      .eq('author_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(40)
-      .then(({ data }) => setMyPosts(data || []))
-    // Follower / following counts (head + count)
-    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId)
-      .then(({ count }) => setFollowers(count || 0))
-    supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId)
-      .then(({ count }) => setFollowing(count || 0))
+    ;(async () => {
+      const [{ data: profile }, { data: posts }, { count: followerCount }, { count: followingCount }, { data: mine }, { data: theirs }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        supabase.from('posts').select('id,content,media_url,media_type,created_at,likes(user_id)').eq('author_id', userId).order('created_at', { ascending: false }).limit(40),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+        supabase.from('follows').select('following_id').eq('follower_id', userId),
+        supabase.from('follows').select('follower_id').eq('following_id', userId)
+      ])
+      if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || ''); setIsAdmin(!!profile.is_admin) }
+      setMyPosts(posts || [])
+      setFollowers(followerCount || 0); setFollowing(followingCount || 0)
+      const mineSet = new Set((mine || []).map(x => x.following_id))
+      setFriends((theirs || []).filter(x => mineSet.has(x.follower_id)).length)
+    })()
   }, [userId])
 
   const save = async () => {
     if (!supabase) return
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: name.trim() || null, username: username.trim() || null, bio: bio.trim() || null })
-      .eq('id', userId)
-    if (!error) {
-      setSaved(true)
-      setEditing(false)
-      setTimeout(() => setSaved(false), 2000)
-    }
+    const { error } = await supabase.from('profiles').update({ full_name: name.trim() || null, username: username.trim() || null, bio: bio.trim() || null }).eq('id', userId)
+    if (!error) { setSaved(true); setEditing(false); setTimeout(() => setSaved(false), 2000) } else alert(error.message)
   }
 
   const uploadAvatar = async (file) => {
@@ -112,165 +88,75 @@ export function ProfilePage({ userId }) {
       const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: true })
       if (up.error) throw up.error
       const url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-      await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId)
+      const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId)
+      if (error) throw error
       setAvatar(url)
-    } catch (e) {
-      alert(e.message || 'Không tải được ảnh')
-    } finally {
-      setUploading(false)
-    }
+    } catch (e) { alert(e.message || 'Không tải được ảnh') } finally { setUploading(false) }
   }
 
   const clips = myPosts.filter(p => p.media_type === 'video')
-  const moments = myPosts.filter(p => p.media_url && p.media_type === 'image').slice(0, 24)
+  const images = myPosts.filter(p => p.media_url && p.media_type === 'image')
   const displayName = name || 'Thành viên D'
 
-  return (
-    <div className="space-y-0">
-      <section className="d-card overflow-hidden">
-        <div className="h-36 sm:h-44 relative bg-gradient-to-br from-cyan-500/40 via-violet-500/50 to-fuchsia-500/30">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15),transparent_50%)]" />
-          <div className="absolute bottom-3 right-3 text-[10px] text-white/50 font-medium tracking-wide">D SOCIAL</div>
-        </div>
-        <div className="px-4 pb-4 -mt-12 relative">
-          <div className="flex items-end gap-3">
-            <label className="relative cursor-pointer group shrink-0">
-              <Avatar src={avatar} name={displayName} size={88} ring />
-              <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[10px] transition">
-                {uploading ? '...' : 'Đổi ảnh'}
-              </div>
-              <input hidden type="file" accept="image/*" onChange={e => uploadAvatar(e.target.files?.[0])} />
-            </label>
-            <div className="flex-1 min-w-0 pb-1">
-              <h2 className="text-xl font-black truncate">{displayName}</h2>
-              {username && <div className="text-sm text-slate-400">@{username}</div>}
-            </div>
-            <button type="button" onClick={() => setEditing(v => !v)} className="d-btn-ghost text-xs shrink-0">
-              {editing ? 'Đóng' : 'Chỉnh sửa'}
-            </button>
-          </div>
-
-          {bio && !editing && <p className="mt-3 text-sm text-slate-300 leading-relaxed">{bio}</p>}
-
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
-              <div className="font-black text-lg">{myPosts.length}</div>
-              <div className="text-[10px] text-slate-500">Bài viết</div>
-            </div>
-            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
-              <div className="font-black text-lg">{followers}</div>
-              <div className="text-[10px] text-slate-500">Người theo dõi</div>
-            </div>
-            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
-              <div className="font-black text-lg">{following}</div>
-              <div className="text-[10px] text-slate-500">Đang theo dõi</div>
-            </div>
-            <div className="rounded-xl border border-slate-700/50 bg-slate-900/50 py-2">
-              <div className="font-black text-lg">{clips.length}</div>
-              <div className="text-[10px] text-slate-500">Clip ngắn</div>
-            </div>
-          </div>
-
-          {editing && (
-            <div className="mt-4 space-y-2 border-t border-slate-800 pt-4">
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Tên hiển thị" className="d-input" />
-              <input value={username} onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} placeholder="Username" className="d-input" />
-              <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Giới thiệu ngắn về bạn..." className="d-input min-h-20" />
-              <button type="button" onClick={save} className="d-btn-primary">Lưu hồ sơ</button>
-              {saved && <span className="text-emerald-400 text-sm ml-2">Đã lưu</span>}
-            </div>
-          )}
-
-          {isAdmin && (
-            <p className="pt-3 text-sm">
-              <a href="/admin" className="text-amber-300 underline inline-flex items-center gap-1">
-                <Shield size={14} /> Admin + AI kiểm duyệt
-              </a>
-            </p>
-          )}
-        </div>
-      </section>
-
-      <div className="flex gap-1 mt-3 p-1 d-card">
-        {[
-          { id: 'posts', label: 'Bài viết' },
-          { id: 'clips', label: 'Clip ngắn' },
-          { id: 'moments', label: 'Khoảnh khắc' },
-        ].map(x => (
-          <button
-            key={x.id}
-            type="button"
-            onClick={() => setTab(x.id)}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition ${
-              tab === x.id
-                ? 'bg-gradient-to-r from-cyan-500/20 to-violet-500/20 text-cyan-200 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            {x.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-3 space-y-3">
-        {tab === 'posts' && (
-          <>
-            {myPosts.map(p => (
-              <MiniPost key={p.id} post={p} name={displayName} avatar={avatar} />
-            ))}
-            {!myPosts.length && (
-              <div className="d-card p-8 text-center text-slate-500 text-sm">
-                Chưa có bài viết. Vào Trang chủ để đăng bài hoặc ảnh.
-              </div>
-            )}
-          </>
-        )}
-
-        {tab === 'clips' && (
-          <>
-            <div className="d-card p-3 text-xs text-slate-400 leading-relaxed">
-              <b className="text-violet-300">Clip ngắn</b> — đăng video từ Trang chủ (chọn video khi tạo bài). Tính năng gốc của D Social.
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {clips.map(p => (
-                <div key={p.id} className="d-card overflow-hidden aspect-[9/14] relative bg-black">
-                  <video src={p.media_url} className="w-full h-full object-cover" muted playsInline controls />
-                  {p.content && (
-                    <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/80 to-transparent text-[11px] line-clamp-2">
-                      {p.content}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {!clips.length && (
-              <div className="d-card p-8 text-center text-slate-500 text-sm">
-                Chưa có clip. Trang chủ → Đăng bài → chọn file video.
-              </div>
-            )}
-          </>
-        )}
-
-        {tab === 'moments' && (
-          <>
-            <div className="d-card p-3 text-xs text-slate-400 leading-relaxed">
-              <b className="text-cyan-300">Khoảnh khắc</b> — lưới ảnh gần đây trên trang cá nhân (thiết kế D Social).
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {moments.map(p => (
-                <a key={p.id} href={`/p/${p.id}`} className="aspect-square overflow-hidden rounded-xl bg-slate-800">
-                  <img src={p.media_url} alt="" className="w-full h-full object-cover hover:scale-105 transition" loading="lazy" />
-                </a>
-              ))}
-            </div>
-            {!moments.length && (
-              <div className="d-card p-8 text-center text-slate-500 text-sm">
-                Chưa có khoảnh khắc. Đăng ảnh từ Trang chủ.
-              </div>
-            )}
-          </>
-        )}
-      </div>
+  if (view !== 'home') {
+    const titles = { profile:'Trang cá nhân', friends:'Bạn bè', followers:'Người theo dõi', following:'Đang theo dõi', media:'Ảnh & video của tôi', posts:'Bài viết của tôi', moments:'Khoảnh khắc của tôi', saved:'Bài viết đã lưu', settings:'Cài đặt tài khoản', privacy:'Quyền riêng tư', notifications:'Cài đặt thông báo', help:'Trợ giúp' }
+    return <div className="space-y-3">
+      <div className="flex items-center gap-2"><button type="button" onClick={() => setView('home')} className="d-btn-ghost !px-3">←</button><h2 className="font-black text-lg">{titles[view] || 'Trung tâm cá nhân'}</h2></div>
+      {view === 'profile' && <section className="d-card p-4 space-y-3"><div className="flex items-center gap-3"><Avatar src={avatar} name={displayName} size={64} ring /><div><div className="font-bold">{displayName}</div><div className="text-sm d-muted">@{username || 'username'}</div></div></div><button type="button" onClick={() => { setEditing(true); setView('home') }} className="d-btn-primary w-full">Chỉnh sửa thông tin</button></section>}
+      {['friends','followers','following'].includes(view) && <div className="d-card p-8 text-center d-muted text-sm">{view === 'friends' ? `${friends} bạn bè` : view === 'followers' ? `${followers} người theo dõi` : `${following} người đang theo dõi`}<div className="mt-2">Danh sách kết nối sẽ được mở từ mục này.</div></div>}
+      {(view === 'posts' || view === 'media' || view === 'moments') && <div className="space-y-3">
+        {view === 'moments' ? <div className="grid grid-cols-3 gap-1.5">{images.map(p => <a key={p.id} href={`/p/${p.id}`} className="aspect-square overflow-hidden rounded-xl bg-[var(--d-surface-2)]"><img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" /></a>)}</div> :
+        view === 'media' ? <div className="grid grid-cols-2 gap-2">{[...images, ...clips].map(p => p.media_url && <a key={p.id} href={`/p/${p.id}`} className="d-card overflow-hidden aspect-square"><img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" /></a>)}</div> :
+        myPosts.map(p => <MiniPost key={p.id} post={p} name={displayName} avatar={avatar} />)}
+        {!myPosts.length && <div className="d-card p-8 text-center d-muted text-sm">Chưa có nội dung.</div>}
+      </div>}
+      {view === 'saved' && <div className="d-card p-8 text-center d-muted text-sm">Chưa có bài viết đã lưu.</div>}
+      {['settings','privacy','notifications','help'].includes(view) && <section className="d-card p-2">
+        {view === 'settings' && <><MenuRow icon={Lock} label="Quyền riêng tư" onClick={() => setView('privacy')} /><MenuRow icon={Bell} label="Cài đặt thông báo" onClick={() => setView('notifications')} /><MenuRow icon={HelpCircle} label="Trợ giúp" onClick={() => setView('help')} />{isAdmin && <MenuRow icon={Shield} label="Admin + AI kiểm duyệt" onClick={() => { window.location.href='/admin' }} />}</>}
+        {view === 'privacy' && <div className="p-4 text-sm leading-relaxed d-muted">Bạn kiểm soát thông tin hồ sơ và nội dung đã đăng. D Social sử dụng Supabase Auth + RLS để bảo vệ dữ liệu theo quyền truy cập.</div>}
+        {view === 'notifications' && <div className="p-4 text-sm leading-relaxed d-muted">Thông báo hoạt động và tin nhắn mới được quản lý tại tab Thông báo.</div>}
+        {view === 'help' && <div className="p-4 text-sm leading-relaxed d-muted">Nếu gặp lỗi, hãy tải lại ứng dụng và kiểm tra kết nối. Bạn có thể dùng chức năng Báo cáo trên bài viết để gửi nội dung cần kiểm duyệt.</div>}
+      </section>}
     </div>
-  )
+  }
+
+  return <div className="space-y-3">
+    <section className="d-card overflow-hidden">
+      <div className="h-36 sm:h-44 relative" style={{ background:'linear-gradient(135deg, color-mix(in srgb, var(--d-primary) 55%, transparent), color-mix(in srgb, #8b5cf6 45%, transparent), color-mix(in srgb, #ec4899 30%, transparent))' }}>
+        <div className="absolute inset-0 opacity-40" style={{ background:'radial-gradient(circle_at_30%_20%,rgba(255,255,255,.18),transparent 50%)' }} />
+        <div className="absolute bottom-3 right-3 text-[10px] text-white/60 font-medium tracking-wide">D SOCIAL</div>
+      </div>
+      <div className="px-4 pb-4 -mt-12 relative">
+        <div className="flex items-end gap-3">
+          <label className="relative cursor-pointer group shrink-0"><Avatar src={avatar} name={displayName} size={88} ring /><div className="absolute inset-0 rounded-full bg-black/45 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[10px] transition">{uploading ? '...' : <Camera size={18} />}</div><input hidden type="file" accept="image/*" onChange={e => uploadAvatar(e.target.files?.[0])} /></label>
+          <div className="flex-1 min-w-0 pb-1"><h2 className="text-xl font-black truncate">{displayName}</h2><div className="text-sm d-muted">{username ? '@'+username : '@username'}</div></div>
+          <button type="button" onClick={() => setEditing(v => !v)} className="d-btn-ghost text-xs shrink-0">{editing ? 'Đóng' : 'Chỉnh sửa'}</button>
+        </div>
+        {bio && !editing && <p className="mt-3 text-sm leading-relaxed d-muted">{bio}</p>}
+        <div className="mt-4 grid grid-cols-4 gap-1.5">
+          {[[myPosts.length,'Bài viết','posts'],[friends,'Bạn bè','friends'],[followers,'Người theo dõi','followers'],[following,'Đang theo dõi','following']].map(([count,label,target]) => <button key={label} type="button" onClick={() => setView(target)} className="rounded-xl py-2.5 px-1 text-center border transition hover:bg-[var(--d-surface-2)]" style={{ borderColor:'var(--d-border)', background:'var(--d-surface)' }}><div className="font-black text-lg leading-none">{count}</div><div className="text-[10px] d-muted mt-1 leading-tight">{label}</div></button>)}
+        </div>
+        {editing && <div className="mt-4 space-y-2 border-t d-border-c pt-4"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Tên hiển thị" className="d-input" /><input value={username} onChange={e=>setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g,''))} placeholder="Username" className="d-input" /><textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Giới thiệu ngắn về bạn..." className="d-input min-h-20" /><div className="flex items-center gap-2"><button type="button" onClick={save} className="d-btn-primary">Lưu hồ sơ</button>{saved && <span className="text-sm flex items-center gap-1" style={{color:'var(--d-success)'}}><Check size={15}/>Đã lưu</span>}</div></div>}
+        {isAdmin && <a href="/admin" className="mt-3 text-xs inline-flex items-center gap-1" style={{color:'var(--d-warning)'}}><Shield size={14}/>Admin + AI kiểm duyệt</a>}
+      </div>
+    </section>
+    <section className="d-card p-1.5">
+      <SectionTitle>Trung tâm cá nhân</SectionTitle>
+      <MenuRow icon={UserRound} label="Trang cá nhân" onClick={()=>setView('profile')} />
+      <MenuRow icon={Users} label="Bạn bè" value={String(friends)} onClick={()=>setView('friends')} />
+      <MenuRow icon={Heart} label="Người theo dõi" value={String(followers)} onClick={()=>setView('followers')} />
+      <MenuRow icon={ImageIcon} label="Ảnh & video của tôi" value={String(images.length+clips.length)} onClick={()=>setView('media')} />
+      <MenuRow icon={FileText} label="Bài viết của tôi" value={String(myPosts.length)} onClick={()=>setView('posts')} />
+      <MenuRow icon={Bookmark} label="Bài viết đã lưu" onClick={()=>setView('saved')} />
+    </section>
+    <section className="d-card p-1.5">
+      <SectionTitle>Tài khoản & hỗ trợ</SectionTitle>
+      <MenuRow icon={Settings} label="Cài đặt tài khoản" onClick={()=>setView('settings')} />
+      <MenuRow icon={Lock} label="Quyền riêng tư" onClick={()=>setView('privacy')} />
+      <MenuRow icon={Bell} label="Thông báo" onClick={()=>setView('notifications')} />
+      <MenuRow icon={HelpCircle} label="Trợ giúp" onClick={()=>setView('help')} />
+      <MenuRow icon={LogOut} label="Đăng xuất" danger onClick={async()=>{await supabase?.auth.signOut()}} />
+    </section>
+    <div className="px-1 pb-2 text-[11px] d-muted text-center">D Social · Hồ sơ & quản lý cá nhân</div>
+  </div>
 }
