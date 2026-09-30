@@ -14,6 +14,7 @@ import { ShareMenu } from './components/ShareMenu'
 import { AuthScreen } from './components/AuthScreen'
 import { ProfilePage } from './components/ProfilePage'
 import './index.css'
+import { LOGO_SRC } from './lib/brand'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -754,7 +755,7 @@ function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
       <header className="sticky top-0 z-30 border-b backdrop-blur-xl" style={{ background: 'color-mix(in srgb, var(--d-nav) 92%, transparent)', borderColor: 'var(--d-border)' }}>
         <div className="max-w-6xl mx-auto px-3 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl text-white font-black grid place-items-center text-sm" style={{ background: 'var(--d-primary)' }}>D</div>
+            <img src={LOGO_SRC} alt="D Social" width={36} height={36} className="w-9 h-9 rounded-xl shadow-sm object-cover" />
             <div>
               <div className="font-black leading-none tracking-tight text-[15px]">D Social</div>
               <div className="text-[10px] d-muted">Cộng đồng văn minh</div>
@@ -798,7 +799,7 @@ function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t d-safe-bottom" style={{ background: 'var(--d-nav)', borderColor: 'var(--d-border)' }}>
         <div className="flex items-stretch justify-around px-1 pt-1.5 pb-1">
           {nav.map(n => (
-            <button key={n.id} type="button" onClick={() => setTab(n.id)} className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 text-[10px] min-h-[48px] ${tab === n.id ? 'font-semibold' : 'd-muted'}`} style={tab === n.id ? { color: 'var(--d-primary)' } : undefined}>
+            <button key={n.id} type="button" onClick={() => setTab(n.id)} className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 text-[11px] min-h-[48px] ${tab === n.id ? 'font-bold' : 'font-medium'}`} style={{ color: tab === n.id ? 'var(--d-primary)' : 'var(--d-muted)' }}>
               <n.icon size={22} strokeWidth={tab === n.id ? 2.4 : 1.8} />
               {n.label}
             </button>
