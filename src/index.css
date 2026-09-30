@@ -140,3 +140,14 @@ body {
 .d-border-c { border-color: var(--d-border); }
 .d-bg { background: var(--d-bg); }
 .d-surface { background: var(--d-surface); }
+
+
+/* D Social home/feed polish */
+.scrollbar-hide::-webkit-scrollbar{display:none}.scrollbar-hide{scrollbar-width:none}
+.home-welcome{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px;border-radius:18px;background:linear-gradient(135deg,var(--d-primary-soft),var(--d-surface));border:1px solid var(--d-border)}
+.home-welcome-btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border:0;border-radius:12px;padding:9px 13px;background:var(--d-primary);color:#fff;font-size:12px;font-weight:800;box-shadow:0 6px 18px color-mix(in srgb,var(--d-primary) 20%,transparent)}
+.d-icon-btn{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;color:var(--d-muted)}
+.d-icon-btn:hover{background:var(--d-surface-2);color:var(--d-text)}
+.d-post-action{display:flex;align-items:center;justify-content:center;gap:7px;min-height:40px;border-radius:10px;font-size:13px;font-weight:600;color:var(--d-muted);transition:.15s}
+.d-post-action:hover{background:var(--d-surface-2);color:var(--d-text)}
+@media(max-width:640px){.home-welcome{padding:15px;border-radius:16px}.home-welcome h1{font-size:20px}.home-welcome-btn{padding:8px 10px}.d-card{border-radius:15px}}
