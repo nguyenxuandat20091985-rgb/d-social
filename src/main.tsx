@@ -779,7 +779,7 @@ function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
   const nav = [
     { id: 'feed', label: 'Trang chủ', icon: Home },
     { id: 'discover', label: 'Bạn bè', icon: Users },
-    { id: 'chat', label: 'Chat', icon: MessageSquare },
+    { id: 'chat', label: 'Kết nối', icon: Users },
     { id: 'notifs', label: 'Thông báo', icon: Bell },
     { id: 'profile', label: 'Tôi', icon: User },
   ]
