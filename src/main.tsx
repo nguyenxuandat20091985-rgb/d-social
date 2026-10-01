@@ -459,100 +459,141 @@ function Chat({ userId }) {
   const [active, setActive] = useState(null)
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+  const [mobileConversation, setMobileConversation] = useState(false)
   const bottom = useRef(null)
-  useEffect(() => {
+  const textRef = useRef(null)
+
+  const loadPeople = async () => {
     if (!supabase) return
-    ;(async () => {
-      const [{ data: profiles }, { data: blk }] = await Promise.all([
-        supabase.from('profiles').select('id,username,full_name,avatar_url').neq('id', userId).limit(80),
-        supabase.from('blocks').select('blocked_id').eq('blocker_id', userId),
-      ])
-      const blocked = new Set((blk || []).map(b => b.blocked_id))
-      setUsers((profiles || []).filter(p => !blocked.has(p.id)))
-    })()
-  }, [userId])
+    const [{ data: profiles, error: profileError }, { data: blocks }] = await Promise.all([
+      supabase.from('profiles').select('id,username,full_name,avatar_url').neq('id', userId).limit(100),
+      supabase.from('blocks').select('blocked_id').eq('blocker_id', userId),
+    ])
+    if (profileError) { setError('Không tải được danh sách thành viên.'); return }
+    const blocked = new Set((blocks || []).map(b => b.blocked_id))
+    const allowed = (profiles || []).filter(p => !blocked.has(p.id))
+    const { data: recent } = await supabase.from('messages').select('sender_id,recipient_id,content,created_at,read_at').or('sender_id.eq.'+userId+',recipient_id.eq.'+userId).order('created_at', { ascending: false }).limit(300)
+    const latest = new Map()
+    for (const m of recent || []) {
+      const otherId = m.sender_id === userId ? m.recipient_id : m.sender_id
+      if (!latest.has(otherId)) latest.set(otherId, m)
+    }
+    allowed.sort((a,b) => {
+      const at = new Date(latest.get(a.id)?.created_at || 0).getTime()
+      const bt = new Date(latest.get(b.id)?.created_at || 0).getTime()
+      return bt - at
+    })
+    setUsers(allowed)
+  }
+
+  useEffect(() => { loadPeople() }, [userId])
+
   useEffect(() => {
     if (!supabase || !active) return
+    let alive = true
+    setLoading(true); setError('')
     const load = async () => {
-      const { data } = await supabase!.from('messages').select('*').or(`and(sender_id.eq.${userId},recipient_id.eq.${active.id}),and(sender_id.eq.${active.id},recipient_id.eq.${userId})`).order('created_at', { ascending: true }).limit(200)
-      if (data) {
-        setMessages(data)
-        const unread = data.filter(m => m.recipient_id === userId && !m.read_at).map(m => m.id)
-        if (unread.length) {
-          await supabase!.from('messages').update({ read_at: new Date().toISOString() }).in('id', unread)
-        }
+      const { data, error: loadError } = await supabase.from('messages').select('*').or(`and(sender_id.eq.${userId},recipient_id.eq.${active.id}),and(sender_id.eq.${active.id},recipient_id.eq.${userId})`).order('created_at', { ascending: true }).limit(200)
+      if (!alive) return
+      if (loadError) setError('Không tải được cuộc trò chuyện.')
+      else {
+        setMessages(data || [])
+        const unread = (data || []).filter(m => m.recipient_id === userId && !m.read_at).map(m => m.id)
+        if (unread.length) await supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', unread)
       }
+      setLoading(false)
     }
     load()
-    const ch = supabase.channel(`chat-${userId}-${active.id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-      const m = payload.new
-      if ((m.sender_id === userId && m.recipient_id === active.id) || (m.sender_id === active.id && m.recipient_id === userId))
-        setMessages(x => (x.some(y => y.id === m.id) ? x : [...x, m]))
-    }).subscribe()
-    return () => { supabase!.removeChannel(ch) }
-  }, [active, userId])
+    const channel = supabase.channel('chat-'+userId+'-'+active.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async payload => {
+        const m = payload.new
+        if (!((m.sender_id === userId && m.recipient_id === active.id) || (m.sender_id === active.id && m.recipient_id === userId))) return
+        setMessages(prev => prev.some(x => x.id === m.id) ? prev : [...prev, m])
+        if (m.recipient_id === userId && !m.read_at) await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', m.id)
+        loadPeople()
+      }).subscribe()
+    return () => { alive = false; supabase.removeChannel(channel) }
+  }, [active?.id, userId])
+
   useEffect(() => bottom.current?.scrollIntoView({ behavior: 'smooth' }), [messages])
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase()
-    if (!s) return users
-    return users.filter(u => (u.full_name || '').toLowerCase().includes(s) || (u.username || '').toLowerCase().includes(s))
+    const term = q.trim().toLowerCase()
+    if (!term) return users
+    return users.filter(u => (u.full_name || '').toLowerCase().includes(term) || (u.username || '').toLowerCase().includes(term))
   }, [users, q])
+  const unreadFor = id => messages.length && active?.id === id ? 0 : 0
   const send = async () => {
-    if (!supabase || !active || !text.trim()) return
-    if (!messageRateLimit(userId)) return
-    const mod = moderateText(text)
-    if (!mod.allowed) return
-    const { data: blocked } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', userId).eq('blocked_id', active.id).maybeSingle()
-    if (blocked) return
-    const { error } = await supabase.from('messages').insert({ sender_id: userId, recipient_id: active.id, content: text.trim() })
-    if (!error) setText('')
+    const value = text.trim()
+    if (!supabase || !active || !value || sending) return
+    if (!messageRateLimit(userId)) { setError('Bạn gửi tin quá nhanh. Vui lòng thử lại sau.'); return }
+    const mod = moderateText(value)
+    if (!mod.allowed) { setError(mod.reason || 'Tin nhắn chưa phù hợp.'); return }
+    const { data: block } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', userId).eq('blocked_id', active.id).maybeSingle()
+    if (block) { setError('Bạn đã chặn thành viên này.'); return }
+    setSending(true); setError('')
+    const { error: sendError } = await supabase.from('messages').insert({ sender_id: userId, recipient_id: active.id, content: value })
+    if (sendError) setError('Gửi chưa thành công. Kiểm tra kết nối rồi thử lại.')
+    else { setText(''); textRef.current?.focus(); loadPeople() }
+    setSending(false)
   }
+  const choose = user => { setActive(user); setMobileConversation(true); setMessages([]) }
   return (
-    <div className="grid md:grid-cols-[240px_1fr] gap-3 min-h-[70vh]">
-      <aside className="d-card p-2 flex flex-col">
-        <div className="relative mb-2">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm bạn bè..." className="d-input pl-8 py-2 text-sm" />
+    <section className="space-y-3">
+      <header className="d-card p-4">
+        <div className="flex items-center justify-between">
+          <div><h1 className="text-xl font-black">Chat</h1><p className="text-xs d-muted mt-1">Trò chuyện riêng tư với cộng đồng D Social</p></div>
+          <div className="rounded-2xl p-3" style={{ background:'var(--d-primary-soft)', color:'var(--d-primary)' }}><MessageSquare size={21}/></div>
         </div>
-        <div className="overflow-auto max-h-[60vh] space-y-1">
-          {filtered.map(u => (
-            <button key={u.id} onClick={() => setActive(u)} className={`w-full text-left p-2.5 rounded-xl flex items-center gap-2 ${active?.id === u.id ? '' : 'hover:/50'}`}>
-              <Avatar src={u.avatar_url} name={u.full_name || u.username} size={36} />
-              <span className="truncate text-sm font-medium">{u.full_name || u.username || 'User'}</span>
-            </button>
-          ))}
+        <div className="relative mt-3">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted"/>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm tên hoặc @username..." className="d-input pl-9"/>
         </div>
-      </aside>
-      <section className="d-card flex flex-col min-h-[50vh]">
-        {!active ? (
-          <div className="m-auto d-muted text-sm flex flex-col items-center gap-2 p-8"><MessageSquare size={32} className="opacity-40" />Chọn người để nhắn tin</div>
-        ) : (
-          <>
-            <header className="p-3 border-b d-border-c font-bold flex items-center gap-2">
-              <Avatar src={active.avatar_url} name={active.full_name || active.username} size={32} />
-              {active.full_name || active.username}
+      </header>
+      {error && <div role="status" className="d-card p-3 text-sm" style={{color:'var(--d-danger)'}}>{error}</div>}
+      <div className="grid md:grid-cols-[280px_1fr] gap-3 min-h-[68vh]">
+        <aside className={`d-card p-2 flex-col ${mobileConversation ? 'hidden md:flex' : 'flex'}`}>
+          <div className="px-2 py-2 flex items-center justify-between"><b className="text-sm">Cuộc trò chuyện</b><span className="text-xs d-muted">{filtered.length} thành viên</span></div>
+          <div className="overflow-y-auto space-y-1 max-h-[65vh]">
+            {filtered.map(u => (
+              <button key={u.id} type="button" onClick={() => choose(u)} className="w-full text-left p-3 rounded-xl flex items-center gap-3 transition" style={{background:active?.id===u.id?'var(--d-primary-soft)':'transparent'}}>
+                <Avatar src={u.avatar_url} name={u.full_name || u.username} size={42}/>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{u.full_name || u.username || 'Thành viên'}</span><span className="block truncate text-xs d-muted">@{u.username || 'd-social'}</span></span>
+                {active?.id===u.id && <span className="w-2 h-2 rounded-full" style={{background:'var(--d-primary)'}}/>}
+              </button>
+            ))}
+            {!filtered.length && <p className="p-5 text-center text-sm d-muted">Không tìm thấy thành viên.</p>}
+          </div>
+        </aside>
+        <section className={`d-card flex-col min-h-[65vh] overflow-hidden ${mobileConversation ? 'flex' : 'hidden md:flex'}`}>
+          {!active ? <div className="m-auto d-muted text-sm flex flex-col items-center gap-3 p-8"><MessageSquare size={36} className="opacity-40"/>Chọn một người để bắt đầu trò chuyện</div> : <>
+            <header className="p-3 border-b d-border-c flex items-center gap-3">
+              <button type="button" onClick={()=>setMobileConversation(false)} className="md:hidden d-icon-btn" aria-label="Quay lại danh sách"><MessageCircle size={18}/></button>
+              <Avatar src={active.avatar_url} name={active.full_name || active.username} size={38}/>
+              <div className="min-w-0"><div className="font-bold text-sm truncate">{active.full_name || active.username}</div><div className="text-xs d-muted">@{active.username || 'thanh-vien'}</div></div>
             </header>
-            <div className="flex-1 p-3 space-y-2 overflow-auto max-h-[55vh]">
-              {messages.map(m => (
-                <div key={m.id} className={`flex ${m.sender_id === userId ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[80%] px-3 py-2 rounded-2xl text-sm" style={m.sender_id === userId ? { background: 'var(--d-primary)', color: '#fff' } : { background: 'var(--d-surface-2)', color: 'var(--d-text)' }}>
-                    <div>{m.content}</div>
-                    <div className={`text-[10px] mt-1 opacity-70 ${m.sender_id === userId ? 'text-right' : ''}`}>
-                      {timeAgo(m.created_at)}{m.sender_id === userId ? (m.read_at ? ' · Đã xem' : ' · Đã gửi') : ''}
-                    </div>
-                  </div>
+            <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[60vh]" aria-live="polite">
+              {loading && <p className="text-center text-xs d-muted py-3">Đang tải tin nhắn...</p>}
+              {!loading && !messages.length && <p className="text-center text-sm d-muted py-12">Hãy gửi lời chào đầu tiên 👋</p>}
+              {messages.map(m => <div key={m.id} className={`flex ${m.sender_id===userId?'justify-end':'justify-start'}`}>
+                <div className="max-w-[84%] px-3.5 py-2.5 rounded-2xl text-sm break-words" style={m.sender_id===userId?{background:'var(--d-primary)',color:'#fff',borderBottomRightRadius:5}:{background:'var(--d-surface-2)',color:'var(--d-text)',borderBottomLeftRadius:5}}>
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                  <div className={`text-[10px] mt-1 opacity-70 ${m.sender_id===userId?'text-right':''}`}>{timeAgo(m.created_at)}{m.sender_id===userId?(m.read_at?' · Đã xem':' · Đã gửi'):''}</div>
                 </div>
-              ))}
-              <div ref={bottom} />
+              </div>)}
+              <div ref={bottom}/>
             </div>
-            <div className="p-3 border-t d-border-c flex gap-2">
-              <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') send() }} placeholder="Nhắn tin..." className="d-input flex-1 py-2.5 text-sm" />
-              <button onClick={send} className="d-btn-primary px-3"><Send size={16} /></button>
-            </div>
-          </>
-        )}
-      </section>
-    </div>
+            <form onSubmit={e=>{e.preventDefault();send()}} className="p-3 border-t d-border-c flex items-end gap-2">
+              <textarea ref={textRef} value={text} onChange={e=>setText(e.target.value)} maxLength={2000} rows={1} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Nhập tin nhắn..." className="d-input flex-1 resize-none py-3" aria-label="Nội dung tin nhắn"/>
+              <button type="submit" disabled={!text.trim()||sending} className="d-btn-primary !min-h-[44px] px-4" aria-label="Gửi tin nhắn"><Send size={17}/></button>
+            </form>
+            <p className="text-[10px] d-muted px-4 pb-2">Enter để gửi · Shift + Enter xuống dòng</p>
+          </>}
+        </section>
+      </div>
+    </section>
   )
 }
 
