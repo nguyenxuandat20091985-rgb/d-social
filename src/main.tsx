@@ -622,7 +622,7 @@ function Chat({ userId }) {
             {filtered.map(u => (
               <button key={u.id} type="button" onClick={() => choose(u)} className="w-full text-left p-3 rounded-xl flex items-center gap-3 transition" style={{background:active?.id===u.id?'var(--d-primary-soft)':'transparent'}}>
                 <Avatar src={u.avatar_url} name={u.full_name || u.username} size={42}/>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{u.full_name || u.username || 'Thành viên'}</span><span className="block truncate text-xs d-muted">@{u.username || 'd-social'}</span></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{u.full_name || u.username || 'Thành viên'}</span><span className="block truncate text-xs d-muted">@{u.username || 'd-social'}</span></span>{unreadFor(u.id) > 0 && <span className="text-[10px] min-w-5 h-5 px-1 rounded-full text-white grid place-items-center" style={{background:'var(--d-primary)'}}>{unreadFor(u.id)}</span>}
                 {active?.id===u.id && <span className="w-2 h-2 rounded-full" style={{background:'var(--d-primary)'}}/>}
               </button>
             ))}
