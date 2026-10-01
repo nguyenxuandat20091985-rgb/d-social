@@ -669,7 +669,7 @@ function Chat({ userId }) {
                     setSending(true)
                     try {
                       const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-                      const path = `chat/${userId}/${crypto.randomUUID()}.${ext}`
+                      const path = `${userId}/chat-${crypto.randomUUID()}.${ext}`
                       const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
                       if (up.error) throw up.error
                       const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
