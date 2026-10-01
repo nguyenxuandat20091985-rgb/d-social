@@ -552,8 +552,9 @@ function Chat({ userId }) {
       if (loadError) setError('Không tải được cuộc trò chuyện.')
       else {
         setMessages(data || [])
-        const unread = (data || []).filter(m => m.recipient_id === userId && !m.read_at).map(m => m.id)
+        const unread = (data || []).filter(m => m.recipient_id === userId && !m.read_at && !m.deleted_at).map(m => m.id)
         if (unread.length) await supabase.from('messages').update({ read_at: new Date().toISOString() }).in('id', unread)
+        refreshUnread()
       }
       setLoading(false)
     }
@@ -575,7 +576,17 @@ function Chat({ userId }) {
     if (!term) return users
     return users.filter(u => (u.full_name || '').toLowerCase().includes(term) || (u.username || '').toLowerCase().includes(term))
   }, [users, q])
-  const unreadFor = id => messages.length && active?.id === id ? 0 : 0
+  const [unreadMap, setUnreadMap] = useState({})
+  const refreshUnread = async () => {
+    if (!supabase) return
+    const { data } = await supabase.from('messages').select('sender_id').eq('recipient_id', userId).is('read_at', null).limit(200)
+    const map = {}
+    for (const m of data || []) map[m.sender_id] = (map[m.sender_id] || 0) + 1
+    setUnreadMap(map)
+    window.dispatchEvent(new CustomEvent('d-chat-unread', { detail: Object.values(map).reduce((a,b)=>a+b,0) }))
+  }
+  useEffect(() => { refreshUnread() }, [userId])
+  const unreadFor = id => unreadMap[id] || 0
   const send = async () => {
     const value = text.trim()
     if (!supabase || !active || !value || sending) return
@@ -628,15 +639,48 @@ function Chat({ userId }) {
             <div className="flex-1 p-3 space-y-2 overflow-y-auto max-h-[60vh]" aria-live="polite">
               {loading && <p className="text-center text-xs d-muted py-3">Đang tải tin nhắn...</p>}
               {!loading && !messages.length && <p className="text-center text-sm d-muted py-12">Hãy gửi lời chào đầu tiên 👋</p>}
-              {messages.map(m => <div key={m.id} className={`flex ${m.sender_id===userId?'justify-end':'justify-start'}`}>
+              {messages.filter(m => !m.deleted_at).map(m => <div key={m.id} className={`flex ${m.sender_id===userId?'justify-end':'justify-start'}`}>
                 <div className="max-w-[84%] px-3.5 py-2.5 rounded-2xl text-sm break-words" style={m.sender_id===userId?{background:'var(--d-primary)',color:'#fff',borderBottomRightRadius:5}:{background:'var(--d-surface-2)',color:'var(--d-text)',borderBottomLeftRadius:5}}>
-                  <div className="whitespace-pre-wrap">{m.content}</div>
-                  <div className={`text-[10px] mt-1 opacity-70 ${m.sender_id===userId?'text-right':''}`}>{timeAgo(m.created_at)}{m.sender_id===userId?(m.read_at?' · Đã xem':' · Đã gửi'):''}</div>
+                  {m.media_url && m.media_type === 'image' && <img src={m.media_url} alt="" className="rounded-xl mb-1 max-h-56 object-cover" />}
+                  {m.content && m.content !== '[ảnh]' && <div className="whitespace-pre-wrap">{m.content}</div>}
+                  <div className={`text-[10px] mt-1 opacity-70 flex items-center gap-2 ${m.sender_id===userId?'justify-end':''}`}>
+                    <span>{timeAgo(m.created_at)}{m.sender_id===userId?(m.read_at?' · Đã xem':' · Đã gửi'):''}</span>
+                    {m.sender_id===userId && <button type="button" className="underline" onClick={async () => {
+                      if (!confirm('Thu hồi tin nhắn này?')) return
+                      const { error } = await supabase.from('messages').delete().eq('id', m.id).eq('sender_id', userId)
+                      if (error) alert(error.message)
+                      else setMessages(x => x.filter(y => y.id !== m.id))
+                    }}>Thu hồi</button>}
+                  </div>
                 </div>
               </div>)}
               <div ref={bottom}/>
             </div>
             <form onSubmit={e=>{e.preventDefault();send()}} className="p-3 border-t d-border-c flex items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <button type="button" className="d-icon-btn" title="Emoji" onClick={()=>setText(t => t + '😊')}>😊</button>
+                <label className="d-icon-btn cursor-pointer" title="Gửi ảnh">
+                  <ImageIcon size={16} />
+                  <input hidden type="file" accept="image/*" onChange={async e => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!file || !supabase || !active) return
+                    if (!file.type.startsWith('image/') || file.size > 8*1024*1024) { setError('Ảnh tối đa 8MB'); return }
+                    setSending(true)
+                    try {
+                      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+                      const path = `chat/${userId}/${crypto.randomUUID()}.${ext}`
+                      const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
+                      if (up.error) throw up.error
+                      const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+                      const { error } = await supabase.from('messages').insert({ sender_id: userId, recipient_id: active.id, content: text.trim() || '[ảnh]', media_url, media_type: 'image' })
+                      if (error) throw error
+                      setText('')
+                      try { await supabase.rpc('create_notification', { p_user_id: active.id, p_actor_id: userId, p_type: 'message', p_title: 'Tin nhắn mới', p_body: 'đã gửi một ảnh' }) } catch {}
+                    } catch (err) { setError(err.message || 'Không gửi được ảnh') } finally { setSending(false) }
+                  }} />
+                </label>
+              </div>
               <textarea ref={textRef} value={text} onChange={e=>setText(e.target.value)} maxLength={2000} rows={1} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}} placeholder="Nhập tin nhắn..." className="d-input flex-1 resize-none py-3" aria-label="Nội dung tin nhắn"/>
               <button type="submit" disabled={!text.trim()||sending} className="d-btn-primary !min-h-[44px] px-4" aria-label="Gửi tin nhắn"><Send size={17}/></button>
             </form>
@@ -913,7 +957,7 @@ function AdminPage({ userId }) {
   )
 }
 
-function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
+function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme, chatBadge = 0 }) {
   const nav = [
     { id: 'feed', label: 'Trang chủ', icon: Home },
     { id: 'discover', label: 'Bạn bè', icon: Users },
@@ -972,7 +1016,10 @@ function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme }) {
         <div className="flex items-stretch justify-around px-1 pt-1.5 pb-1">
           {nav.map(n => (
             <button key={n.id} type="button" onClick={() => setTab(n.id)} className={`flex flex-col items-center gap-0.5 flex-1 py-1.5 text-[11px] min-h-[48px] ${tab === n.id ? 'font-bold' : 'font-medium'}`} style={{ color: tab === n.id ? 'var(--d-primary)' : 'var(--d-muted)' }}>
-              <n.icon size={22} strokeWidth={tab === n.id ? 2.4 : 1.8} />
+              <span className="relative">
+                <n.icon size={22} strokeWidth={tab === n.id ? 2.4 : 1.8} />
+                {n.id === 'chat' && chatBadge > 0 && <span className="absolute -top-1 -right-2 text-[9px] min-w-4 h-4 px-1 rounded-full text-white grid place-items-center" style={{background:'var(--d-danger, #e11d48)'}}>{chatBadge > 9 ? '9+' : chatBadge}</span>}
+              </span>
               {n.label}
             </button>
           ))}
@@ -1010,9 +1057,15 @@ function App() {
   if (route.name === 'admin') { if (!session) return <AuthScreen onLegal={setLegal} />; return <AdminPage userId={session.user.id} /> }
   if (!session && supabase) return <AuthScreen onLegal={setLegal} />
   if (!session) return <div className="p-8 text-center">D Social</div>
+  const [chatBadge, setChatBadge] = useState(0)
+  useEffect(() => {
+    const onBadge = e => setChatBadge(e.detail || 0)
+    window.addEventListener('d-chat-unread', onBadge)
+    return () => window.removeEventListener('d-chat-unread', onBadge)
+  }, [])
   const logout = async () => { await supabase?.auth.signOut() }
   return (
-    <Shell tab={tab} setTab={setTab} onLogout={logout} theme={theme} onToggleTheme={toggleTheme}>
+    <Shell tab={tab} setTab={setTab} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} chatBadge={chatBadge}>
       {tab === 'feed' && <Feed userId={session.user.id} />}
       {tab === 'discover' && <Discover userId={session.user.id} />}
       {tab === 'chat' && <Chat userId={session.user.id} />}
