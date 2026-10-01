@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Shield, Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check } from 'lucide-react'
+import { Shield, Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check, MessageCircle, UserPlus, UserMinus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const MAX_IMAGE = 8 * 1024 * 1024
@@ -32,11 +32,40 @@ function MiniPost({ post, name, avatar }) {
 function MenuRow({ icon: Icon, label, value, onClick, danger = false }) {
   return <button type="button" onClick={onClick} className="w-full flex items-center gap-3 px-3 py-3.5 text-left rounded-xl transition hover:bg-[var(--d-surface-2)]" style={{ color: danger ? 'var(--d-danger)' : 'var(--d-text)' }}>
     <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: danger ? 'color-mix(in srgb, var(--d-danger) 10%, transparent)' : 'var(--d-surface-2)', color: danger ? 'var(--d-danger)' : 'var(--d-primary)' }}><Icon size={18} /></span>
-    <span className="flex-1 text-sm font-semibold">{label}</span>{value && <span className="text-xs d-muted">{value}</span>}<ChevronRight size={17} className="d-muted shrink-0" />
+    <span className="flex-1 text-sm font-semibold">{label}</span>{value != null && value !== '' && <span className="text-xs d-muted">{value}</span>}<ChevronRight size={17} className="d-muted shrink-0" />
   </button>
 }
 
 function SectionTitle({ children }) { return <div className="px-3 pt-4 pb-1 text-xs font-bold uppercase tracking-wide d-muted">{children}</div> }
+
+function PeopleList({ title, people, emptyText, userId, onToggleFollow, followingMap }) {
+  if (!people?.length) return <div className="d-card p-8 text-center d-muted text-sm">{emptyText}</div>
+  return (
+    <div className="space-y-2">
+      {people.map(p => (
+        <div key={p.id} className="d-card p-3 flex items-center gap-3">
+          <Avatar src={p.avatar_url} name={p.full_name || p.username} size={44} />
+          <div className="min-w-0 flex-1">
+            <div className="font-bold truncate text-sm">{p.full_name || p.username || 'User'}</div>
+            {p.username && <div className="text-xs d-muted">@{p.username}</div>}
+          </div>
+          {p.id !== userId && (
+            <button
+              type="button"
+              onClick={() => onToggleFollow?.(p.id)}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold border shrink-0"
+              style={followingMap?.[p.id]
+                ? { borderColor: 'var(--d-border)', background: 'var(--d-surface-2)' }
+                : { borderColor: 'transparent', color: '#fff', background: 'var(--d-primary)' }}
+            >
+              {followingMap?.[p.id] ? 'Bỏ theo dõi' : 'Theo dõi'}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export function ProfilePage({ userId }) {
   const [name, setName] = useState('')
@@ -52,25 +81,102 @@ export function ProfilePage({ userId }) {
   const [friends, setFriends] = useState(0)
   const [view, setView] = useState('home')
   const [uploading, setUploading] = useState(false)
+  const [listPeople, setListPeople] = useState([])
+  const [listLoading, setListLoading] = useState(false)
+  const [savedPosts, setSavedPosts] = useState([])
+  const [followingMap, setFollowingMap] = useState({})
+
+  const loadProfile = async () => {
+    if (!supabase) return
+    const [{ data: profile }, { data: posts }, { count: followerCount }, { count: followingCount }, { data: mine }, { data: theirs }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).single(),
+      supabase.from('posts').select('id,content,media_url,media_type,created_at,likes(user_id)').eq('author_id', userId).is('deleted_at', null).order('created_at', { ascending: false }).limit(40),
+      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+      supabase.from('follows').select('following_id').eq('follower_id', userId),
+      supabase.from('follows').select('follower_id').eq('following_id', userId)
+    ])
+    if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || ''); setIsAdmin(!!profile.is_admin) }
+    setMyPosts(posts || [])
+    setFollowers(followerCount || 0); setFollowing(followingCount || 0)
+    const mineSet = new Set((mine || []).map(x => x.following_id))
+    setFriends((theirs || []).filter(x => mineSet.has(x.follower_id)).length)
+    const fmap = {}
+    ;(mine || []).forEach(x => { fmap[x.following_id] = true })
+    setFollowingMap(fmap)
+  }
+
+  useEffect(() => { loadProfile() }, [userId])
 
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase || !['friends','followers','following','saved'].includes(view)) return
+    let alive = true
+    setListLoading(true)
     ;(async () => {
-      const [{ data: profile }, { data: posts }, { count: followerCount }, { count: followingCount }, { data: mine }, { data: theirs }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', userId).single(),
-        supabase.from('posts').select('id,content,media_url,media_type,created_at,likes(user_id)').eq('author_id', userId).order('created_at', { ascending: false }).limit(40),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
-        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
-        supabase.from('follows').select('following_id').eq('follower_id', userId),
-        supabase.from('follows').select('follower_id').eq('following_id', userId)
-      ])
-      if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || ''); setIsAdmin(!!profile.is_admin) }
-      setMyPosts(posts || [])
-      setFollowers(followerCount || 0); setFollowing(followingCount || 0)
-      const mineSet = new Set((mine || []).map(x => x.following_id))
-      setFriends((theirs || []).filter(x => mineSet.has(x.follower_id)).length)
+      try {
+        if (view === 'saved') {
+          const { data } = await supabase
+            .from('saved_posts')
+            .select('post_id,created_at,posts(id,content,media_url,media_type,created_at,author_id,profiles(full_name,username,avatar_url),likes(user_id))')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(40)
+          if (alive) setSavedPosts((data || []).map(r => r.posts).filter(Boolean))
+        } else if (view === 'followers') {
+          const { data } = await supabase
+            .from('follows')
+            .select('follower_id,profiles:follower_id(id,username,full_name,avatar_url)')
+            .eq('following_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(100)
+          if (alive) setListPeople((data || []).map(r => r.profiles).filter(Boolean))
+        } else if (view === 'following') {
+          const { data } = await supabase
+            .from('follows')
+            .select('following_id,profiles:following_id(id,username,full_name,avatar_url)')
+            .eq('follower_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(100)
+          if (alive) setListPeople((data || []).map(r => r.profiles).filter(Boolean))
+        } else if (view === 'friends') {
+          const [{ data: mine }, { data: theirs }] = await Promise.all([
+            supabase.from('follows').select('following_id').eq('follower_id', userId),
+            supabase.from('follows').select('follower_id,profiles:follower_id(id,username,full_name,avatar_url)').eq('following_id', userId).limit(200)
+          ])
+          const mineSet = new Set((mine || []).map(x => x.following_id))
+          const friendsList = (theirs || []).filter(x => mineSet.has(x.follower_id)).map(x => x.profiles).filter(Boolean)
+          if (alive) setListPeople(friendsList)
+        }
+      } finally {
+        if (alive) setListLoading(false)
+      }
     })()
-  }, [userId])
+    return () => { alive = false }
+  }, [view, userId])
+
+  const toggleFollow = async (targetId) => {
+    if (!supabase || targetId === userId) return
+    if (followingMap[targetId]) {
+      await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', targetId)
+      setFollowingMap(x => { const n = { ...x }; delete n[targetId]; return n })
+      setFollowing(c => Math.max(0, c - 1))
+    } else {
+      const { error } = await supabase.from('follows').insert({ follower_id: userId, following_id: targetId })
+      if (!error) {
+        setFollowingMap(x => ({ ...x, [targetId]: true }))
+        setFollowing(c => c + 1)
+        try {
+          await supabase.rpc('create_notification', {
+            p_user_id: targetId,
+            p_actor_id: userId,
+            p_type: 'follow',
+            p_title: 'Người theo dõi mới',
+            p_body: 'đã theo dõi bạn'
+          })
+        } catch {}
+      }
+    }
+  }
 
   const save = async () => {
     if (!supabase) return
@@ -103,18 +209,36 @@ export function ProfilePage({ userId }) {
     return <div className="space-y-3">
       <div className="flex items-center gap-2"><button type="button" onClick={() => setView('home')} className="d-btn-ghost !px-3">←</button><h2 className="font-black text-lg">{titles[view] || 'Trung tâm cá nhân'}</h2></div>
       {view === 'profile' && <section className="d-card p-4 space-y-3"><div className="flex items-center gap-3"><Avatar src={avatar} name={displayName} size={64} ring /><div><div className="font-bold">{displayName}</div><div className="text-sm d-muted">@{username || 'username'}</div></div></div><button type="button" onClick={() => { setEditing(true); setView('home') }} className="d-btn-primary w-full">Chỉnh sửa thông tin</button></section>}
-      {['friends','followers','following'].includes(view) && <div className="d-card p-8 text-center d-muted text-sm">{view === 'friends' ? `${friends} bạn bè` : view === 'followers' ? `${followers} người theo dõi` : `${following} người đang theo dõi`}<div className="mt-2">Danh sách kết nối sẽ được mở từ mục này.</div></div>}
+      {['friends','followers','following'].includes(view) && (
+        listLoading
+          ? <div className="d-card p-8 text-center d-muted text-sm">Đang tải danh sách...</div>
+          : <PeopleList
+              title={titles[view]}
+              people={listPeople}
+              emptyText={view === 'friends' ? 'Chưa có bạn bè (theo dõi hai chiều).' : view === 'followers' ? 'Chưa có người theo dõi.' : 'Bạn chưa theo dõi ai.'}
+              userId={userId}
+              onToggleFollow={toggleFollow}
+              followingMap={followingMap}
+            />
+      )}
       {(view === 'posts' || view === 'media' || view === 'moments') && <div className="space-y-3">
         {view === 'moments' ? <div className="grid grid-cols-3 gap-1.5">{images.map(p => <a key={p.id} href={`/p/${p.id}`} className="aspect-square overflow-hidden rounded-xl bg-[var(--d-surface-2)]"><img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" /></a>)}</div> :
         view === 'media' ? <div className="grid grid-cols-2 gap-2">{[...images, ...clips].map(p => p.media_url && <a key={p.id} href={`/p/${p.id}`} className="d-card overflow-hidden aspect-square"><img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" /></a>)}</div> :
         myPosts.map(p => <MiniPost key={p.id} post={p} name={displayName} avatar={avatar} />)}
         {!myPosts.length && <div className="d-card p-8 text-center d-muted text-sm">Chưa có nội dung.</div>}
       </div>}
-      {view === 'saved' && <div className="d-card p-8 text-center d-muted text-sm">Chưa có bài viết đã lưu.</div>}
+      {view === 'saved' && (
+        listLoading
+          ? <div className="d-card p-8 text-center d-muted text-sm">Đang tải...</div>
+          : <div className="space-y-3">
+              {savedPosts.map(p => <MiniPost key={p.id} post={p} name={p.profiles?.full_name || p.profiles?.username || 'User'} avatar={p.profiles?.avatar_url} />)}
+              {!savedPosts.length && <div className="d-card p-8 text-center d-muted text-sm">Chưa có bài viết đã lưu. Bấm biểu tượng ⋯ trên bài viết → Lưu bài viết.</div>}
+            </div>
+      )}
       {['settings','privacy','notifications','help'].includes(view) && <section className="d-card p-2">
         {view === 'settings' && <><MenuRow icon={Lock} label="Quyền riêng tư" onClick={() => setView('privacy')} /><MenuRow icon={Bell} label="Cài đặt thông báo" onClick={() => setView('notifications')} /><MenuRow icon={HelpCircle} label="Trợ giúp" onClick={() => setView('help')} />{isAdmin && <MenuRow icon={Shield} label="Admin + AI kiểm duyệt" onClick={() => { window.location.href='/admin' }} />}</>}
         {view === 'privacy' && <div className="p-4 text-sm leading-relaxed d-muted">Bạn kiểm soát thông tin hồ sơ và nội dung đã đăng. D Social sử dụng Supabase Auth + RLS để bảo vệ dữ liệu theo quyền truy cập.</div>}
-        {view === 'notifications' && <div className="p-4 text-sm leading-relaxed d-muted">Thông báo hoạt động và tin nhắn mới được quản lý tại tab Thông báo.</div>}
+        {view === 'notifications' && <div className="p-4 text-sm leading-relaxed d-muted">Thông báo hoạt động và tin nhắn mới được quản lý tại tab Thông báo. Bạn có thể đánh dấu đã đọc từng mục hoặc tất cả.</div>}
         {view === 'help' && <div className="p-4 text-sm leading-relaxed d-muted">Nếu gặp lỗi, hãy tải lại ứng dụng và kiểm tra kết nối. Bạn có thể dùng chức năng Báo cáo trên bài viết để gửi nội dung cần kiểm duyệt.</div>}
       </section>}
     </div>
