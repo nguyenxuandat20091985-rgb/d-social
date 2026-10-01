@@ -223,7 +223,12 @@ function PostCard({ post, userId }) {
       if (!error) { setLiked(false); setCount(x => Math.max(0, x - 1)) }
     } else {
       const { error } = await supabase.from('likes').insert({ post_id: post.id, user_id: userId })
-      if (!error) { setLiked(true); setCount(x => x + 1) }
+      if (!error) {
+        setLiked(true); setCount(x => x + 1)
+        if (post.author_id && post.author_id !== userId) {
+          try { await supabase.rpc('create_notification', { p_user_id: post.author_id, p_actor_id: userId, p_type: 'like', p_target_type: 'post', p_target_id: post.id, p_title: 'Lượt thích mới', p_body: 'đã thích bài viết của bạn' }) } catch {}
+        }
+      }
     }
   }
   const addComment = async () => {
@@ -231,12 +236,28 @@ function PostCard({ post, userId }) {
     const mod = moderateText(comment)
     if (!mod.allowed) return
     const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: comment.trim() })
-    if (!error) setComment('')
+    if (!error) {
+      setComment('')
+      if (post.author_id && post.author_id !== userId) {
+        try { await supabase.rpc('create_notification', { p_user_id: post.author_id, p_actor_id: userId, p_type: 'comment', p_target_type: 'post', p_target_id: post.id, p_title: 'Bình luận mới', p_body: comment.trim().slice(0, 120) }) } catch {}
+      }
+    }
   }
-  const toggleSave = () => {
-    const next = !saved
-    setSaved(next)
-    try { localStorage.setItem('d_saved_'+post.id, next ? '1' : '0') } catch {}
+  const toggleSave = async () => {
+    if (!supabase || !userId) {
+      const next = !saved; setSaved(next)
+      try { localStorage.setItem('d_saved_'+post.id, next ? '1' : '0') } catch {}
+      return
+    }
+    if (saved) {
+      const { error } = await supabase.from('saved_posts').delete().eq('user_id', userId).eq('post_id', post.id)
+      if (!error) setSaved(false)
+      else { setSaved(false); try { localStorage.setItem('d_saved_'+post.id, '0') } catch {} }
+    } else {
+      const { error } = await supabase.from('saved_posts').insert({ user_id: userId, post_id: post.id })
+      if (!error) setSaved(true)
+      else { setSaved(true); try { localStorage.setItem('d_saved_'+post.id, '1') } catch {} }
+    }
   }
   const name = post.profiles?.full_name || post.profiles?.username || 'Thành viên D'
   const username = post.profiles?.username ? '@'+post.profiles.username : ''
@@ -251,8 +272,22 @@ function PostCard({ post, userId }) {
         <div className="relative">
           <button type="button" onClick={() => setMenu(v => !v)} className="d-icon-btn" aria-label="Tùy chọn bài viết"><MoreHorizontal size={19} /></button>
           {menu && <div className="absolute right-0 top-10 z-20 w-44 d-card p-1 shadow-xl">
-            <button type="button" onClick={toggleSave} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Bookmark size={16} />{saved ? 'Bỏ lưu bài viết' : 'Lưu bài viết'}</button>
-            <button type="button" onClick={() => navigator.clipboard?.writeText(window.location.origin+'/p/'+post.id)} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Link2 size={16} />Sao chép liên kết</button>
+            <button type="button" onClick={() => { toggleSave(); setMenu(false) }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Bookmark size={16} />{saved ? 'Bỏ lưu bài viết' : 'Lưu bài viết'}</button>
+            <button type="button" onClick={() => { navigator.clipboard?.writeText(window.location.origin+'/p/'+post.id); setMenu(false) }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]"><Link2 size={16} />Sao chép liên kết</button>
+            {userId && (userId === post.author_id || userId === post.user_id) && <>
+              <button type="button" onClick={async () => {
+                const next = prompt('Sửa nội dung bài viết', post.content || '')
+                if (next === null || !supabase) return
+                const { error } = await supabase.from('posts').update({ content: next.trim() || null, updated_at: new Date().toISOString() }).eq('id', post.id)
+                if (error) alert(error.message); else { post.content = next.trim() || null; setMenu(false) }
+              }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]">Sửa bài viết</button>
+              <button type="button" onClick={async () => {
+                if (!confirm('Xóa bài viết này?') || !supabase) return
+                let { error } = await supabase.from('posts').update({ deleted_at: new Date().toISOString(), is_published: false }).eq('id', post.id)
+                if (error) { const r = await supabase.from('posts').delete().eq('id', post.id); error = r.error }
+                if (error) alert(error.message); else { setMenu(false); window.location.reload() }
+              }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]" style={{ color: 'var(--d-danger)' }}>Xóa bài viết</button>
+            </>}
             {userId && userId !== post.author_id && <button type="button" onClick={async () => {
               const reason = prompt('Lý do báo cáo (spam, lừa đảo, bản quyền...)')
               if (!reason || !supabase) return
@@ -284,6 +319,22 @@ function PostCard({ post, userId }) {
           <div className="rounded-2xl px-3 py-2 flex-1" style={{ background:'var(--d-surface-2)' }}>
             <b className="text-xs">{c.profiles?.full_name || c.profiles?.username || 'User'}</b>
             <div className="mt-0.5">{c.content}</div>
+            {userId === c.author_id && (
+              <div className="flex gap-2 mt-1">
+                <button type="button" className="text-[11px] d-muted" onClick={async () => {
+                  const next = prompt('Sửa bình luận', c.content)
+                  if (next === null || !supabase) return
+                  const { error } = await supabase.from('comments').update({ content: next.trim(), updated_at: new Date().toISOString() }).eq('id', c.id)
+                  if (!error) setComments(x => x.map(cc => cc.id === c.id ? { ...cc, content: next.trim() } : cc))
+                }}>Sửa</button>
+                <button type="button" className="text-[11px]" style={{ color: 'var(--d-danger)' }} onClick={async () => {
+                  if (!confirm('Xóa bình luận?') || !supabase) return
+                  let { error } = await supabase.from('comments').update({ deleted_at: new Date().toISOString() }).eq('id', c.id)
+                  if (error) { const r = await supabase.from('comments').delete().eq('id', c.id); error = r.error }
+                  if (!error) setComments(x => x.filter(cc => cc.id !== c.id))
+                }}>Xóa</button>
+              </div>
+            )}
           </div>
         </div>)}
         <div className="flex gap-2">
@@ -622,7 +673,10 @@ function Discover({ userId }) {
         setFollowing(x => { const n = { ...x }; delete n[targetId]; return n })
       } else {
         const { error } = await supabase.from('follows').insert({ follower_id: userId, following_id: targetId })
-        if (!error) setFollowing(x => ({ ...x, [targetId]: true }))
+        if (!error) {
+          setFollowing(x => ({ ...x, [targetId]: true }))
+          try { await supabase.rpc('create_notification', { p_user_id: targetId, p_actor_id: userId, p_type: 'follow', p_title: 'Người theo dõi mới', p_body: 'đã theo dõi bạn' }) } catch {}
+        }
       }
     } finally { setBusyId(null) }
   }
@@ -678,67 +732,110 @@ function Discover({ userId }) {
 function Notifications({ userId }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  useEffect(() => {
+  const [usingTable, setUsingTable] = useState(false)
+
+  const load = async () => {
     if (!supabase) return
-    ;(async () => {
-      setLoading(true)
-      const { data: myPosts } = await supabase.from('posts').select('id').eq('author_id', userId).limit(40)
-      const ids = (myPosts || []).map(p => p.id)
-      let notifs = []
-      if (ids.length) {
-        const { data: comments } = await supabase.from('comments').select('id,content,created_at,author_id,post_id,profiles(full_name,username,avatar_url)').in('post_id', ids).neq('author_id', userId).order('created_at', { ascending: false }).limit(25)
-        notifs = (comments || []).map(c => ({
-          id: 'c-' + c.id, type: 'comment',
-          text: `${c.profiles?.full_name || c.profiles?.username || 'Ai đó'} đã bình luận: ${c.content}`,
-          at: c.created_at, avatar: c.profiles?.avatar_url, name: c.profiles?.full_name || c.profiles?.username,
-        }))
-        const { data: likes } = await supabase.from('likes').select('post_id,user_id,created_at,profiles:user_id(full_name,username,avatar_url)').in('post_id', ids).neq('user_id', userId).order('created_at', { ascending: false }).limit(25)
-        for (const l of likes || []) {
-          notifs.push({
-            id: 'l-' + l.post_id + '-' + l.user_id, type: 'like',
-            text: `${l.profiles?.full_name || l.profiles?.username || 'Ai đó'} đã thích bài viết của bạn`,
-            at: l.created_at, avatar: l.profiles?.avatar_url, name: l.profiles?.full_name || l.profiles?.username,
-          })
-        }
+    setLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('id,type,title,body,is_read,created_at,actor_id,profiles:actor_id(full_name,username,avatar_url)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (!error) {
+        setUsingTable(true)
+        setItems((data || []).map(n => ({
+          id: n.id, type: n.type,
+          text: n.body || n.title || 'Hoạt động mới',
+          at: n.created_at, avatar: n.profiles?.avatar_url,
+          name: n.profiles?.full_name || n.profiles?.username,
+          is_read: n.is_read,
+        })))
+        setLoading(false)
+        return
       }
-      const { data: follows } = await supabase.from('follows').select('follower_id,created_at,profiles:follower_id(full_name,username,avatar_url)').eq('following_id', userId).order('created_at', { ascending: false }).limit(20)
-      for (const f of follows || []) {
+    } catch {}
+    setUsingTable(false)
+    const { data: myPosts } = await supabase.from('posts').select('id').eq('author_id', userId).limit(40)
+    const ids = (myPosts || []).map(p => p.id)
+    let notifs = []
+    if (ids.length) {
+      const { data: comments } = await supabase.from('comments').select('id,content,created_at,author_id,post_id,profiles(full_name,username,avatar_url)').in('post_id', ids).neq('author_id', userId).order('created_at', { ascending: false }).limit(25)
+      notifs = (comments || []).map(c => ({
+        id: 'c-' + c.id, type: 'comment',
+        text: `${c.profiles?.full_name || c.profiles?.username || 'Ai đó'} đã bình luận: ${c.content}`,
+        at: c.created_at, avatar: c.profiles?.avatar_url, name: c.profiles?.full_name || c.profiles?.username, is_read: true,
+      }))
+      const { data: likes } = await supabase.from('likes').select('post_id,user_id,created_at,profiles:user_id(full_name,username,avatar_url)').in('post_id', ids).neq('user_id', userId).order('created_at', { ascending: false }).limit(25)
+      for (const l of likes || []) {
         notifs.push({
-          id: 'f-' + f.follower_id, type: 'follow',
-          text: `${f.profiles?.full_name || f.profiles?.username || 'Ai đó'} đã theo dõi bạn`,
-          at: f.created_at, avatar: f.profiles?.avatar_url, name: f.profiles?.full_name || f.profiles?.username,
+          id: 'l-' + l.post_id + '-' + l.user_id, type: 'like',
+          text: `${l.profiles?.full_name || l.profiles?.username || 'Ai đó'} đã thích bài viết của bạn`,
+          at: l.created_at, avatar: l.profiles?.avatar_url, name: l.profiles?.full_name || l.profiles?.username, is_read: true,
         })
       }
-      const { data: msgs } = await supabase.from('messages').select('id,content,created_at,sender_id,profiles:sender_id(full_name,username,avatar_url)').eq('recipient_id', userId).order('created_at', { ascending: false }).limit(15)
-      for (const m of msgs || []) {
-        notifs.push({
-          id: 'm-' + m.id, type: 'message',
-          text: `Tin nhắn mới từ ${m.profiles?.full_name || m.profiles?.username || 'ai đó'}: ${m.content}`,
-          at: m.created_at, avatar: m.profiles?.avatar_url, name: m.profiles?.full_name || m.profiles?.username,
-        })
-      }
-      notifs.sort((a, b) => new Date(b.at) - new Date(a.at))
-      setItems(notifs.slice(0, 50))
-      setLoading(false)
-    })()
-  }, [userId])
+    }
+    const { data: follows } = await supabase.from('follows').select('follower_id,created_at,profiles:follower_id(full_name,username,avatar_url)').eq('following_id', userId).order('created_at', { ascending: false }).limit(20)
+    for (const f of follows || []) {
+      notifs.push({
+        id: 'f-' + f.follower_id, type: 'follow',
+        text: `${f.profiles?.full_name || f.profiles?.username || 'Ai đó'} đã theo dõi bạn`,
+        at: f.created_at, avatar: f.profiles?.avatar_url, name: f.profiles?.full_name || f.profiles?.username, is_read: true,
+      })
+    }
+    const { data: msgs } = await supabase.from('messages').select('id,content,created_at,sender_id,read_at,profiles:sender_id(full_name,username,avatar_url)').eq('recipient_id', userId).order('created_at', { ascending: false }).limit(15)
+    for (const m of msgs || []) {
+      notifs.push({
+        id: 'm-' + m.id, type: 'message',
+        text: `Tin nhắn mới từ ${m.profiles?.full_name || m.profiles?.username || 'ai đó'}: ${m.content}`,
+        at: m.created_at, avatar: m.profiles?.avatar_url, name: m.profiles?.full_name || m.profiles?.username, is_read: !!m.read_at,
+      })
+    }
+    notifs.sort((a, b) => new Date(b.at) - new Date(a.at))
+    setItems(notifs.slice(0, 50))
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [userId])
+
+  const markRead = async (id) => {
+    if (!usingTable || !supabase) return
+    if (String(id).match(/^[clfm]-/)) return
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id).eq('user_id', userId)
+    setItems(x => x.map(n => n.id === id ? { ...n, is_read: true } : n))
+  }
+  const markAllRead = async () => {
+    if (!usingTable || !supabase) return
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('is_read', false)
+    setItems(x => x.map(n => ({ ...n, is_read: true })))
+  }
+  const unread = items.filter(n => !n.is_read).length
+
   return (
     <div className="space-y-3">
-      <div className="d-card p-4">
-        <h2 className="font-black text-lg flex items-center gap-2"><Bell size={18} className="text-violet-300" /> Thông báo</h2>
-        <p className="text-xs d-muted mt-1">Like, bình luận, theo dõi và tin nhắn mới.</p>
+      <div className="d-card p-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-black text-lg flex items-center gap-2"><Bell size={18} style={{ color: 'var(--d-primary)' }} /> Thông báo {unread > 0 && <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: 'var(--d-primary)' }}>{unread}</span>}</h2>
+          <p className="text-xs d-muted mt-1">Like, bình luận, theo dõi và tin nhắn mới.</p>
+        </div>
+        {usingTable && unread > 0 && (
+          <button type="button" onClick={markAllRead} className="text-xs font-semibold shrink-0" style={{ color: 'var(--d-primary)' }}>Đánh dấu đã đọc</button>
+        )}
       </div>
       {loading && <div className="text-center d-muted py-8 text-sm">Đang tải...</div>}
       {!loading && !items.length && <div className="d-card p-10 text-center d-muted text-sm">Chưa có thông báo.</div>}
       <div className="space-y-2">
         {items.map(n => (
-          <div key={n.id} className="d-card p-3 flex gap-3 items-start">
+          <button key={n.id} type="button" onClick={() => markRead(n.id)} className="d-card p-3 flex gap-3 items-start w-full text-left" style={!n.is_read ? { borderColor: 'var(--d-primary)', background: 'color-mix(in srgb, var(--d-primary) 6%, var(--d-surface))' } : {}}>
             <Avatar src={n.avatar} name={n.name || 'D'} size={40} />
             <div className="min-w-0 flex-1">
               <p className="text-sm leading-relaxed">{n.text}</p>
-              <div className="text-[11px] d-muted mt-1">{timeAgo(n.at)} · {n.type === 'like' ? 'Thích' : n.type === 'follow' ? 'Theo dõi' : n.type === 'comment' ? 'Bình luận' : 'Tin nhắn'}</div>
+              <div className="text-[11px] d-muted mt-1">{timeAgo(n.at)} · {n.type === 'like' ? 'Thích' : n.type === 'follow' ? 'Theo dõi' : n.type === 'comment' ? 'Bình luận' : n.type === 'message' ? 'Tin nhắn' : 'Hệ thống'}{!n.is_read ? ' · Chưa đọc' : ''}</div>
             </div>
-          </div>
+            {!n.is_read && <span className="w-2.5 h-2.5 rounded-full shrink-0 mt-2" style={{ background: 'var(--d-primary)' }} />}
+          </button>
         ))}
       </div>
     </div>
