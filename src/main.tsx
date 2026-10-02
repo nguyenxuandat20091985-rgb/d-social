@@ -449,7 +449,9 @@ function Feed({ userId }) {
       <div className="d-card p-1 mb-3 flex gap-1 sticky top-[4.25rem] z-10">
         <button type="button" onClick={() => setMode('all')} className={`d-tab ${mode === 'all' ? 'active' : ''}`}>Dành cho bạn</button>
         <button type="button" onClick={() => setMode('following')} className={`d-tab ${mode === 'following' ? 'active' : ''}`}>Đang theo dõi</button>
+        <button type="button" onClick={() => setMode('market')} className={`d-tab ${mode === 'market' ? 'active' : ''}`}>Chợ</button>
       </div>
+      {mode === 'market' ? <MarketTab /> : <>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
       {showComposer ? (
         <Composer userId={userId} onPublished={() => load(true)} autoFocus onClose={() => setShowComposer(false)} />
@@ -473,7 +475,77 @@ function Feed({ userId }) {
         {loading && <div className="text-center d-muted py-4 text-sm">Đang tải...</div>}
         <div ref={sentinel} className="h-6" />
       </div>
+      </>}
     </>
+  )
+}
+
+
+function MarketTab() {
+  const [deals, setDeals] = useState([])
+  const [cat, setCat] = useState('all')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const cats = ['Tất cả', 'Điện tử', 'Gia dụng', 'Nhà cửa', 'Sức khỏe', 'Đồ ăn', 'Khác']
+  useEffect(() => {
+    let alive = true
+    const headers = {
+      apikey: 'sb_publishable_uR0WKMOakw9L2Gq1dz4suA_7NNgUKKd',
+      Authorization: 'Bearer sb_publishable_uR0WKMOakw9L2Gq1dz4suA_7NNgUKKd',
+    }
+    const base = 'https://pkyaoclgzyejlfozkbiw.supabase.co/rest/v1'
+    Promise.all([
+      fetch(base + '/products?select=id,title,price,image_url&order=id.desc', { headers }).then(r => r.json()),
+      fetch(base + '/affiliate_links?select=product_id,short_url,platform', { headers }).then(r => r.json()),
+    ]).then(([products, links]) => {
+      if (!alive) return
+      if (!Array.isArray(products)) throw new Error('Không tải được chợ')
+      const map = new Map()
+      ;(Array.isArray(links) ? links : []).forEach(l => {
+        if (l.product_id != null && l.short_url && !map.has(String(l.product_id))) map.set(String(l.product_id), l)
+      })
+      setDeals(products.map(p => ({ ...p, link: map.get(String(p.id)) })))
+    }).catch(e => { if (alive) setError(e.message || 'Không tải được chợ') })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [])
+  const catOf = title => {
+    const t = (title || '').toLowerCase()
+    if (/iphone|samsung|điện thoại|flycam|camera|máy tính/.test(t)) return 'Điện tử'
+    if (/nồi|máy|quạt|bàn ủi|gia dụng/.test(t)) return 'Gia dụng'
+    if (/nhà|đèn|gối|chăn/.test(t)) return 'Nhà cửa'
+    if (/sức khỏe|vitamin|collagen/.test(t)) return 'Sức khỏe'
+    if (/ăn|cà phê|trà|bánh/.test(t)) return 'Đồ ăn'
+    return 'Khác'
+  }
+  const shown = deals.filter(d => cat === 'Tất cả' || catOf(d.title) === cat)
+  return (
+    <section>
+      <div className="d-card p-4 mb-3" style={{ background: 'var(--d-primary)', color: '#fff' }}>
+        <div className="font-black">Chợ Deal</div>
+        <p className="text-xs mt-1 opacity-90">Bấm deal để sang shop. Hoa hồng thuộc link affiliate, không trừ vào bài viết.</p>
+      </div>
+      <div className="flex gap-2 overflow-x-auto pb-2 mb-3">
+        {cats.map(c => (
+          <button key={c} type="button" onClick={() => setCat(c)} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold ${cat === c ? 'text-white' : ''}`} style={cat === c ? { background: 'var(--d-primary)' } : { background: 'var(--d-surface)', color: 'var(--d-muted)', border: '1px solid var(--d-border)' }}>{c}</button>
+        ))}
+      </div>
+      {loading && <p className="text-sm d-muted text-center py-6">Đang tải deal...</p>}
+      {error && <p className="text-sm text-center py-6" style={{ color: 'var(--d-danger)' }}>{error}</p>}
+      <div className="grid grid-cols-2 gap-3">
+        {shown.map(d => (
+          <a key={d.id} href={d.link?.short_url || '#'} target="_blank" rel="noopener sponsored nofollow" className="d-card overflow-hidden block">
+            <div className="aspect-square bg-[var(--d-surface-2)]">
+              {d.image_url && <img src={d.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />}
+            </div>
+            <div className="p-2.5">
+              <div className="text-sm font-semibold line-clamp-2 min-h-[2.5rem]">{d.title}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--d-primary)' }}>{d.price ? Number(d.price).toLocaleString('vi-VN') + 'đ' : 'Xem giá'}</div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
   )
 }
 
