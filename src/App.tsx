@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -146,7 +146,7 @@ function Composer({ userId, onPublished, onClose }) {
         <div className="font-bold text-sm">Tạo bài viết</div>
         {onClose && <button onClick={onClose} className="d-muted p-1"><X size={16} /></button>}
       </div>
-      <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px]" />
+      <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px]" autoFocus />
       {file && <div className="flex items-center justify-between p-2 rounded-xl text-sm mb-2" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
       {error && <p className="text-sm mb-2" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <div className="flex items-center justify-between pt-2 border-t d-border-c">
@@ -160,19 +160,36 @@ function Composer({ userId, onPublished, onClose }) {
   )
 }
 
-function PostCard({ post, userId }) {
+function PostCard({ post, userId, onRemoved }) {
   const [liked, setLiked] = useState(Boolean(userId && post.likes?.some(x => x.user_id === userId)))
   const [count, setCount] = useState(post.likes?.length || 0)
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState([])
   const [comment, setComment] = useState('')
+  const [menu, setMenu] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [content, setContent] = useState(post.content)
   const name = post.profiles?.full_name || post.profiles?.username || 'Thành viên D'
   const username = post.profiles?.username ? '@' + post.profiles.username : ''
+  const isOwner = userId && (userId === post.author_id || userId === post.user_id)
+
+  useEffect(() => {
+    if (!supabase || !userId) return
+    supabase.from('saved_posts').select('post_id').eq('user_id', userId).eq('post_id', post.id).maybeSingle()
+      .then(({ data }) => setSaved(!!data))
+  }, [userId, post.id])
 
   useEffect(() => {
     if (!supabase || !showComments) return
-    supabase.from('comments').select('id,content,created_at,profiles(full_name,username,avatar_url)').eq('post_id', post.id).order('created_at').limit(40)
-      .then(({ data }) => { if (data) setComments(data) })
+    const load = async () => {
+      const { data } = await supabase.from('comments').select('id,content,created_at,author_id,profiles(full_name,username,avatar_url)').eq('post_id', post.id).order('created_at').limit(50)
+      if (data) setComments(data)
+    }
+    load()
+    const ch = supabase.channel('comments-' + post.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comments', filter: 'post_id=eq.' + post.id }, load)
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
   }, [showComments, post.id])
 
   const toggleLike = async () => {
@@ -182,19 +199,65 @@ function PostCard({ post, userId }) {
       if (!error) { setLiked(false); setCount(c => Math.max(0, c - 1)) }
     } else {
       const { error } = await supabase.from('likes').insert({ post_id: post.id, user_id: userId })
-      if (!error) { setLiked(true); setCount(c => c + 1) }
+      if (!error) {
+        setLiked(true); setCount(c => c + 1)
+        if (post.author_id && post.author_id !== userId) {
+          try { await supabase.rpc('create_notification', { p_user_id: post.author_id, p_actor_id: userId, p_type: 'like', p_target_type: 'post', p_target_id: post.id, p_title: 'Lượt thích mới', p_body: 'đã thích bài viết của bạn' }) } catch {}
+        }
+      }
     }
   }
+
   const addComment = async () => {
     if (!supabase || !userId || !comment.trim() || !commentRateLimit(userId)) return
     const mod = moderateText(comment)
     if (!mod.allowed) return
-    const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: comment.trim() })
+    const body = comment.trim()
+    const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: body })
     if (!error) {
       setComment('')
-      const { data } = await supabase.from('comments').select('id,content,created_at,profiles(full_name,username,avatar_url)').eq('post_id', post.id).order('created_at').limit(40)
-      if (data) setComments(data)
+      if (post.author_id && post.author_id !== userId) {
+        try { await supabase.rpc('create_notification', { p_user_id: post.author_id, p_actor_id: userId, p_type: 'comment', p_target_type: 'post', p_target_id: post.id, p_title: 'Bình luận mới', p_body: body.slice(0, 120) }) } catch {}
+      }
     }
+  }
+
+  const toggleSave = async () => {
+    if (!supabase || !userId) return
+    if (saved) {
+      const { error } = await supabase.from('saved_posts').delete().eq('user_id', userId).eq('post_id', post.id)
+      if (!error) setSaved(false)
+    } else {
+      const { error } = await supabase.from('saved_posts').insert({ user_id: userId, post_id: post.id })
+      if (!error) setSaved(true)
+    }
+  }
+
+  const reportPost = async () => {
+    const reason = prompt('Lý do báo cáo (spam, lừa đảo, nội dung xấu...)')
+    if (!reason?.trim() || !supabase) return
+    const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.trim().slice(0, 500) })
+    alert(error ? error.message : 'Đã gửi báo cáo. Cảm ơn bạn.')
+    setMenu(false)
+  }
+
+  const deletePost = async () => {
+    if (!confirm('Xóa bài viết này?') || !supabase) return
+    let { error } = await supabase.from('posts').update({ deleted_at: new Date().toISOString(), is_published: false }).eq('id', post.id)
+    if (error) {
+      const r = await supabase.from('posts').delete().eq('id', post.id)
+      error = r.error
+    }
+    if (error) alert(error.message)
+    else { setMenu(false); onRemoved?.(post.id) }
+  }
+
+  const editPost = async () => {
+    const next = prompt('Sửa nội dung bài viết', content || '')
+    if (next === null || !supabase) return
+    const { error } = await supabase.from('posts').update({ content: next.trim() || null }).eq('id', post.id)
+    if (error) alert(error.message)
+    else { setContent(next.trim() || null); setMenu(false) }
   }
 
   return (
@@ -205,25 +268,56 @@ function PostCard({ post, userId }) {
           <div className="font-bold truncate leading-tight">{name}</div>
           <div className="text-xs d-muted mt-0.5">{username}{username && ' · '}{timeAgo(post.created_at)}</div>
         </div>
+        <div className="relative">
+          <button type="button" onClick={() => setMenu(v => !v)} className="d-icon-btn" aria-label="Tùy chọn"><MoreHorizontal size={19} /></button>
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+              <div className="absolute right-0 top-10 z-20 w-48 d-card p-1 shadow-xl">
+                <button type="button" onClick={() => { toggleSave(); setMenu(false) }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]">
+                  <Bookmark size={16} />{saved ? 'Bỏ lưu' : 'Lưu bài viết'}
+                </button>
+                <button type="button" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/p/${post.id}`); setMenu(false) }} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]">
+                  <Link2 size={16} />Sao chép liên kết
+                </button>
+                {isOwner && (
+                  <>
+                    <button type="button" onClick={editPost} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]">Sửa bài viết</button>
+                    <button type="button" onClick={deletePost} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]" style={{ color: 'var(--d-danger)' }}>Xóa bài viết</button>
+                  </>
+                )}
+                {!isOwner && userId && (
+                  <button type="button" onClick={reportPost} className="w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--d-surface-2)]">
+                    <Flag size={16} />Báo cáo
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-      {post.content && <p className="px-4 pt-3 text-[15px] leading-relaxed whitespace-pre-wrap">{post.content}</p>}
+      {content && <p className="px-4 pt-3 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>}
       {post.media_url && (
         <div className="mt-3">
           {post.media_type === 'video' ? (
-            <video src={post.media_url} controls className="w-full max-h-[420px] bg-black" />
+            <video src={post.media_url} controls playsInline preload="metadata" className="w-full max-h-[75vh] bg-black object-contain" />
           ) : (
-            <img src={post.media_url} alt="" className="w-full max-h-[480px] object-cover" />
+            <img src={post.media_url} alt="" className="w-full max-h-[560px] object-cover" loading="lazy" />
           )}
         </div>
       )}
-      <div className="px-2 py-2 flex items-center gap-1 border-t d-border-c mt-3">
+      <div className="px-4 pt-3 flex items-center justify-between text-xs d-muted">
+        <span>{count ? `${count} lượt thích` : 'Chưa có lượt thích'}</span>
+        <button type="button" onClick={() => setShowComments(true)}>{comments.length ? `${comments.length} bình luận` : 'Bình luận'}</button>
+      </div>
+      <div className="px-2 py-2 flex items-center gap-1 border-t d-border-c mt-1">
         <button type="button" onClick={toggleLike} className="d-post-action flex-1" style={{ color: liked ? 'var(--d-danger)' : undefined }}>
-          <Heart size={18} fill={liked ? 'currentColor' : 'none'} />{count > 0 ? count : ''}
+          <Heart size={18} fill={liked ? 'currentColor' : 'none'} /> Thích
         </button>
         <button type="button" onClick={() => setShowComments(v => !v)} className="d-post-action flex-1">
-          <MessageCircle size={18} />{comments.length || ''}
+          <MessageCircle size={18} /> Bình luận
         </button>
-        <ShareMenu url={`${window.location.origin}/p/${post.id}`} />
+        <ShareMenu postId={post.id} text={content} author={name} />
       </div>
       {showComments && (
         <div className="px-4 pb-4 space-y-2 border-t d-border-c pt-3">
@@ -256,10 +350,21 @@ function Feed({ userId }) {
     if (!supabase) return
     setLoading(true)
     try {
-      let { data, error } = await supabase.from('posts').select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)').eq('is_published', true).order('created_at', { ascending: false }).limit(40)
+      let { data, error } = await supabase
+        .from('posts')
+        .select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
+        .eq('is_published', true)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(40)
       if (error || !data?.length) {
-        const alt = await supabase.from('posts').select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)').eq('is_published', true).order('created_at', { ascending: false }).limit(40)
-        data = alt.data || []
+        const alt = await supabase
+          .from('posts')
+          .select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(40)
+        data = (alt.data || []).filter(p => !p.deleted_at)
       }
       setPosts(data || [])
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
@@ -289,7 +394,9 @@ function Feed({ userId }) {
       )}
       {loading && <div className="text-center text-sm d-muted py-8">Đang tải bảng tin...</div>}
       {!loading && posts.length === 0 && <div className="d-card p-8 text-center text-sm d-muted">Chưa có bài viết. Hãy là người đầu tiên đăng!</div>}
-      {posts.map(p => <PostCard key={p.id} post={p} userId={userId} />)}
+      {posts.map(p => (
+        <PostCard key={p.id} post={p} userId={userId} onRemoved={(id) => setPosts(x => x.filter(y => y.id !== id))} />
+      ))}
     </div>
   )
 }
