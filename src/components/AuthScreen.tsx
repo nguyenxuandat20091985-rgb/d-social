@@ -50,7 +50,7 @@ export function AuthScreen({ onLegal }: Props) {
     const { error } = await supabase!.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: `${window.location.origin}${window.location.pathname}`,
         queryParams: { access_type: 'online', prompt: 'select_account' },
       },
     })
