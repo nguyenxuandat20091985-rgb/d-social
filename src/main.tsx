@@ -820,7 +820,7 @@ function Notifications({ userId }) {
           text: n.body || n.title || 'Hoạt động mới',
           at: n.created_at, avatar: n.profiles?.avatar_url,
           name: n.profiles?.full_name || n.profiles?.username,
-          is_read: n.is_read,
+          is_read: n.is_read, target_type: n.target_type, target_id: n.target_id,
         })))
         setLoading(false)
         return
@@ -859,7 +859,7 @@ function Notifications({ userId }) {
       notifs.push({
         id: 'm-' + m.id, type: 'message',
         text: `Tin nhắn mới từ ${m.profiles?.full_name || m.profiles?.username || 'ai đó'}: ${m.content}`,
-        at: m.created_at, avatar: m.profiles?.avatar_url, name: m.profiles?.full_name || m.profiles?.username, is_read: !!m.read_at,
+        at: m.created_at, avatar: m.profiles?.avatar_url, name: m.profiles?.full_name || m.profiles?.username, is_read: !!m.read_at, target_type: 'message', target_id: m.id,
       })
     }
     notifs.sort((a, b) => new Date(b.at) - new Date(a.at))
@@ -897,7 +897,7 @@ function Notifications({ userId }) {
       {!loading && !items.length && <div className="d-card p-10 text-center d-muted text-sm">Chưa có thông báo.</div>}
       <div className="space-y-2">
         {items.map(n => (
-          <button key={n.id} type="button" onClick={() => markRead(n.id)} className="d-card p-3 flex gap-3 items-start w-full text-left" style={!n.is_read ? { borderColor: 'var(--d-primary)', background: 'color-mix(in srgb, var(--d-primary) 6%, var(--d-surface))' } : {}}>
+          <button key={n.id} type="button" onClick={() => { markRead(n.id); if (n.target_type === 'post' && n.target_id) window.location.href = '/p/' + n.target_id; else if (n.type === 'message') window.dispatchEvent(new CustomEvent('d-open-chat', { detail: n.target_id })) }} className="d-card p-3 flex gap-3 items-start w-full text-left" style={!n.is_read ? { borderColor: 'var(--d-primary)', background: 'color-mix(in srgb, var(--d-primary) 6%, var(--d-surface))' } : {}}>
             <Avatar src={n.avatar} name={n.name || 'D'} size={40} />
             <div className="min-w-0 flex-1">
               <p className="text-sm leading-relaxed">{n.text}</p>
