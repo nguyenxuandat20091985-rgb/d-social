@@ -19,14 +19,17 @@ function MainRouter() {
       setSession(session)
       setLoading(false)
     })
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
   const path = window.location.pathname
 
+  // Nếu truy cập đường dẫn /admin thì hiển thị trang quản trị
   if (path.startsWith('/admin')) {
     if (loading) {
       return (
@@ -42,6 +45,7 @@ function MainRouter() {
     return <AdminPage userId={session.user.id} />
   }
 
+  // Truy cập các trang khác thì hiển thị ứng dụng mạng xã hội chính của anh (App)
   return <App />
 }
 
