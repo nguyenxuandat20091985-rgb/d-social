@@ -300,7 +300,7 @@ function PostCard({ post, userId }) {
       </div>
       {post.content && <p className="px-4 mt-3 whitespace-pre-wrap break-words text-[15px] leading-[1.55]">{post.content}</p>}
       {post.media_url && (post.media_type === 'video'
-        ? <video src={post.media_url} controls playsInline preload="metadata" className="mt-3 w-full max-h-[560px] bg-black object-contain" />
+        ? <video src={post.media_url} controls playsInline preload="metadata" className="mt-3 w-full aspect-[4/5] max-h-[70vh] object-cover bg-black" />
         : <img src={post.media_url} loading="lazy" alt="" className="mt-3 w-full max-h-[560px] object-cover" />)}
       <div className="px-4 pt-3 flex items-center justify-between text-xs d-muted">
         <span>{count ? count+' lượt thích' : 'Chưa có lượt thích'}</span>
