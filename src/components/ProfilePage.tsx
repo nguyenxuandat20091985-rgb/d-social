@@ -85,9 +85,6 @@ export function ProfilePage({ userId }) {
   const [listLoading, setListLoading] = useState(false)
   const [savedPosts, setSavedPosts] = useState([])
   const [followingMap, setFollowingMap] = useState({})
-  const [privacy, setPrivacy] = useState(() => { try { return JSON.parse(localStorage.getItem('d_privacy') || '{"profile":"public","messages":"everyone"}') } catch { return { profile:'public', messages:'everyone' } } })
-  const [notificationPrefs, setNotificationPrefs] = useState(() => { try { return JSON.parse(localStorage.getItem('d_notification_prefs') || '{"likes":true,"comments":true,"follows":true,"messages":true}') } catch { return { likes:true, comments:true, follows:true, messages:true } } })
-  const [accountBusy, setAccountBusy] = useState(false)
 
   const loadProfile = async () => {
     if (!supabase) return
@@ -181,22 +178,6 @@ export function ProfilePage({ userId }) {
     }
   }
 
-  const savePrivacy = (next) => { setPrivacy(next); try { localStorage.setItem('d_privacy', JSON.stringify(next)) } catch {} }
-  const saveNotificationPrefs = (next) => { setNotificationPrefs(next); try { localStorage.setItem('d_notification_prefs', JSON.stringify(next)) } catch {} }
-
-  const updateEmail = async () => {
-    const email = prompt('Email mới')
-    if (!email || !supabase) return
-    setAccountBusy(true)
-    try { const { error } = await supabase.auth.updateUser({ email: email.trim() }); if (error) throw error; alert('Đã gửi email xác nhận tới địa chỉ mới.') } catch (e) { alert(e.message || 'Không thể đổi email') } finally { setAccountBusy(false) }
-  }
-  const updatePassword = async () => {
-    const password = prompt('Mật khẩu mới (ít nhất 6 ký tự)')
-    if (!password || password.length < 6 || !supabase) return alert('Mật khẩu phải có ít nhất 6 ký tự.')
-    setAccountBusy(true)
-    try { const { error } = await supabase.auth.updateUser({ password }); if (error) throw error; alert('Đã cập nhật mật khẩu.') } catch (e) { alert(e.message || 'Không thể đổi mật khẩu') } finally { setAccountBusy(false) }
-  }
-
   const save = async () => {
     if (!supabase) return
     const { error } = await supabase.from('profiles').update({ full_name: name.trim() || null, username: username.trim() || null, bio: bio.trim() || null }).eq('id', userId)
@@ -255,25 +236,11 @@ export function ProfilePage({ userId }) {
             </div>
       )}
       {['settings','privacy','notifications','help'].includes(view) && <section className="d-card p-2">
-        {view === 'settings' && <div className="space-y-1">
-          <MenuRow icon={Lock} label="Quyền riêng tư" value={privacy.profile === 'public' ? 'Công khai' : 'Riêng tư'} onClick={() => setView('privacy')} />
-          <MenuRow icon={Bell} label="Cài đặt thông báo" onClick={() => setView('notifications')} />
-          <MenuRow icon={Settings} label="Đổi email" value={accountBusy ? 'Đang xử lý...' : ''} onClick={updateEmail} />
-          <MenuRow icon={Lock} label="Đổi mật khẩu" value={accountBusy ? 'Đang xử lý...' : ''} onClick={updatePassword} />
-          <MenuRow icon={HelpCircle} label="Trợ giúp" onClick={() => setView('help')} />
-          {isAdmin && <MenuRow icon={Shield} label="Admin + AI kiểm duyệt" onClick={() => { window.location.href='/admin' }} />}
-        </div>}
-        {view === 'privacy' && <div className="p-4 space-y-4">
-          <div><div className="font-bold text-sm">Ai có thể xem hồ sơ</div><select value={privacy.profile} onChange={e => savePrivacy({ ...privacy, profile:e.target.value })} className="d-input mt-2"><option value="public">Mọi người</option><option value="private">Chỉ người theo dõi</option></select></div>
-          <div><div className="font-bold text-sm">Ai có thể nhắn tin</div><select value={privacy.messages} onChange={e => savePrivacy({ ...privacy, messages:e.target.value })} className="d-input mt-2"><option value="everyone">Mọi người</option><option value="following">Người tôi theo dõi</option><option value="friends">Bạn bè</option></select></div>
-          <p className="text-xs d-muted">Thiết lập được lưu cho tài khoản trên thiết bị này. Quyền truy cập dữ liệu vẫn được bảo vệ bởi Supabase RLS.</p>
-        </div>}
-        {view === 'notifications' && <div className="p-4 space-y-1">
-          {[['likes','Lượt thích'],['comments','Bình luận'],['follows','Người theo dõi'],['messages','Tin nhắn']].map(([key,label]) => <label key={key} className="flex items-center justify-between py-3"><span className="text-sm font-semibold">{label}</span><input type="checkbox" checked={!!notificationPrefs[key]} onChange={e => saveNotificationPrefs({ ...notificationPrefs, [key]:e.target.checked })} /></label>)}
-          <p className="text-xs d-muted pt-2">Các lựa chọn này giúp D Social biết loại thông báo bạn muốn xem trên thiết bị hiện tại.</p>
-        </div>}
-        {view === 'help' && <div className="p-4 text-sm leading-relaxed d-muted space-y-2"><p>Nếu gặp lỗi, hãy tải lại ứng dụng và kiểm tra kết nối.</p><p>Bạn có thể dùng Báo cáo trên bài viết để gửi nội dung cần kiểm duyệt.</p><p>Để bảo vệ tài khoản, không chia sẻ mật khẩu hoặc mã xác nhận email.</p></div>}
-      </section>
+        {view === 'settings' && <><MenuRow icon={Lock} label="Quyền riêng tư" onClick={() => setView('privacy')} /><MenuRow icon={Bell} label="Cài đặt thông báo" onClick={() => setView('notifications')} /><MenuRow icon={HelpCircle} label="Trợ giúp" onClick={() => setView('help')} />{isAdmin && <MenuRow icon={Shield} label="Admin + AI kiểm duyệt" onClick={() => { window.location.href='/admin' }} />}</>}
+        {view === 'privacy' && <div className="p-4 text-sm leading-relaxed d-muted">Bạn kiểm soát thông tin hồ sơ và nội dung đã đăng. D Social sử dụng Supabase Auth + RLS để bảo vệ dữ liệu theo quyền truy cập.</div>}
+        {view === 'notifications' && <div className="p-4 text-sm leading-relaxed d-muted">Thông báo hoạt động và tin nhắn mới được quản lý tại tab Thông báo. Bạn có thể đánh dấu đã đọc từng mục hoặc tất cả.</div>}
+        {view === 'help' && <div className="p-4 text-sm leading-relaxed d-muted">Nếu gặp lỗi, hãy tải lại ứng dụng và kiểm tra kết nối. Bạn có thể dùng chức năng Báo cáo trên bài viết để gửi nội dung cần kiểm duyệt.</div>}
+      </section>}
     </div>
   }
 
