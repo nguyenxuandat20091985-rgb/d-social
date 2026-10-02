@@ -1036,6 +1036,12 @@ function App() {
   const [legal, setLegal] = useState(null)
   const [route, setRoute] = useState(getRoute())
   const { theme, toggle: toggleTheme } = useTheme()
+  const [chatBadge, setChatBadge] = useState(0)
+  useEffect(() => {
+    const onBadge = e => setChatBadge(e.detail || 0)
+    window.addEventListener('d-chat-unread', onBadge)
+    return () => window.removeEventListener('d-chat-unread', onBadge)
+  }, [])
   useEffect(() => {
     if (!supabase) { setReady(true); return }
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true) })
@@ -1057,12 +1063,6 @@ function App() {
   if (route.name === 'admin') { if (!session) return <AuthScreen onLegal={setLegal} />; return <AdminPage userId={session.user.id} /> }
   if (!session && supabase) return <AuthScreen onLegal={setLegal} />
   if (!session) return <div className="p-8 text-center">D Social</div>
-  const [chatBadge, setChatBadge] = useState(0)
-  useEffect(() => {
-    const onBadge = e => setChatBadge(e.detail || 0)
-    window.addEventListener('d-chat-unread', onBadge)
-    return () => window.removeEventListener('d-chat-unread', onBadge)
-  }, [])
   const logout = async () => { await supabase?.auth.signOut() }
   return (
     <Shell tab={tab} setTab={setTab} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} chatBadge={chatBadge}>
