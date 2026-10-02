@@ -223,7 +223,7 @@ export function ProfilePage({ userId }) {
       )}
       {(view === 'posts' || view === 'media' || view === 'moments') && <div className="space-y-3">
         {view === 'moments' ? <div className="grid grid-cols-3 gap-1.5">{images.map(p => <a key={p.id} href={`/p/${p.id}`} className="aspect-square overflow-hidden rounded-xl bg-[var(--d-surface-2)]"><img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" /></a>)}</div> :
-        view === 'media' ? <div className="grid grid-cols-2 gap-2">{[...images, ...clips].map(p => p.media_url && <a key={p.id} href={`/p/${p.id}`} className="d-card overflow-hidden aspect-square"><img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" /></a>)}</div> :
+        view === 'media' ? <div className="grid grid-cols-2 gap-2">{[...images, ...clips].map(p => p.media_url && <a key={p.id} href={`/p/${p.id}`} className="d-card overflow-hidden aspect-square bg-black">{p.media_type === "video" ? <video src={p.media_url} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={p.media_url} alt="" className="w-full h-full object-cover" loading="lazy" />}</a>)}</div> :
         myPosts.map(p => <MiniPost key={p.id} post={p} name={displayName} avatar={avatar} />)}
         {!myPosts.length && <div className="d-card p-8 text-center d-muted text-sm">Chưa có nội dung.</div>}
       </div>}
