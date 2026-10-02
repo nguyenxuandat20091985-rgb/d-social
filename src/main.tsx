@@ -921,34 +921,52 @@ function Notifications({ userId }) {
 
 function AdminPage({ userId }) {
   const [ok, setOk] = useState(false)
-  const [stats, setStats] = useState({ users: 0, posts24: 0, openReports: 0, hiddenPosts: 0 })
+  const [tab, setTab] = useState('overview')
+  const [stats, setStats] = useState({ users: 0, posts24: 0, openReports: 0, hiddenPosts: 0, ai24: 0, aiHidden24: 0, aiReview24: 0 })
   const [reports, setReports] = useState([])
   const [logs, setLogs] = useState([])
   const [posts, setPosts] = useState([])
+  const [users, setUsers] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
   const [aiText, setAiText] = useState('')
   const [aiResult, setAiResult] = useState(null)
   const [busy, setBusy] = useState(false)
-  const [tab, setTab] = useState('overview')
+  const [lastSync, setLastSync] = useState(null)
+  const [query, setQuery] = useState('')
 
   const load = async () => {
-    if (!supabase) return
+    if (!supabase || !userId) return
     const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', userId).single()
     if (!me?.is_admin) return setOk(false)
     setOk(true)
     const since = new Date(Date.now() - 86400000).toISOString()
-    const [users, posts24, openReports, hiddenPosts, reps, ai, recentPosts] = await Promise.all([
+    const [usersQ, posts24Q, openReportsQ, hiddenQ, repsQ, aiQ, recentPostsQ, peopleQ, auditQ] = await Promise.all([
       supabase.from('profiles').select('id', { count: 'exact', head: true }),
       supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', since),
       supabase.from('reports').select('id', { count: 'exact', head: true }).in('status', ['open', 'reviewing']),
       supabase.from('posts').select('id', { count: 'exact', head: true }).eq('is_published', false),
-      supabase.from('reports').select('id,reporter_id,target_type,target_id,reason,status,ai_score,ai_action,created_at,resolved_at,resolved_by').order('created_at', { ascending: false }).limit(80),
-      supabase.from('ai_moderation_log').select('id,user_id,source,input_text,score,action,engine,reasons,created_at').order('created_at', { ascending: false }).limit(80),
-      supabase.from('posts').select('id,author_id,content,is_published,created_at,profiles!user_id(full_name,username)').order('created_at', { ascending: false }).limit(40),
+      supabase.from('reports').select('id,reporter_id,target_type,target_id,reason,status,ai_score,ai_action,created_at,resolved_at,resolved_by').order('created_at', { ascending: false }).limit(120),
+      supabase.from('ai_moderation_log').select('id,user_id,source,input_text,score,action,engine,reasons,created_at').order('created_at', { ascending: false }).limit(120),
+      supabase.from('posts').select('id,author_id,content,is_published,created_at,ai_action,ai_score,ai_moderated_at,profiles!user_id(full_name,username,avatar_url)').order('created_at', { ascending: false }).limit(80),
+      supabase.from('profiles').select('id,username,full_name,avatar_url,is_online,last_seen,is_vip,vip_expires_at,is_admin,created_at').order('created_at', { ascending: false }).limit(100),
+      supabase.from('admin_audit_log').select('id,admin_id,action,target_type,target_id,meta,created_at').order('created_at', { ascending: false }).limit(100),
     ])
-    setStats({ users: users.count || 0, posts24: posts24.count || 0, openReports: openReports.count || 0, hiddenPosts: hiddenPosts.count || 0 })
-    setReports(reps.data || [])
-    setLogs(ai.data || [])
-    setPosts(recentPosts.data || [])
+    const ai24 = (aiQ.data || []).filter(x => x.created_at >= since)
+    setStats({
+      users: usersQ.count || 0,
+      posts24: posts24Q.count || 0,
+      openReports: openReportsQ.count || 0,
+      hiddenPosts: hiddenQ.count || 0,
+      ai24: ai24.length,
+      aiHidden24: ai24.filter(x => x.action === 'hide').length,
+      aiReview24: ai24.filter(x => x.action === 'review').length,
+    })
+    setReports(repsQ.data || [])
+    setLogs(aiQ.data || [])
+    setPosts(recentPostsQ.data || [])
+    setUsers(peopleQ.data || [])
+    setAuditLogs(auditQ.data || [])
+    setLastSync(new Date())
   }
 
   useEffect(() => {
@@ -965,37 +983,184 @@ function AdminPage({ userId }) {
   const audit = async (action, targetType, targetId, meta = {}) => {
     try { await supabase.from('admin_audit_log').insert({ admin_id: userId, action, target_type: targetType, target_id: targetId || null, meta }) } catch {}
   }
+
   const setReportStatus = async (id, status) => {
-    const final = ['resolved','dismissed'].includes(status)
-    const { error } = await supabase.from('reports').update({ status, resolved_at: final ? new Date().toISOString() : null, resolved_by: final ? userId : null }).eq('id', id)
+    const final = ['resolved', 'dismissed'].includes(status)
+    const { error } = await supabase.from('reports').update({
+      status,
+      resolved_at: final ? new Date().toISOString() : null,
+      resolved_by: final ? userId : null,
+    }).eq('id', id)
     if (!error) { await audit('report_' + status, 'report', id); await load() }
   }
+
   const setPostPublished = async (id, published) => {
     const { error } = await supabase.from('posts').update({ is_published: published }).eq('id', id)
     if (!error) { await audit(published ? 'restore_post' : 'hide_post', 'post', id); await load() }
   }
+
   const runAi = async () => {
+    if (!aiText.trim()) return
     setBusy(true); setAiResult(null)
     try {
-      const result = await fetch('/api/ai/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: aiText }) }).then(r => r.json())
-      setAiResult(result); await logAiModeration(userId, 'admin_test', aiText, result); await load()
-    } catch (e) { setAiResult({ error: e.message }) } finally { setBusy(false) }
+      const result = await fetch('/api/ai/moderate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: aiText }),
+      }).then(r => r.json())
+      setAiResult(result)
+      await logAiModeration(userId, 'admin_test', aiText, result)
+      await audit('ai_manual_test', 'ai', null, { action: result?.action, score: result?.score })
+      await load()
+    } catch (e) {
+      setAiResult({ error: e.message })
+    } finally { setBusy(false) }
   }
-  if (!ok) return <div className="p-10 text-center d-muted">Không có quyền admin. <a href="/" style={{ color: "var(--d-primary)" }}>Về trang chủ</a></div>
-  const card = (label, value, icon) => <div className="d-card p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-2xl grid place-items-center" style={{ background: 'var(--d-surface-2)' }}>{icon}</div><div><div className="text-xs d-muted">{label}</div><div className="text-2xl font-black">{value}</div></div></div>
+
+  if (!ok) return <div className="p-10 text-center d-muted">Không có quyền admin. <a href="/" style={{ color: 'var(--d-primary)' }}>Về trang chủ</a></div>
+
+  const filteredUsers = users.filter(u => {
+    const q = query.trim().toLowerCase()
+    return !q || [u.username, u.full_name, u.id].some(v => String(v || '').toLowerCase().includes(q))
+  })
+  const filteredPosts = posts.filter(p => {
+    const q = query.trim().toLowerCase()
+    return !q || [p.content, p.author_id, p.profiles?.username, p.profiles?.full_name].some(v => String(v || '').toLowerCase().includes(q))
+  })
+  const openReports = reports.filter(r => ['open', 'reviewing'].includes(r.status))
+
+  const statCard = (label, value, icon, tone = 'normal') => (
+    <div className="d-card p-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="w-10 h-10 rounded-2xl grid place-items-center" style={{ background: 'var(--d-surface-2)', color: tone === 'danger' ? 'var(--d-danger, #e11d48)' : 'var(--d-primary)' }}>{icon}</div>
+        <span className="text-2xl font-black">{value}</span>
+      </div>
+      <div className="text-xs d-muted mt-2">{label}</div>
+    </div>
+  )
+
+  const actionBadge = action => (
+    <span className="text-[11px] px-2 py-1 rounded-full font-bold" style={{
+      background: action === 'hide' ? 'color-mix(in srgb, var(--d-danger, #e11d48) 12%, transparent)' : action === 'review' ? 'color-mix(in srgb, #f59e0b 14%, transparent)' : 'var(--d-surface-2)',
+      color: action === 'hide' ? 'var(--d-danger, #e11d48)' : action === 'review' ? '#d97706' : 'var(--d-text)'
+    }}>{action || '—'}</span>
+  )
+
+  const tabs = [
+    ['overview', 'Tổng quan'],
+    ['ai', 'AI 24/7'],
+    ['review', 'Kiểm duyệt'],
+    ['posts', 'Bài viết'],
+    ['users', 'Thành viên'],
+    ['audit', 'Audit log'],
+  ]
+
   return (
-    <main className="max-w-5xl mx-auto p-4 pb-20 space-y-4">
-      <div className="flex items-center justify-between"><div><h1 className="text-2xl font-black flex items-center gap-2"><Shield /> Admin Monitor</h1><p className="text-xs d-muted mt-1">AI kiểm duyệt + báo cáo + nhật ký hoạt động</p></div><a href="/" className="text-sm d-muted">← App</a></div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{card('Người dùng', stats.users, <Users size={18}/>)}{card('Bài trong 24h', stats.posts24, <MessageCircle size={18}/>)}{card('Report đang mở', stats.openReports, <Flag size={18}/>)}{card('Bài đang ẩn', stats.hiddenPosts, <Shield size={18}/>)}</div>
-      <div className="flex gap-2 overflow-auto">{[['overview','Tổng quan'],['ai','Nhật ký AI'],['review','Review'],['posts','Bài viết']].map(([id,label]) => <button key={id} onClick={()=>setTab(id)} className={tab===id?'d-btn-primary text-sm':'d-btn text-sm'}>{label}</button>)}</div>
-      {tab === 'overview' && <section className="d-card p-4 space-y-3"><div className="flex items-center justify-between"><h2 className="font-bold">AI chạy nền</h2><span className="text-xs px-2 py-1 rounded-full" style={{background:'var(--d-surface-2)'}}>Realtime nhẹ + refresh 60s</span></div><p className="text-sm d-muted">Mỗi lần Composer gọi AI sẽ ghi nhật ký sau khi có kết quả. Admin test cũng được ghi lại.</p><div className="text-sm">AI gần nhất: {logs[0] ? logs[0].action + ' · ' + logs[0].engine + ' · ' + timeAgo(logs[0].created_at) : 'Chưa có log'}</div></section>}
-      {tab === 'ai' && <section className="space-y-3"><div className="d-card p-4 space-y-2"><h2 className="font-bold">Thử AI kiểm duyệt</h2><textarea value={aiText} onChange={e=>setAiText(e.target.value)} className="d-input min-h-24 text-sm" placeholder="Dán nội dung cần kiểm tra..." /><button disabled={busy || !aiText.trim()} onClick={runAi} className="d-btn-primary text-sm">{busy?'Đang phân tích...':'Chạy AI'}</button>{aiResult&&<pre className="text-xs bg-slate-950/80 p-3 rounded-xl overflow-auto text-cyan-100">{JSON.stringify(aiResult,null,2)}</pre>}</div>{logs.map(l=><div key={l.id} className="d-card p-3 text-sm"><div className="flex justify-between gap-3"><b>{l.action}</b><span className="d-muted text-xs">{timeAgo(l.created_at)}</span></div><div className="text-xs d-muted mt-1">{l.engine} · {l.source} · score {l.score == null ? '—' : l.score}</div><p className="mt-2 line-clamp-3">{l.input_text || '(rỗng)'}</p></div>)}</section>}
-      {tab === 'review' && <section className="space-y-3">{reports.filter(r=>['open','reviewing'].includes(r.status)).map(r=><div key={r.id} className="d-card p-4"><div className="flex justify-between gap-3"><div><b>{r.target_type}</b> · {r.reason}</div><span className="text-xs d-muted">{timeAgo(r.created_at)}</span></div><div className="text-xs d-muted mt-1">AI: {r.ai_action || 'chưa có'} {r.ai_score == null ? '' : '· ' + r.ai_score}</div><div className="flex gap-2 mt-3"><button className="d-btn text-xs" onClick={()=>setReportStatus(r.id,'reviewing')}>Đang xử lý</button><button className="d-btn-primary text-xs" onClick={()=>setReportStatus(r.id,'resolved')}>Giải quyết</button><button className="d-btn text-xs" onClick={()=>setReportStatus(r.id,'dismissed')}>Bỏ qua</button></div></div>)}{!reports.some(r=>['open','reviewing'].includes(r.status))&&<div className="d-card p-5 text-sm d-muted">Không có report cần xử lý.</div>}</section>}
-      {tab === 'posts' && <section className="space-y-2">{posts.map(p=><div key={p.id} className="d-card p-4"><div className="text-xs d-muted">{p.profiles?.full_name || p.author_id} · {timeAgo(p.created_at)}</div><p className="mt-1 text-sm">{p.content || '(media)'}</p><button onClick={()=>setPostPublished(p.id,p.is_published===false)} className="mt-2 text-sm font-medium" style={{color:'var(--d-warning)'}}>{p.is_published===false?'Hiện bài':'Ẩn bài'}</button></div>)}</section>}
+    <main className="max-w-6xl mx-auto p-3 md:p-5 pb-20 space-y-4">
+      <header className="d-card p-4 md:p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-black flex items-center gap-2"><Shield size={25} /> D Social Admin</h1>
+            <p className="text-xs d-muted mt-1">Trung tâm điều hành · AI kiểm duyệt chạy nền, admin chỉ cần mở khi cần.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs px-2.5 py-1.5 rounded-full" style={{ background: 'color-mix(in srgb, #22c55e 12%, transparent)', color: '#16a34a' }}>● AI worker ON</span>
+            <button type="button" onClick={load} className="d-btn text-xs">↻ Làm mới</button>
+            <a href="/" className="d-btn text-xs">← App</a>
+          </div>
+        </div>
+        <div className="mt-3 text-[11px] d-muted">Lần đồng bộ: {lastSync ? lastSync.toLocaleTimeString('vi-VN') : 'đang tải'} · Worker xử lý tối đa 25 bài + 25 bình luận mỗi phút.</div>
+      </header>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {statCard('Người dùng', stats.users, <Users size={18} />)}
+        {statCard('Bài mới 24h', stats.posts24, <MessageCircle size={18} />)}
+        {statCard('Report cần xử lý', stats.openReports, <Flag size={18} />, stats.openReports ? 'danger' : 'normal')}
+        {statCard('Bài đang ẩn', stats.hiddenPosts, <Shield size={18} />)}
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {statCard('AI đã kiểm tra 24h', stats.ai24, <Sparkles size={18} />)}
+        {statCard('AI cần review', stats.aiReview24, <Flag size={18} />)}
+        {statCard('AI đã ẩn 24h', stats.aiHidden24, <Shield size={18} />, stats.aiHidden24 ? 'danger' : 'normal')}
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {tabs.map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)} className={tab === id ? 'd-btn-primary text-xs shrink-0' : 'd-btn text-xs shrink-0'}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <section className="d-card p-4 space-y-3">
+            <div className="flex items-center justify-between"><h2 className="font-black">AI nền 24/7</h2>{actionBadge(logs[0]?.action)}</div>
+            <p className="text-sm d-muted leading-relaxed">Worker chạy độc lập bằng Supabase Cron mỗi phút. Nó kiểm tra bài viết và bình luận mới, ghi kết quả vào nhật ký AI và tự ẩn nội dung bị xác định là vi phạm.</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-3 rounded-xl" style={{ background: 'var(--d-surface-2)' }}>Engine<br /><b>{logs[0]?.engine || 'db-rules-v1'}</b></div>
+              <div className="p-3 rounded-xl" style={{ background: 'var(--d-surface-2)' }}>Log mới nhất<br /><b>{logs[0] ? timeAgo(logs[0].created_at) : 'Chưa có'}</b></div>
+            </div>
+          </section>
+          <section className="d-card p-4 space-y-3">
+            <h2 className="font-black">Việc cần xử lý</h2>
+            <div className="flex justify-between text-sm"><span>Report mở</span><b>{stats.openReports}</b></div>
+            <div className="flex justify-between text-sm"><span>AI đề nghị review</span><b>{stats.aiReview24}</b></div>
+            <div className="flex justify-between text-sm"><span>Bài đã ẩn</span><b>{stats.hiddenPosts}</b></div>
+            <button className="d-btn-primary text-xs" onClick={() => setTab(stats.openReports ? 'review' : 'ai')}>{stats.openReports ? 'Mở hàng chờ kiểm duyệt' : 'Xem nhật ký AI'}</button>
+          </section>
+          <section className="d-card p-4 lg:col-span-2">
+            <div className="flex items-center justify-between mb-3"><h2 className="font-black">Hoạt động AI gần nhất</h2><button className="text-xs" style={{ color: 'var(--d-primary)' }} onClick={() => setTab('ai')}>Xem tất cả</button></div>
+            <div className="space-y-2">{logs.slice(0, 8).map(l => <div key={l.id} className="flex gap-3 items-start p-2.5 rounded-xl" style={{ background: 'var(--d-surface-2)' }}><div className="pt-0.5">{actionBadge(l.action)}</div><div className="min-w-0 flex-1"><div className="text-xs truncate">{l.input_text || '(media)'}</div><div className="text-[10px] d-muted mt-1">{l.source} · {l.engine} · score {l.score ?? '—'} · {timeAgo(l.created_at)}</div></div></div>)}{!logs.length && <div className="text-sm d-muted">Chưa có dữ liệu AI.</div>}</div>
+          </section>
+        </div>
+      )}
+
+      {tab === 'ai' && (
+        <section className="space-y-3">
+          <div className="d-card p-4 space-y-3">
+            <div><h2 className="font-black">Phòng thử AI</h2><p className="text-xs d-muted mt-1">Kiểm tra thủ công; kết quả cũng được ghi vào audit.</p></div>
+            <textarea value={aiText} onChange={e => setAiText(e.target.value)} className="d-input min-h-28 text-sm" placeholder="Dán nội dung cần kiểm tra..." />
+            <button disabled={busy || !aiText.trim()} onClick={runAi} className="d-btn-primary text-sm">{busy ? 'Đang phân tích...' : 'Chạy AI'}</button>
+            {aiResult && <pre className="text-xs p-3 rounded-xl overflow-auto" style={{ background: 'var(--d-surface-2)' }}>{JSON.stringify(aiResult, null, 2)}</pre>}
+          </div>
+          <div className="space-y-2">
+            {logs.map(l => <div key={l.id} className="d-card p-3"><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-2">{actionBadge(l.action)}<span className="text-xs d-muted">{l.source}</span></div><span className="text-[11px] d-muted">{timeAgo(l.created_at)}</span></div><p className="text-sm mt-2 line-clamp-3">{l.input_text || '(media / không có text)'}</p><div className="text-[11px] d-muted mt-2">{l.engine} · score {l.score ?? '—'} · {Array.isArray(l.reasons) ? l.reasons.join(', ') : ''}</div></div>)}
+          </div>
+        </section>
+      )}
+
+      {tab === 'review' && (
+        <section className="space-y-3">
+          <div className="d-card p-4 flex items-center justify-between gap-3"><div><h2 className="font-black">Hàng chờ kiểm duyệt</h2><p className="text-xs d-muted mt-1">Report của người dùng và các trường hợp AI cần con người xem.</p></div><b className="text-lg">{openReports.length}</b></div>
+          {openReports.map(r => <div key={r.id} className="d-card p-4"><div className="flex justify-between gap-3"><div><b>{r.target_type}</b> · {r.reason}</div><span className="text-xs d-muted">{timeAgo(r.created_at)}</span></div><div className="text-xs d-muted mt-1">Target: {r.target_id} · AI: {r.ai_action || 'chưa có'} {r.ai_score == null ? '' : '· score ' + r.ai_score}</div><div className="flex flex-wrap gap-2 mt-3"><button className="d-btn text-xs" onClick={() => setReportStatus(r.id, 'reviewing')}>Đang xử lý</button><button className="d-btn-primary text-xs" onClick={() => setReportStatus(r.id, 'resolved')}>Giải quyết</button><button className="d-btn text-xs" onClick={() => setReportStatus(r.id, 'dismissed')}>Bỏ qua</button></div></div>)}
+          {!openReports.length && <div className="d-card p-8 text-center d-muted text-sm">Không có report mở.</div>}
+        </section>
+      )}
+
+      {tab === 'posts' && (
+        <section className="space-y-3">
+          <div className="d-card p-3"><input value={query} onChange={e => setQuery(e.target.value)} className="d-input text-sm" placeholder="Tìm bài viết / username / ID..." /></div>
+          {filteredPosts.map(p => <div key={p.id} className="d-card p-4"><div className="flex justify-between gap-3"><div className="text-xs d-muted">{p.profiles?.full_name || p.profiles?.username || p.author_id} · {timeAgo(p.created_at)}</div>{actionBadge(p.ai_action)}</div><p className="mt-2 text-sm">{p.content || '(media)'}</p><div className="flex items-center gap-3 mt-3 text-xs d-muted">AI score: {p.ai_score ?? '—'} · {p.ai_moderated_at ? 'đã kiểm tra' : 'chờ worker'}<button onClick={() => setPostPublished(p.id, p.is_published === false)} className="ml-auto font-bold" style={{ color: p.is_published === false ? '#16a34a' : 'var(--d-danger, #e11d48)' }}>{p.is_published === false ? 'Hiện bài' : 'Ẩn bài'}</button></div></div>)}
+          {!filteredPosts.length && <div className="d-card p-8 text-center d-muted text-sm">Không có bài phù hợp.</div>}
+        </section>
+      )}
+
+      {tab === 'users' && (
+        <section className="space-y-3">
+          <div className="d-card p-3"><input value={query} onChange={e => setQuery(e.target.value)} className="d-input text-sm" placeholder="Tìm tên, username hoặc ID..." /></div>
+          <div className="space-y-2">{filteredUsers.map(u => <div key={u.id} className="d-card p-3 flex items-center gap-3"><Avatar src={u.avatar_url} name={u.full_name || u.username} size={40} /><div className="min-w-0 flex-1"><div className="font-bold text-sm truncate">{u.full_name || u.username || 'Thành viên'}</div><div className="text-[11px] d-muted truncate">@{u.username || '—'} · {u.is_online ? 'Đang online' : 'offline'}</div></div><div className="text-right text-[11px] d-muted">{u.is_admin && <div className="font-bold" style={{ color: 'var(--d-primary)' }}>ADMIN</div>}{u.is_vip && <div>VIP</div>}</div></div>)}</div>
+        </section>
+      )}
+
+      {tab === 'audit' && (
+        <section className="space-y-2">
+          {auditLogs.map(a => <div key={a.id} className="d-card p-3"><div className="flex justify-between gap-3"><b className="text-sm">{a.action}</b><span className="text-[11px] d-muted">{timeAgo(a.created_at)}</span></div><div className="text-[11px] d-muted mt-1">{a.target_type || 'system'} · {a.target_id || '—'} · admin {a.admin_id}</div>{a.meta && <pre className="text-[10px] d-muted mt-2 whitespace-pre-wrap">{JSON.stringify(a.meta)}</pre>}</div>)}
+          {!auditLogs.length && <div className="d-card p-8 text-center d-muted text-sm">Chưa có audit log.</div>}
+        </section>
+      )}
     </main>
   )
 }
-
 function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme, chatBadge = 0 }) {
   const nav = [
     { id: 'feed', label: 'Trang chủ', icon: Home },
