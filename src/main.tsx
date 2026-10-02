@@ -415,14 +415,18 @@ function Feed({ userId }) {
 
   useEffect(() => {
     if (!supabase) return
-    supabase.from('profiles').select('id,username,full_name,avatar_url').neq('id', userId).limit(20).then(({ data }) => {
+    supabase.from('profiles').select('id,username,full_name,avatar_url').neq('id', userId).limit(12).then(({ data }) => {
       const blk = new Set(blockedRef.current)
       setPeople((data || []).filter(p => !blk.has(p.id)))
     })
-    const ch = supabase.channel('feed-realtime').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => {
+    // Không giữ kênh realtime toàn feed: mỗi user một kết nối sẽ đầy hạn mức Supabase.
+    // Tab đang mở thì làm mới 60 giây; tab ẩn thì không gọi.
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return
       if (modeRef.current === 'all') load(true)
-    }).subscribe()
-    return () => { supabase!.removeChannel(ch) }
+    }
+    const timer = setInterval(tick, 60000)
+    return () => clearInterval(timer)
   }, [userId])
 
   useEffect(() => {
@@ -520,13 +524,13 @@ function Chat({ userId }) {
   const loadPeople = async () => {
     if (!supabase) return
     const [{ data: profiles, error: profileError }, { data: blocks }] = await Promise.all([
-      supabase.from('profiles').select('id,username,full_name,avatar_url').neq('id', userId).limit(100),
+      supabase.from('profiles').select('id,username,full_name,avatar_url').neq('id', userId).limit(40),
       supabase.from('blocks').select('blocked_id').eq('blocker_id', userId),
     ])
     if (profileError) { setError('Không tải được danh sách thành viên.'); return }
     const blocked = new Set((blocks || []).map(b => b.blocked_id))
     const allowed = (profiles || []).filter(p => !blocked.has(p.id))
-    const { data: recent } = await supabase.from('messages').select('sender_id,recipient_id,content,created_at,read_at').or('sender_id.eq.'+userId+',recipient_id.eq.'+userId).order('created_at', { ascending: false }).limit(300)
+    const { data: recent } = await supabase.from('messages').select('sender_id,recipient_id,content,created_at,read_at').or('sender_id.eq.'+userId+',recipient_id.eq.'+userId).order('created_at', { ascending: false }).limit(80)
     const latest = new Map()
     for (const m of recent || []) {
       const otherId = m.sender_id === userId ? m.recipient_id : m.sender_id
@@ -547,7 +551,7 @@ function Chat({ userId }) {
     let alive = true
     setLoading(true); setError('')
     const load = async () => {
-      const { data, error: loadError } = await supabase.from('messages').select('*').or(`and(sender_id.eq.${userId},recipient_id.eq.${active.id}),and(sender_id.eq.${active.id},recipient_id.eq.${userId})`).order('created_at', { ascending: true }).limit(200)
+      const { data, error: loadError } = await supabase.from('messages').select('id,sender_id,recipient_id,content,media_url,media_type,read_at,deleted_at,created_at').or(`and(sender_id.eq.${userId},recipient_id.eq.${active.id}),and(sender_id.eq.${active.id},recipient_id.eq.${userId})`).order('created_at', { ascending: true }).limit(80)
       if (!alive) return
       if (loadError) setError('Không tải được cuộc trò chuyện.')
       else {
