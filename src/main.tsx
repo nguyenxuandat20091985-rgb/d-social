@@ -19,6 +19,13 @@ import { LOGO_SRC } from './lib/brand'
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
 
+async function logAiModeration(userId, source, inputText, result) {
+  if (!supabase || !userId || !result || result.error) return
+  try {
+    await supabase.from('ai_moderation_log').insert({ user_id: userId, source, input_text: String(inputText || '').slice(0, 4000), score: Number.isFinite(Number(result.score)) ? Number(result.score) : null, action: result.action || 'review', engine: result.engine || 'unknown', reasons: result.reasons || [] })
+  } catch {}
+}
+
 function useTheme() {
   const [theme, setTheme] = useState(() => {
     try {
@@ -159,6 +166,7 @@ function Composer({ userId, onPublished, autoFocus, onClose }) {
     try {
       try {
         const ai = await fetch('/api/ai/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text || '' }) }).then(r => r.json())
+        await logAiModeration(userId, 'composer', text, ai)
         if (ai?.action === 'hide') { setError('Nội dung không phù hợp cộng đồng văn minh.'); setBusy(false); return }
       } catch {}
       let media_url = null, media_type = null
@@ -913,71 +921,77 @@ function Notifications({ userId }) {
 
 function AdminPage({ userId }) {
   const [ok, setOk] = useState(false)
-  const [posts, setPosts] = useState([])
+  const [stats, setStats] = useState({ users: 0, posts24: 0, openReports: 0, hiddenPosts: 0 })
   const [reports, setReports] = useState([])
+  const [logs, setLogs] = useState([])
+  const [posts, setPosts] = useState([])
   const [aiText, setAiText] = useState('')
   const [aiResult, setAiResult] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [tab, setTab] = useState('overview')
+
+  const load = async () => {
+    if (!supabase) return
+    const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', userId).single()
+    if (!me?.is_admin) return setOk(false)
+    setOk(true)
+    const since = new Date(Date.now() - 86400000).toISOString()
+    const [users, posts24, openReports, hiddenPosts, reps, ai, recentPosts] = await Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }),
+      supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', since),
+      supabase.from('reports').select('id', { count: 'exact', head: true }).in('status', ['open', 'reviewing']),
+      supabase.from('posts').select('id', { count: 'exact', head: true }).eq('is_published', false),
+      supabase.from('reports').select('id,reporter_id,target_type,target_id,reason,status,ai_score,ai_action,created_at,resolved_at,resolved_by').order('created_at', { ascending: false }).limit(80),
+      supabase.from('ai_moderation_log').select('id,user_id,source,input_text,score,action,engine,reasons,created_at').order('created_at', { ascending: false }).limit(80),
+      supabase.from('posts').select('id,author_id,content,is_published,created_at,profiles!user_id(full_name,username)').order('created_at', { ascending: false }).limit(40),
+    ])
+    setStats({ users: users.count || 0, posts24: posts24.count || 0, openReports: openReports.count || 0, hiddenPosts: hiddenPosts.count || 0 })
+    setReports(reps.data || [])
+    setLogs(ai.data || [])
+    setPosts(recentPosts.data || [])
+  }
+
   useEffect(() => {
+    load()
     if (!supabase) return
-    ;(async () => {
-      const { data: me } = await supabase.from('profiles').select('is_admin').eq('id', userId).single()
-      if (!me?.is_admin) return
-      setOk(true)
-      const { data } = await supabase.from('posts').select('id,author_id,content,is_published,created_at,profiles!user_id(full_name,username)').order('created_at', { ascending: false }).limit(100)
-      if (data) setPosts(data)
-      const { data: reps } = await supabase.from('reports').select('*').order('created_at', { ascending: false }).limit(50)
-      if (reps) setReports(reps)
-    })()
+    const ch = supabase.channel('admin-monitor-lite')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reports' }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ai_moderation_log' }, load)
+      .subscribe()
+    const timer = setInterval(load, 60000)
+    return () => { clearInterval(timer); supabase.removeChannel(ch) }
   }, [userId])
-  const hide = async id => {
-    if (!supabase) return
-    await supabase.from('posts').update({ is_published: false }).eq('id', id)
-    setPosts(x => x.map(p => (p.id === id ? { ...p, is_published: false } : p)))
-    try {
-      await supabase.from('admin_audit_log').insert({
-        admin_id: userId,
-        action: 'hide_post',
-        target_type: 'post',
-        target_id: id,
-        meta: {},
-      })
-    } catch {}
+
+  const audit = async (action, targetType, targetId, meta = {}) => {
+    try { await supabase.from('admin_audit_log').insert({ admin_id: userId, action, target_type: targetType, target_id: targetId || null, meta }) } catch {}
+  }
+  const setReportStatus = async (id, status) => {
+    const final = ['resolved','dismissed'].includes(status)
+    const { error } = await supabase.from('reports').update({ status, resolved_at: final ? new Date().toISOString() : null, resolved_by: final ? userId : null }).eq('id', id)
+    if (!error) { await audit('report_' + status, 'report', id); await load() }
+  }
+  const setPostPublished = async (id, published) => {
+    const { error } = await supabase.from('posts').update({ is_published: published }).eq('id', id)
+    if (!error) { await audit(published ? 'restore_post' : 'hide_post', 'post', id); await load() }
   }
   const runAi = async () => {
     setBusy(true); setAiResult(null)
     try {
-      const r = await fetch('/api/ai/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: aiText }) })
-      setAiResult(await r.json())
+      const result = await fetch('/api/ai/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: aiText }) }).then(r => r.json())
+      setAiResult(result); await logAiModeration(userId, 'admin_test', aiText, result); await load()
     } catch (e) { setAiResult({ error: e.message }) } finally { setBusy(false) }
   }
   if (!ok) return <div className="p-10 text-center d-muted">Không có quyền admin. <a href="/" style={{ color: "var(--d-primary)" }}>Về trang chủ</a></div>
+  const card = (label, value, icon) => <div className="d-card p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-2xl grid place-items-center" style={{ background: 'var(--d-surface-2)' }}>{icon}</div><div><div className="text-xs d-muted">{label}</div><div className="text-2xl font-black">{value}</div></div></div>
   return (
-    <main className="max-w-3xl mx-auto p-4 pb-20 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-black flex items-center gap-2"><Sparkles className="text-violet-300" /> Admin · AI</h1>
-        <a href="/" className="text-sm d-muted">← App</a>
-      </div>
-      <section className="d-card p-4 space-y-2">
-        <textarea value={aiText} onChange={e => setAiText(e.target.value)} className="d-input min-h-24 text-sm" placeholder="Dán nội dung..." />
-        <button disabled={busy || !aiText.trim()} onClick={runAi} className="d-btn-primary text-sm">{busy ? 'Đang phân tích...' : 'Chạy AI'}</button>
-        {aiResult && <pre className="text-xs bg-slate-950/80 p-3 rounded-xl overflow-auto text-cyan-100">{JSON.stringify(aiResult, null, 2)}</pre>}
-      </section>
-      <section className="d-card p-4">
-        <h2 className="font-bold mb-2">Báo cáo ({reports.length})</h2>
-        <div className="space-y-2 max-h-48 overflow-auto">
-          {reports.map(r => <div key={r.id} className="text-xs border-b d-border-c pb-2"><span className="">{r.target_type}</span> · {r.reason}</div>)}
-        </div>
-      </section>
-      <div className="space-y-2">
-        {posts.map(p => (
-          <div key={p.id} className="d-card p-4">
-            <div className="text-xs d-muted">{p.profiles?.full_name || p.author_id}</div>
-            <p className="mt-1 text-sm">{p.content}</p>
-            {p.is_published !== false && <button onClick={() => hide(p.id)} className="mt-2 text-sm font-medium" style={{ color: "var(--d-warning)" }}>Ẩn bài</button>}
-          </div>
-        ))}
-      </div>
+    <main className="max-w-5xl mx-auto p-4 pb-20 space-y-4">
+      <div className="flex items-center justify-between"><div><h1 className="text-2xl font-black flex items-center gap-2"><Shield /> Admin Monitor</h1><p className="text-xs d-muted mt-1">AI kiểm duyệt + báo cáo + nhật ký hoạt động</p></div><a href="/" className="text-sm d-muted">← App</a></div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{card('Người dùng', stats.users, <Users size={18}/>)}{card('Bài trong 24h', stats.posts24, <MessageCircle size={18}/>)}{card('Report đang mở', stats.openReports, <Flag size={18}/>)}{card('Bài đang ẩn', stats.hiddenPosts, <Shield size={18}/>)}</div>
+      <div className="flex gap-2 overflow-auto">{[['overview','Tổng quan'],['ai','Nhật ký AI'],['review','Review'],['posts','Bài viết']].map(([id,label]) => <button key={id} onClick={()=>setTab(id)} className={tab===id?'d-btn-primary text-sm':'d-btn text-sm'}>{label}</button>)}</div>
+      {tab === 'overview' && <section className="d-card p-4 space-y-3"><div className="flex items-center justify-between"><h2 className="font-bold">AI chạy nền</h2><span className="text-xs px-2 py-1 rounded-full" style={{background:'var(--d-surface-2)'}}>Realtime nhẹ + refresh 60s</span></div><p className="text-sm d-muted">Mỗi lần Composer gọi AI sẽ ghi nhật ký sau khi có kết quả. Admin test cũng được ghi lại.</p><div className="text-sm">AI gần nhất: {logs[0] ? logs[0].action + ' · ' + logs[0].engine + ' · ' + timeAgo(logs[0].created_at) : 'Chưa có log'}</div></section>}
+      {tab === 'ai' && <section className="space-y-3"><div className="d-card p-4 space-y-2"><h2 className="font-bold">Thử AI kiểm duyệt</h2><textarea value={aiText} onChange={e=>setAiText(e.target.value)} className="d-input min-h-24 text-sm" placeholder="Dán nội dung cần kiểm tra..." /><button disabled={busy || !aiText.trim()} onClick={runAi} className="d-btn-primary text-sm">{busy?'Đang phân tích...':'Chạy AI'}</button>{aiResult&&<pre className="text-xs bg-slate-950/80 p-3 rounded-xl overflow-auto text-cyan-100">{JSON.stringify(aiResult,null,2)}</pre>}</div>{logs.map(l=><div key={l.id} className="d-card p-3 text-sm"><div className="flex justify-between gap-3"><b>{l.action}</b><span className="d-muted text-xs">{timeAgo(l.created_at)}</span></div><div className="text-xs d-muted mt-1">{l.engine} · {l.source} · score {l.score == null ? '—' : l.score}</div><p className="mt-2 line-clamp-3">{l.input_text || '(rỗng)'}</p></div>)}</section>}
+      {tab === 'review' && <section className="space-y-3">{reports.filter(r=>['open','reviewing'].includes(r.status)).map(r=><div key={r.id} className="d-card p-4"><div className="flex justify-between gap-3"><div><b>{r.target_type}</b> · {r.reason}</div><span className="text-xs d-muted">{timeAgo(r.created_at)}</span></div><div className="text-xs d-muted mt-1">AI: {r.ai_action || 'chưa có'} {r.ai_score == null ? '' : '· ' + r.ai_score}</div><div className="flex gap-2 mt-3"><button className="d-btn text-xs" onClick={()=>setReportStatus(r.id,'reviewing')}>Đang xử lý</button><button className="d-btn-primary text-xs" onClick={()=>setReportStatus(r.id,'resolved')}>Giải quyết</button><button className="d-btn text-xs" onClick={()=>setReportStatus(r.id,'dismissed')}>Bỏ qua</button></div></div>)}{!reports.some(r=>['open','reviewing'].includes(r.status))&&<div className="d-card p-5 text-sm d-muted">Không có report cần xử lý.</div>}</section>}
+      {tab === 'posts' && <section className="space-y-2">{posts.map(p=><div key={p.id} className="d-card p-4"><div className="text-xs d-muted">{p.profiles?.full_name || p.author_id} · {timeAgo(p.created_at)}</div><p className="mt-1 text-sm">{p.content || '(media)'}</p><button onClick={()=>setPostPublished(p.id,p.is_published===false)} className="mt-2 text-sm font-medium" style={{color:'var(--d-warning)'}}>{p.is_published===false?'Hiện bài':'Ẩn bài'}</button></div>)}</section>}
     </main>
   )
 }
