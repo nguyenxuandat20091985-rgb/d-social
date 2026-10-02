@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Shield, Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check, MessageCircle, UserPlus, UserMinus } from 'lucide-react'
+import { Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check, MessageCircle, UserPlus, UserMinus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const MAX_IMAGE = 8 * 1024 * 1024
@@ -74,7 +74,6 @@ export function ProfilePage({ userId }) {
   const [avatar, setAvatar] = useState('')
   const [saved, setSaved] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [myPosts, setMyPosts] = useState([])
   const [followers, setFollowers] = useState(0)
   const [following, setFollowing] = useState(0)
@@ -96,7 +95,7 @@ export function ProfilePage({ userId }) {
       supabase.from('follows').select('following_id').eq('follower_id', userId),
       supabase.from('follows').select('follower_id').eq('following_id', userId)
     ])
-    if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || ''); setIsAdmin(!!profile.is_admin) }
+    if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || '') }
     setMyPosts(posts || [])
     setFollowers(followerCount || 0); setFollowing(followingCount || 0)
     const mineSet = new Set((mine || []).map(x => x.following_id))
@@ -236,7 +235,7 @@ export function ProfilePage({ userId }) {
             </div>
       )}
       {['settings','privacy','notifications','help'].includes(view) && <section className="d-card p-2">
-        {view === 'settings' && <><MenuRow icon={Lock} label="Quyền riêng tư" onClick={() => setView('privacy')} /><MenuRow icon={Bell} label="Cài đặt thông báo" onClick={() => setView('notifications')} /><MenuRow icon={HelpCircle} label="Trợ giúp" onClick={() => setView('help')} />{isAdmin && <MenuRow icon={Shield} label="Admin + AI kiểm duyệt" onClick={() => { window.location.href='/admin' }} />}</>}
+        {view === 'settings' && <><MenuRow icon={Lock} label="Quyền riêng tư" onClick={() => setView('privacy')} /><MenuRow icon={Bell} label="Cài đặt thông báo" onClick={() => setView('notifications')} /><MenuRow icon={HelpCircle} label="Trợ giúp" onClick={() => setView('help')} /></>}
         {view === 'privacy' && <div className="p-4 text-sm leading-relaxed d-muted">Bạn kiểm soát thông tin hồ sơ và nội dung đã đăng. D Social sử dụng Supabase Auth + RLS để bảo vệ dữ liệu theo quyền truy cập.</div>}
         {view === 'notifications' && <div className="p-4 text-sm leading-relaxed d-muted">Thông báo hoạt động và tin nhắn mới được quản lý tại tab Thông báo. Bạn có thể đánh dấu đã đọc từng mục hoặc tất cả.</div>}
         {view === 'help' && <div className="p-4 text-sm leading-relaxed d-muted">Nếu gặp lỗi, hãy tải lại ứng dụng và kiểm tra kết nối. Bạn có thể dùng chức năng Báo cáo trên bài viết để gửi nội dung cần kiểm duyệt.</div>}
@@ -261,7 +260,6 @@ export function ProfilePage({ userId }) {
           {[[myPosts.length,'Bài viết','posts'],[friends,'Bạn bè','friends'],[followers,'Người theo dõi','followers'],[following,'Đang theo dõi','following']].map(([count,label,target]) => <button key={label} type="button" onClick={() => setView(target)} className="rounded-xl py-2.5 px-1 text-center border transition hover:bg-[var(--d-surface-2)]" style={{ borderColor:'var(--d-border)', background:'var(--d-surface)' }}><div className="font-black text-lg leading-none">{count}</div><div className="text-[10px] d-muted mt-1 leading-tight">{label}</div></button>)}
         </div>
         {editing && <div className="mt-4 space-y-2 border-t d-border-c pt-4"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Tên hiển thị" className="d-input" /><input value={username} onChange={e=>setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g,''))} placeholder="Username" className="d-input" /><textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Giới thiệu ngắn về bạn..." className="d-input min-h-20" /><div className="flex items-center gap-2"><button type="button" onClick={save} className="d-btn-primary">Lưu hồ sơ</button>{saved && <span className="text-sm flex items-center gap-1" style={{color:'var(--d-success)'}}><Check size={15}/>Đã lưu</span>}</div></div>}
-        {isAdmin && <a href="/admin" className="mt-3 text-xs inline-flex items-center gap-1" style={{color:'var(--d-warning)'}}><Shield size={14}/>Admin + AI kiểm duyệt</a>}
       </div>
     </section>
     <section className="d-card p-1.5">
