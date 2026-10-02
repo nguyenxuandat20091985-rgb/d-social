@@ -485,12 +485,7 @@ function MarketTab() {
   const MARKET_URL = 'https://nguyenxuandat20091985-rgb.github.io/my-ai-bot/market.html'
   return (
     <section className="space-y-3">
-      <div className="d-card p-5" style={{ background: 'var(--d-primary)', color: '#fff' }}>
-        <div className="font-black text-lg">Chợ Deal</div>
-        <p className="text-sm mt-1 opacity-90">Mở Chợ Deal để xem đầy đủ sản phẩm và ưu đãi.</p>
-      </div>
       <div className="d-card p-6 text-center">
-        <div className="text-sm d-muted mb-4">Chợ được mở trên trang Market riêng để tránh lỗi tải dữ liệu và giảm truy vấn trực tiếp từ D Social.</div>
         <a
           href={MARKET_URL}
           target="_blank"
