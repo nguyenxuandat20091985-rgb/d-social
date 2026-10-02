@@ -3,9 +3,10 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { supabase } from './lib/supabase'
 import { AdminPage } from './components/AdminPage'
+import App from './App'
 import './index.css'
 
-function MainApp() {
+function MainRouter() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -28,6 +29,7 @@ function MainApp() {
 
   const path = window.location.pathname
 
+  // Nếu truy cập đường dẫn /admin thì hiển thị trang quản trị
   if (path.startsWith('/admin')) {
     if (loading) {
       return (
@@ -43,18 +45,11 @@ function MainApp() {
     return <AdminPage userId={session.user.id} />
   }
 
-  return (
-    <div className="min-h-screen grid place-items-center p-6 text-center">
-      <div>
-        <h1 className="text-xl font-bold mb-2">D-Social đang hoạt động</h1>
-        <p className="text-sm text-gray-500 mb-4">Truy cập trang quản trị tại /admin</p>
-        <a href="/admin" className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold">Vào trang Admin</a>
-      </div>
-    </div>
-  )
+  // Ngược lại, truy cập trang chủ / thì hiển thị ứng dụng mạng xã hội bình thường của anh
+  return <App />
 }
 
 const root = document.getElementById('root')
 if (root) {
-  createRoot(root).render(<MainApp />)
+  createRoot(root).render(<MainRouter />)
 }
