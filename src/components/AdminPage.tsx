@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useState } from 'react'
 import {
-  Activity, AlertTriangle, CheckCircle2, Clock, Eye, EyeOff,
+  Activity, AlertTriangle, BadgeCheck, CheckCircle2, Clock, Eye, EyeOff,
   Flag, LayoutDashboard, Menu, RefreshCw, Search, Shield, Sparkles,
   Users, FileText, X, Bot, ScrollText, Settings, Home
 } from 'lucide-react'
@@ -57,6 +57,7 @@ async function logAiModeration(userId, source, inputText, result) {
 const NAV = [
   { id: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
   { id: 'ai', label: 'AI 24/7', icon: Bot },
+  { id: 'verification', label: 'Xác minh', icon: BadgeCheck },
   { id: 'review', label: 'Kiểm duyệt', icon: Shield },
   { id: 'posts', label: 'Bài viết', icon: FileText },
   { id: 'users', label: 'Người dùng', icon: Users },
@@ -111,6 +112,7 @@ export function AdminPage({ userId }) {
   const [posts, setPosts] = useState([])
   const [users, setUsers] = useState([])
   const [auditLogs, setAuditLogs] = useState([])
+  const [verificationRequests, setVerificationRequests] = useState([])
   const [aiText, setAiText] = useState('')
   const [aiResult, setAiResult] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -163,7 +165,7 @@ export function AdminPage({ userId }) {
       const since = new Date(Date.now() - 86400000).toISOString()
       const [
         usersQ, posts24Q, openReportsQ, hiddenQ,
-        repsQ, aiQ, recentPostsQ, peopleQ, auditQ,
+        repsQ, aiQ, recentPostsQ, peopleQ, auditQ, verificationQ,
       ] = await Promise.all([
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('posts').select('id', { count: 'exact', head: true }).gte('created_at', since),
@@ -174,6 +176,7 @@ export function AdminPage({ userId }) {
         supabase.from('posts').select('id,author_id,user_id,content,is_published,created_at,ai_action,ai_score,ai_moderated_at,profiles!author_id(full_name,username,avatar_url)').order('created_at', { ascending: false }).limit(80),
         supabase.from('profiles').select('id,username,full_name,avatar_url,is_online,last_seen,is_vip,vip_expires_at,is_admin,created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('admin_audit_log').select('id,admin_id,action,target_type,target_id,meta,created_at').order('created_at', { ascending: false }).limit(100),
+        supabase.from('profiles').select('id,username,full_name,avatar_url,follower_count,is_verified,verification_status,verification_requested_at,verification_reviewed_at,verification_rejection_reason,community_violation_count').neq('verification_status', 'none').order('verification_requested_at', { ascending: false }).limit(100),
       ])
 
       let postRows = recentPostsQ.data || []
@@ -211,6 +214,7 @@ export function AdminPage({ userId }) {
       setPosts(postRows)
       setUsers(peopleQ.data || [])
       setAuditLogs(auditQ.data || [])
+      setVerificationRequests(verificationQ.data || [])
       setLastSync(new Date().toISOString())
 
       const dbOk = !usersQ.error
@@ -278,6 +282,26 @@ export function AdminPage({ userId }) {
       await audit(published ? 'restore_post' : 'hide_post', 'post', id)
       await load()
     } else alert(error.message)
+  }
+
+  const runVerificationCheck = async (targetUserId) => {
+    setBusy(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-verification', {
+        body: { action: 'check', user_id: targetUserId },
+      })
+      if (error) throw error
+      await audit('verification_check', 'profile', targetUserId, {
+        approved: data?.approved,
+        follower_count: data?.follower_count,
+        status: data?.verification_status,
+      })
+      await load()
+    } catch (e) {
+      alert(e.message || 'Không thể chạy kiểm tra xác minh')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const runAi = async () => {
@@ -590,6 +614,45 @@ export function AdminPage({ userId }) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {tab === 'verification' && (
+            <div className="space-y-4">
+              <section className="d-card p-4">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck size={18} style={{ color: 'var(--d-primary)' }} />
+                  <div>
+                    <h2 className="font-bold text-sm">AI Admin — Xác minh tài khoản</h2>
+                    <p className="text-xs d-muted mt-1">Tự động kiểm tra người theo dõi thực, hồ sơ và lịch sử vi phạm.</p>
+                  </div>
+                </div>
+              </section>
+              {verificationRequests.length === 0 ? <Empty title="Chưa có yêu cầu xác minh" hint="Yêu cầu mới sẽ xuất hiện ở đây." /> : (
+                <div className="space-y-2">
+                  {verificationRequests.slice(0, 50).map(v => (
+                    <div key={v.id} className="d-card p-3 flex gap-3 items-center">
+                      <Avatar src={v.avatar_url} name={v.full_name || v.username} size={42} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-sm truncate">{v.full_name || v.username || 'User'}</span>
+                          {v.is_verified && <Badge tone="primary">✓ Đã xác minh</Badge>}
+                          <Badge tone={v.verification_status === 'pending' ? 'warning' : v.verification_status === 'approved' ? 'success' : 'danger'}>{v.verification_status}</Badge>
+                        </div>
+                        <div className="text-xs d-muted mt-1">
+                          {Number(v.follower_count || 0).toLocaleString('vi-VN')} người theo dõi · {Number(v.community_violation_count || 0)} vi phạm
+                        </div>
+                        {v.verification_rejection_reason && <div className="text-xs mt-1" style={{ color: 'var(--d-danger)' }}>{v.verification_rejection_reason}</div>}
+                      </div>
+                      {v.verification_status !== 'approved' && (
+                        <button type="button" className="d-btn-primary text-xs px-3 shrink-0" disabled={busy} onClick={() => runVerificationCheck(v.id)}>
+                          Kiểm tra lại
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
