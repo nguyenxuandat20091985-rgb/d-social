@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Search, Users, Compass, Image as ImageIcon, Clock3, Flame, UserPlus, RefreshCw, X, MessageCircle, Heart, PlayCircle } from 'lucide-react'
+import { Search, Users, Compass, Image as ImageIcon, Clock3, Flame, UserPlus, RefreshCw, X, MessageCircle, Heart, PlayCircle, Store } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function Avatar({ src, name, size = 44 }) {
@@ -123,6 +123,16 @@ export function Discover({ userId }) {
     <header className="discover-hero d-card">
       <div className="flex items-center gap-2"><span className="discover-mark"><Compass size={20}/></span><div><div className="text-xs font-bold d-muted tracking-wide">D-SOCIAL</div><h1 className="text-2xl font-black">Khám phá</h1></div><button type="button" onClick={load} disabled={loading} className="discover-refresh ml-auto" aria-label="Làm mới"><RefreshCw size={17} className={loading ? 'animate-spin' : ''}/></button></div>
       <p className="text-sm d-muted mt-2">Tìm nội dung mới và kết nối với cộng đồng.</p>
+      <button
+        type="button"
+        onClick={() => { window.location.href = 'https://nguyenxuandat20091985-rgb.github.io/my-ai-bot/market.html' }}
+        className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 font-extrabold text-sm text-white shadow-sm transition-transform active:scale-[0.99]"
+        style={{ background: 'var(--d-primary)' }}
+        aria-label="Mở Market-Deal"
+      >
+        <Store size={18}/>
+        Market-Deal
+      </button>
       <div className="relative mt-4"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted"/><input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm bài viết, thành viên, chủ đề..." className="d-input pl-10 pr-10 py-3 text-sm w-full"/>{q && <button type="button" onClick={() => setQ('')} aria-label="Xóa tìm kiếm" className="absolute right-3 top-1/2 -translate-y-1/2 d-muted"><X size={16}/></button>}</div>
     </header>
 
