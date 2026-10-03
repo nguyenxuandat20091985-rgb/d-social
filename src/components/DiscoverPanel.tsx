@@ -56,12 +56,27 @@ export function Discover({ userId }) {
       const [peopleRes, followRes, postRes] = await Promise.all([
         supabase.from('profiles').select('id,username,full_name,avatar_url,bio,created_at').neq('id', userId).order('created_at', { ascending: false }).limit(80),
         supabase.from('follows').select('following_id').eq('follower_id', userId),
-        supabase.from('posts').select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)').eq('is_published', true).is('deleted_at', null).order('created_at', { ascending: false }).limit(60)
+        supabase.from('posts').select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id)').eq('is_published', true).is('deleted_at', null).order('created_at', { ascending: false }).limit(60)
       ])
       if (peopleRes.error) throw peopleRes.error
       if (postRes.error) throw postRes.error
       setPeople(peopleRes.data || [])
-      setPosts(postRes.data || [])
+
+      // Keep Discover independent from PostgREST's embedded relationship cache.
+      // The database has the FK, but a stale schema cache can reject profiles!author_id.
+      // Load profiles separately and hydrate posts locally so this fix is scoped to Discover.
+      const rawPosts = postRes.data || []
+      const authorIds = [...new Set(rawPosts.map(p => p.author_id || p.user_id).filter(Boolean))]
+      let profileMap = {}
+      if (authorIds.length) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from('profiles')
+          .select('id,full_name,username,avatar_url')
+          .in('id', authorIds)
+        if (profileError) throw profileError
+        profileMap = Object.fromEntries((profileRows || []).map(profile => [profile.id, profile]))
+      }
+      setPosts(rawPosts.map(post => ({ ...post, profiles: profileMap[post.author_id || post.user_id] || null })))
       const map = {}; (followRes.data || []).forEach(f => { map[f.following_id] = true }); setFollowing(map)
     } catch (e) { setError(e?.message || 'Không thể tải nội dung khám phá.'); }
     finally { setLoading(false) }
