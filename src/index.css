@@ -284,3 +284,27 @@ body {
 .home-feed article.d-card{transition:box-shadow .18s ease,transform .18s ease}
 @media(min-width:768px){.home-feed{padding-top:18px}.home-feed article.d-card{margin-bottom:16px}.home-compose-teaser{padding:16px 18px}}
 @media(max-width:390px){.home-welcome{align-items:flex-start}.home-welcome-btn{font-size:11px}.home-compose-actions button{font-size:11px}}
+
+/* Final home feed density and safe-area pass */
+.home-feed{padding-bottom:calc(112px + env(safe-area-inset-bottom))!important}
+.home-welcome{min-height:0;padding:16px 18px}
+.home-welcome p{line-height:1.4}
+.home-feed>section.d-card:first-of-type{padding:12px 14px;margin-bottom:10px}
+.home-feed>section.d-card:first-of-type .flex.gap-3.overflow-x-auto{gap:12px}
+.home-feed>section.d-card:first-of-type .rounded-full.p-\[2px\]{width:48px!important;height:48px!important}
+.home-feed>section.d-card:first-of-type img.rounded-full{width:42px!important;height:42px!important}
+.home-compose-teaser{padding:10px 12px;margin-bottom:10px}
+.home-compose-open{padding-bottom:9px}
+.home-compose-actions{padding-top:8px}
+.home-feed-heading{margin:12px 3px 8px}
+.home-feed article.d-card{margin-bottom:10px}
+@media(max-width:640px){
+ .home-feed{padding:10px 10px calc(116px + env(safe-area-inset-bottom))!important}
+ .home-welcome{padding:13px 15px;margin-bottom:10px!important}
+ .home-welcome h1{font-size:21px;line-height:1.2}
+ .home-feed>section.d-card:first-of-type{padding:11px 12px}
+ .home-compose-teaser{padding:10px 11px}
+ .home-compose-open{font-size:13px}
+ .home-feed-heading{margin:10px 3px 8px}
+}
+@media(min-width:768px){.home-feed{padding-bottom:36px!important}}
