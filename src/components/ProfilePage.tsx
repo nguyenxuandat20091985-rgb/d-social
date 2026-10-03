@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check, MessageCircle, UserPlus, UserMinus } from 'lucide-react'
+import { Users, UserRound, Heart, Image as ImageIcon, Bookmark, Settings, Lock, Bell, HelpCircle, LogOut, ChevronRight, Camera, FileText, Check, BadgeCheck, MessageCircle, UserPlus, UserMinus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const MAX_IMAGE = 8 * 1024 * 1024
@@ -84,6 +84,10 @@ export function ProfilePage({ userId }) {
   const [listLoading, setListLoading] = useState(false)
   const [savedPosts, setSavedPosts] = useState([])
   const [followingMap, setFollowingMap] = useState({})
+  const [isVerified, setIsVerified] = useState(false)
+  const [verificationStatus, setVerificationStatus] = useState('none')
+  const [verificationReason, setVerificationReason] = useState('')
+  const [verificationBusy, setVerificationBusy] = useState(false)
 
   const loadProfile = async () => {
     if (!supabase) return
@@ -95,7 +99,7 @@ export function ProfilePage({ userId }) {
       supabase.from('follows').select('following_id').eq('follower_id', userId),
       supabase.from('follows').select('follower_id').eq('following_id', userId)
     ])
-    if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || '') }
+    if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || ''); setIsVerified(Boolean(profile.is_verified)); setVerificationStatus(profile.verification_status || 'none'); setVerificationReason(profile.verification_rejection_reason || '') }
     setMyPosts(posts || [])
     setFollowers(followerCount || 0); setFollowing(followingCount || 0)
     const mineSet = new Set((mine || []).map(x => x.following_id))
@@ -177,6 +181,25 @@ export function ProfilePage({ userId }) {
     }
   }
 
+  const requestVerification = async () => {
+    if (!supabase || verificationBusy || isVerified) return
+    setVerificationBusy(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-verification', {
+        body: { action: 'request' },
+      })
+      if (error) throw error
+      setIsVerified(Boolean(data?.is_verified))
+      setVerificationStatus(data?.verification_status || (data?.pending ? 'pending' : 'none'))
+      setVerificationReason((data?.reasons || []).join(' '))
+      await loadProfile()
+    } catch (e) {
+      alert(e.message || 'Không thể gửi yêu cầu xác minh')
+    } finally {
+      setVerificationBusy(false)
+    }
+  }
+
   const save = async () => {
     if (!supabase) return
     const { error } = await supabase.from('profiles').update({ full_name: name.trim() || null, username: username.trim() || null, bio: bio.trim() || null }).eq('id', userId)
@@ -252,10 +275,32 @@ export function ProfilePage({ userId }) {
       <div className="px-4 pb-4 -mt-12 relative">
         <div className="flex items-end gap-3">
           <label className="relative cursor-pointer group shrink-0"><Avatar src={avatar} name={displayName} size={88} ring /><div className="absolute inset-0 rounded-full bg-black/45 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[10px] transition">{uploading ? '...' : <Camera size={18} />}</div><input hidden type="file" accept="image/*" onChange={e => uploadAvatar(e.target.files?.[0])} /></label>
-          <div className="flex-1 min-w-0 pb-1"><h2 className="text-xl font-black truncate">{displayName}</h2><div className="text-sm d-muted">{username ? '@'+username : '@username'}</div></div>
-          <button type="button" onClick={() => setEditing(v => !v)} className="d-btn-ghost text-xs shrink-0">{editing ? 'Đóng' : 'Chỉnh sửa'}</button>
+          <div className="flex-1 min-w-0 pb-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-black truncate">{displayName}</h2>
+              {isVerified && <BadgeCheck size={19} fill="currentColor" style={{ color: 'var(--d-primary)' }} aria-label="Đã xác minh" />}
+            </div>
+            <div className="text-sm d-muted">{username ? '@'+username : '@username'}</div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isVerified ? (
+              <span className="text-xs font-bold inline-flex items-center gap-1 px-3 py-2 rounded-xl" style={{ background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}>
+                <BadgeCheck size={15} /> Đã xác minh
+              </span>
+            ) : (
+              <button type="button" onClick={requestVerification} disabled={verificationBusy || verificationStatus === 'pending'} className="text-xs font-bold inline-flex items-center gap-1 px-3 py-2 rounded-xl" style={{ background: 'var(--d-primary)', color: '#fff', opacity: verificationBusy || verificationStatus === 'pending' ? 0.65 : 1 }}>
+                <BadgeCheck size={15} /> {verificationBusy ? 'Đang kiểm tra...' : verificationStatus === 'pending' ? 'Đang xét duyệt' : 'Yêu cầu xác minh'}
+              </button>
+            )}
+            <button type="button" onClick={() => setEditing(v => !v)} className="d-btn-ghost text-xs">{editing ? 'Đóng' : 'Chỉnh sửa'}</button>
+          </div>
         </div>
         {bio && !editing && <p className="mt-3 text-sm leading-relaxed d-muted">{bio}</p>}
+        {!isVerified && verificationStatus === 'rejected' && verificationReason && (
+          <div className="mt-3 rounded-xl px-3 py-2 text-xs" style={{ background: 'color-mix(in srgb, var(--d-danger) 8%, transparent)', color: 'var(--d-danger)' }}>
+            Xác minh chưa đạt: {verificationReason}
+          </div>
+        )}
         <div className="mt-4 grid grid-cols-4 gap-1.5">
           {[[myPosts.length,'Bài viết','posts'],[friends,'Bạn bè','friends'],[followers,'Người theo dõi','followers'],[following,'Đang theo dõi','following']].map(([count,label,target]) => <button key={label} type="button" onClick={() => setView(target)} className="rounded-xl py-2.5 px-1 text-center border transition hover:bg-[var(--d-surface-2)]" style={{ borderColor:'var(--d-border)', background:'var(--d-surface)' }}><div className="font-black text-lg leading-none">{count}</div><div className="text-[10px] d-muted mt-1 leading-tight">{label}</div></button>)}
         </div>
