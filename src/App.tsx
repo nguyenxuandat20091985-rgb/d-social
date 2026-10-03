@@ -84,16 +84,11 @@ function StoryRail({ people, onCompose }) {
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-2 px-1">
         <div>
-          <div className="font-black text-sm">Cộng đồng D-Social</div>
-          <div className="text-[11px] d-muted">Khám phá những thành viên mới</div>
+          <div className="font-black text-sm">Thành viên mới</div>
+          <div className="text-[11px] d-muted">Gặp gỡ những người trong cộng đồng</div>
         </div>
-        <button type="button" onClick={onCompose} className="text-xs font-semibold" style={{ color: 'var(--d-primary)' }}>Tạo mới</button>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-        <button onClick={onCompose} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
-          <div className="w-14 h-14 rounded-full border-2 border-dashed grid place-items-center" style={{ borderColor: 'var(--d-primary)', background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}><Plus size={21} strokeWidth={2.5} /></div>
-          <span className="text-[10px] font-semibold truncate w-full text-center">Đăng bài</span>
-        </button>
         {(people || []).slice(0, 12).map(p => (
           <div key={p.id} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
             <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring />
@@ -387,11 +382,11 @@ function Feed({ userId }) {
         <button type="button" className="home-welcome-btn" onClick={() => setShowComposer(true)}><Plus size={16} /> Đăng bài</button>
       </div>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
-      <div className="home-feed-heading"><div><h2>Bài viết mới</h2><p>Chia sẻ và kết nối mỗi ngày</p></div><button type="button" onClick={load} disabled={loading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
       {showComposer && <Composer userId={userId} onPublished={load} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
         <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
       )}
+      <div className="home-feed-heading"><div><h2>Bài viết mới</h2><p>Chia sẻ và kết nối mỗi ngày</p></div><button type="button" onClick={load} disabled={loading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
       {loading && <div className="home-feed-loading"><span className="home-loading-dot" /> Đang tải bài viết...</div>}
       {!loading && loadError && <div className="d-card p-6 text-center"><p className="text-sm mb-3" style={{color: 'var(--d-danger)'}}>{loadError}</p><button type="button" className="d-btn-primary text-sm" onClick={load}>Thử tải lại</button></div>}
       {!loading && !loadError && posts.length === 0 && <div className="home-empty d-card p-8 text-center"><div className="home-empty-icon"><MessageSquare size={25}/></div><h3>Chưa có bài viết mới</h3><p>Hãy chia sẻ điều đầu tiên để bắt đầu cuộc trò chuyện cùng cộng đồng.</p><button type="button" className="d-btn-primary text-sm mt-4" onClick={() => setShowComposer(true)}><Plus size={16}/> Tạo bài viết</button></div>}
