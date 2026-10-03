@@ -257,13 +257,14 @@ export function Chat({ userId }) {
   const replyLookup = useMemo(() => { const map = {}; for (const m of messages) map[m.id] = m; return map }, [messages])
 
   return (
-    <section className="chat-shell max-w-4xl mx-auto px-2 sm:px-3 pb-24 pt-2">
+    <section className="chat-shell max-w-6xl mx-auto px-2 sm:px-3 pb-24 pt-2">
       <div className="chat-layout">
         <aside className={`chat-inbox d-card ${mobileOpen ? 'chat-inbox-hide' : ''}`}>
           <div className="chat-inbox-head">
-            <div><h2 className="font-black text-base leading-tight">Tin nhắn</h2><p className="text-[11px] d-muted">Realtime · Ảnh/Video · Đã xem</p></div>
-            <button type="button" className="d-icon-btn" onClick={() => { loadPeople(); refreshUnread() }} title="Làm mới"><RefreshCw size={16} /></button>
+            <div className="min-w-0"><div className="flex items-center gap-2"><span className="chat-heading-mark"><MessageSquare size={17} /></span><h2 className="font-black text-lg leading-tight">Tin nhắn</h2></div><p className="text-xs d-muted mt-1">Kết nối và trò chuyện cùng cộng đồng</p></div>
+            <button type="button" className="chat-refresh-btn" onClick={() => { loadPeople(); refreshUnread() }} title="Làm mới" aria-label="Làm mới"><RefreshCw size={16} /><span>Làm mới</span></button>
           </div>
+          <div className="chat-inbox-subhead"><span>{users.length} thành viên</span><span className="chat-live-dot" /> <span>Nhắn tin trực tiếp</span></div>
           <div className="px-2 pb-2"><div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted" /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm cuộc trò chuyện..." className="d-input pl-8 py-2 text-sm" /></div></div>
           <div className="chat-inbox-list">
             {listLoading && <div className="chat-state"><div className="chat-skeleton" /><div className="chat-skeleton" /><div className="chat-skeleton" /></div>}
@@ -285,7 +286,7 @@ export function Chat({ userId }) {
         </aside>
         <section className={`chat-thread d-card ${mobileOpen ? 'chat-thread-show' : 'chat-thread-hide'}`}>
           {!active ? (
-            <div className="chat-state h-full"><MessageSquare size={40} className="opacity-30 mb-2" /><p className="text-sm font-semibold">Chọn một cuộc trò chuyện</p><p className="text-xs d-muted mt-1 px-6 text-center">Bấm vào người dùng để bắt đầu nhắn tin.</p></div>
+            <div className="chat-welcome-state"><div className="chat-welcome-icon"><MessageCircle size={30} /></div><h3>Bắt đầu một cuộc trò chuyện</h3><p>Chọn một người ở danh sách bên trái để gửi lời chào, chia sẻ ảnh hoặc video.</p><span className="chat-welcome-hint"><span className="chat-live-dot" /> Tin nhắn được cập nhật theo thời gian thực</span></div>
           ) : (
             <>
               <header className="chat-thread-head">
