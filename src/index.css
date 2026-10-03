@@ -308,3 +308,32 @@ body {
  .home-feed-heading{margin:10px 3px 8px}
 }
 @media(min-width:768px){.home-feed{padding-bottom:36px!important}}
+
+/* D-Social Discover — responsive content discovery */
+.discover-shell{width:100%}
+.discover-hero{padding:18px;border-radius:22px;background:linear-gradient(120deg,var(--d-surface),var(--d-primary-soft));}
+.discover-mark{width:38px;height:38px;display:grid;place-items:center;border-radius:13px;background:var(--d-primary);color:#fff}
+.discover-refresh{width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--d-border);border-radius:12px;background:var(--d-surface);color:var(--d-muted)}
+.discover-tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 5px;scrollbar-width:none}
+.discover-tabs::-webkit-scrollbar,.discover-topics>div::-webkit-scrollbar{display:none}
+.discover-tab{display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;padding:10px 13px;border:1px solid var(--d-border);border-radius:999px;background:var(--d-surface);color:var(--d-muted);font-size:12px;font-weight:750}
+.discover-tab.active{background:var(--d-primary-soft);border-color:color-mix(in srgb,var(--d-primary) 35%,var(--d-border));color:var(--d-primary)}
+.discover-topics{padding:14px;border:1px solid var(--d-border);border-radius:18px;background:var(--d-surface)}
+.discover-topic{white-space:nowrap;padding:8px 13px;border:1px solid var(--d-border);border-radius:999px;background:var(--d-surface-2);font-size:12px;font-weight:700;color:var(--d-muted)}
+.discover-topic.active{background:var(--d-primary);border-color:var(--d-primary);color:#fff}
+.discover-follow{display:inline-flex;align-items:center;gap:6px;padding:8px 11px;border-radius:10px;background:var(--d-primary);color:#fff;font-size:11px;font-weight:800}
+.discover-follow.following{background:var(--d-primary-soft);color:var(--d-primary);border:1px solid var(--d-border)}
+.discover-block{padding:7px 9px;border-radius:9px;border:1px solid var(--d-border);font-size:11px;color:var(--d-muted)}
+.discover-post{min-width:0;transition:box-shadow .18s ease}
+.discover-media-image{display:block;width:100%;max-height:420px;aspect-ratio:4/3;object-fit:cover;background:var(--d-surface-2)}
+.discover-media-video{display:block;width:100%;max-height:420px;background:#000;object-fit:contain}
+.discover-media-label{position:absolute;top:10px;left:10px;display:flex;align-items:center;gap:5px;padding:6px 9px;border-radius:999px;background:rgba(0,0,0,.65);color:#fff;font-size:11px;font-weight:700}
+.discover-skeleton{height:72px;border-radius:14px;background:linear-gradient(90deg,var(--d-surface-2),var(--d-border),var(--d-surface-2));background-size:200% 100%;animation:chat-shimmer 1.2s infinite}
+.discover-empty-icon{width:52px;height:52px;margin:auto;display:grid;place-items:center;border-radius:16px;background:var(--d-primary-soft);color:var(--d-primary)}
+@media(max-width:640px){
+ .discover-shell{padding:10px 10px calc(112px + env(safe-area-inset-bottom))}
+ .discover-hero{padding:15px;border-radius:19px}
+ .discover-tab{padding:9px 11px;font-size:11px}
+ .discover-topics{padding:12px}
+}
+@media(min-width:768px){.discover-shell{padding-top:18px}}
