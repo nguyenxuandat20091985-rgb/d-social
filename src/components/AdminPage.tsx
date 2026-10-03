@@ -123,6 +123,7 @@ export function AdminPage({ userId }) {
   const [reportFilter, setReportFilter] = useState('open')
   const [health, setHealth] = useState({ db: 'unknown', auth: 'unknown', ai: 'unknown', realtime: 'unknown', api: 'unknown' })
   const [adminProfile, setAdminProfile] = useState(null)
+  const [userActionBusy, setUserActionBusy] = useState(null)
 
   const audit = async (action, targetType, targetId, meta = {}) => {
     try {
@@ -174,7 +175,7 @@ export function AdminPage({ userId }) {
         supabase.from('reports').select('id,reporter_id,target_type,target_id,reason,status,ai_score,ai_action,created_at,resolved_at,resolved_by').order('created_at', { ascending: false }).limit(120),
         supabase.from('ai_moderation_log').select('id,user_id,source,input_text,score,action,engine,reasons,created_at').order('created_at', { ascending: false }).limit(120),
         supabase.from('posts').select('id,author_id,user_id,content,is_published,created_at,ai_action,ai_score,ai_moderated_at,profiles!author_id(full_name,username,avatar_url)').order('created_at', { ascending: false }).limit(80),
-        supabase.from('profiles').select('id,username,full_name,avatar_url,is_online,last_seen,is_vip,vip_expires_at,is_admin,created_at').order('created_at', { ascending: false }).limit(100),
+        supabase.from('profiles').select('id,username,full_name,avatar_url,is_online,last_seen,is_vip,vip_expires_at,is_admin,is_suspended,suspended_until,created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('admin_audit_log').select('id,admin_id,action,target_type,target_id,meta,created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('profiles').select('id,username,full_name,avatar_url,follower_count,is_verified,verification_status,verification_requested_at,verification_reviewed_at,verification_rejection_reason,community_violation_count').neq('verification_status', 'none').order('verification_requested_at', { ascending: false }).limit(100),
       ])
@@ -272,6 +273,29 @@ export function AdminPage({ userId }) {
       await audit('report_' + status, 'report', id)
       await load()
     } else alert(error.message)
+  }
+
+  const manageUser = async (targetId, action) => {
+    if (!targetId || targetId === userId) return
+    let vipDays = null
+    if (action === 'vip_on') {
+      const raw = prompt('VIP trong bao nhiêu ngày?', '30')
+      if (raw === null) return
+      vipDays = Number(raw)
+      if (!Number.isInteger(vipDays) || vipDays < 1 || vipDays > 3650) return alert('Số ngày VIP phải từ 1 đến 3650.')
+    }
+    const labels = { ban: 'khóa tài khoản', unban: 'mở khóa tài khoản', vip_on: 'bật VIP', vip_off: 'tắt VIP' }
+    if (!confirm('Xác nhận ' + (labels[action] || action) + ' cho tài khoản này?')) return
+    setUserActionBusy(targetId + ':' + action)
+    try {
+      const { error } = await supabase.rpc('admin_manage_user', { target_user: targetId, action, vip_days: vipDays })
+      if (error) throw error
+      await load()
+    } catch (e) {
+      alert(e.message || 'Không thể thực hiện thao tác.')
+    } finally {
+      setUserActionBusy(null)
+    }
   }
 
   const setPostPublished = async (id, published) => {
@@ -692,16 +716,27 @@ export function AdminPage({ userId }) {
                 <input className="d-input pl-9" placeholder="Tìm user..." value={query} onChange={e => setQuery(e.target.value)} />
               </div>
               {filteredUsers.length === 0 ? <Empty title="Không có user" /> : filteredUsers.slice(0, 50).map(u => (
-                <div key={u.id} className="d-card p-3 flex items-center gap-3">
-                  <Avatar src={u.avatar_url} name={u.full_name || u.username} size={40} />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-sm truncate">{u.full_name || u.username || '—'}</div>
-                    <div className="text-xs d-muted truncate">@{u.username || u.id.slice(0, 8)} · {timeAgo(u.created_at)}</div>
+                <div key={u.id} className="d-card p-3 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar src={u.avatar_url} name={u.full_name || u.username} size={40} />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-sm truncate">{u.full_name || u.username || '—'}</div>
+                      <div className="text-xs d-muted truncate">@{u.username || u.id.slice(0, 8)} · {timeAgo(u.created_at)}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-1 justify-end">
+                      {u.is_admin && <Badge tone="primary">Admin</Badge>}
+                      {u.is_vip && <Badge tone="warning">VIP{u.vip_expires_at ? ' · ' + new Date(u.vip_expires_at).toLocaleDateString('vi-VN') : ''}</Badge>}
+                      {u.is_suspended && <Badge tone="danger">Đã khóa</Badge>}
+                      {u.is_online && <Badge tone="success">Online</Badge>}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1 justify-end">
-                    {u.is_admin && <Badge tone="primary">Admin</Badge>}
-                    {u.is_vip && <Badge tone="warning">VIP</Badge>}
-                    {u.is_online && <Badge tone="success">Online</Badge>}
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" className="text-xs px-3 py-2 rounded-xl" style={{background:'var(--d-surface-2)'}} disabled={!!userActionBusy || u.id === userId} onClick={() => manageUser(u.id, u.is_suspended ? 'unban' : 'ban')}>
+                      {userActionBusy?.startsWith(u.id + ':') ? 'Đang xử lý…' : (u.is_suspended ? 'Mở khóa' : 'Khóa user')}
+                    </button>
+                    <button type="button" className="text-xs px-3 py-2 rounded-xl" style={{background:'var(--d-surface-2)'}} disabled={!!userActionBusy} onClick={() => manageUser(u.id, u.is_vip ? 'vip_off' : 'vip_on')}>
+                      {u.is_vip ? 'Tắt VIP' : 'Bật VIP'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -720,6 +755,7 @@ export function AdminPage({ userId }) {
                   <div className="flex flex-wrap gap-2 text-xs">
                     <Badge tone={['open', 'reviewing'].includes(r.status) ? 'danger' : 'neutral'}>{r.status}</Badge>
                     <span className="d-muted">{r.target_type} · {timeAgo(r.created_at)}</span>
+                    {r.target_type === 'post' && r.target_id && <a className="text-xs font-bold" style={{color:'var(--d-primary)'}} href={'/p/' + r.target_id}>Xem bài</a>}
                   </div>
                   <p className="text-sm">{r.reason || '—'}</p>
                   {['open', 'reviewing'].includes(r.status) && (
@@ -760,7 +796,7 @@ export function AdminPage({ userId }) {
         </div>
 
         <nav className="admin-bottom-nav md:hidden">
-          {NAV.slice(0, 5).map(item => {
+          {NAV.filter(item => ['overview','review','reports','audit','users'].includes(item.id)).map(item => {
             const Icon = item.icon
             const active = tab === item.id
             return (
