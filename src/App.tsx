@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -84,15 +84,15 @@ function StoryRail({ people, onCompose }) {
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-2 px-1">
         <div>
-          <div className="font-black text-sm">Khoảnh khắc</div>
-          <div className="text-[11px] d-muted">Khám phá mọi người trong cộng đồng</div>
+          <div className="font-black text-sm">Cộng đồng D-Social</div>
+          <div className="text-[11px] d-muted">Khám phá những thành viên mới</div>
         </div>
         <button type="button" onClick={onCompose} className="text-xs font-semibold" style={{ color: 'var(--d-primary)' }}>Tạo mới</button>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
         <button onClick={onCompose} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
           <div className="w-14 h-14 rounded-full border-2 border-dashed grid place-items-center" style={{ borderColor: 'var(--d-primary)', background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}><Plus size={21} strokeWidth={2.5} /></div>
-          <span className="text-[10px] font-semibold truncate w-full text-center">Tạo</span>
+          <span className="text-[10px] font-semibold truncate w-full text-center">Đăng bài</span>
         </button>
         {(people || []).slice(0, 12).map(p => (
           <div key={p.id} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
@@ -345,10 +345,11 @@ function Feed({ userId }) {
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
   const [showComposer, setShowComposer] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const load = async () => {
     if (!supabase) return
-    setLoading(true)
+    setLoading(true); setLoadError('')
     try {
       let { data, error } = await supabase
         .from('posts')
@@ -369,31 +370,31 @@ function Feed({ userId }) {
       setPosts(data || [])
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
       setPeople(peeps || [])
-    } finally { setLoading(false) }
+    } catch (e) { setLoadError(e?.message || 'Không thể tải bảng tin. Vui lòng thử lại.') } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [userId])
 
   return (
-    <div className="max-w-xl mx-auto px-3 pb-24 pt-2">
+    <div className="home-feed max-w-3xl mx-auto px-3 pb-24 pt-3">
       <InstallBanner />
       <div className="home-welcome mb-3">
         <div>
           <div className="text-xs font-semibold opacity-80">D SOCIAL</div>
-          <h1 className="text-xl sm:text-2xl font-black mt-0.5">Bảng tin của bạn</h1>
-          <p className="text-xs sm:text-sm opacity-80 mt-1">Kết nối · Chia sẻ · Cùng xây dựng cộng đồng văn minh</p>
+          <h1 className="text-xl sm:text-2xl font-black mt-0.5">Bảng tin</h1>
+          <p className="text-xs sm:text-sm opacity-80 mt-1">Cập nhật mới từ cộng đồng của bạn</p>
         </div>
         <button type="button" className="home-welcome-btn" onClick={() => setShowComposer(true)}><Plus size={16} /> Đăng bài</button>
       </div>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
+      <div className="home-feed-heading"><div><h2>Bài viết mới</h2><p>Chia sẻ và kết nối mỗi ngày</p></div><button type="button" onClick={load} disabled={loading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
       {showComposer && <Composer userId={userId} onPublished={load} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
-        <button type="button" className="d-card w-full p-3 mb-3 text-left text-sm d-muted" onClick={() => setShowComposer(true)}>
-          Bạn đang nghĩ gì?
-        </button>
+        <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
       )}
-      {loading && <div className="text-center text-sm d-muted py-8">Đang tải bảng tin...</div>}
-      {!loading && posts.length === 0 && <div className="d-card p-8 text-center text-sm d-muted">Chưa có bài viết. Hãy là người đầu tiên đăng!</div>}
+      {loading && <div className="home-feed-loading"><span className="home-loading-dot" /> Đang tải bài viết...</div>}
+      {!loading && loadError && <div className="d-card p-6 text-center"><p className="text-sm mb-3" style={{color: 'var(--d-danger)'}}>{loadError}</p><button type="button" className="d-btn-primary text-sm" onClick={load}>Thử tải lại</button></div>}
+      {!loading && !loadError && posts.length === 0 && <div className="home-empty d-card p-8 text-center"><div className="home-empty-icon"><MessageSquare size={25}/></div><h3>Chưa có bài viết mới</h3><p>Hãy chia sẻ điều đầu tiên để bắt đầu cuộc trò chuyện cùng cộng đồng.</p><button type="button" className="d-btn-primary text-sm mt-4" onClick={() => setShowComposer(true)}><Plus size={16}/> Tạo bài viết</button></div>}
       {posts.map(p => (
         <PostCard key={p.id} post={p} userId={userId} onRemoved={(id) => setPosts(x => x.filter(y => y.id !== id))} />
       ))}
