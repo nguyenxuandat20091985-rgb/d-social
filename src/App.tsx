@@ -379,7 +379,7 @@ function Feed({ userId }) {
           <h1 className="text-xl sm:text-2xl font-black mt-0.5">Bảng tin</h1>
           <p className="text-xs sm:text-sm opacity-80 mt-1">Cập nhật mới từ cộng đồng của bạn</p>
         </div>
-        <button type="button" className="home-welcome-btn" onClick={() => setShowComposer(true)}><Plus size={16} /> Đăng bài</button>
+        
       </div>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
       {showComposer && <Composer userId={userId} onPublished={load} onClose={() => setShowComposer(false)} />}
