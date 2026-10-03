@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, Store
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -412,7 +412,18 @@ function Shell({ tab, setTab, onLogout, children, theme, onToggleTheme, chatBadg
           {LOGO_SRC ? <img src={LOGO_SRC} alt="D" className="w-8 h-8 rounded-lg" /> : <div className="w-8 h-8 rounded-lg grid place-items-center text-white font-black text-sm" style={{ background: 'var(--d-primary)' }}>D</div>}
           <span className="font-black text-sm">D Social</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => { window.location.href = 'https://nguyenxuandat20091985-rgb.github.io/my-ai-bot/market.html' }}
+            className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black transition-transform active:scale-95"
+            style={{ background: 'var(--d-primary)', color: '#fff', boxShadow: '0 4px 14px color-mix(in srgb, var(--d-primary) 22%, transparent)' }}
+            aria-label="Mở Market-Deal"
+            title="Market-Deal"
+          >
+            <Store size={16} strokeWidth={2.5} />
+            <span>Market-Deal</span>
+          </button>
           <button type="button" className="d-icon-btn" onClick={onToggleTheme} aria-label="Đổi theme">{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
           <button type="button" className="d-icon-btn" onClick={onLogout} aria-label="Đăng xuất"><LogOut size={18} /></button>
         </div>
