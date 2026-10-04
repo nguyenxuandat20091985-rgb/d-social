@@ -28,12 +28,14 @@ async function ensureDmConversation(userId, peerId) {
     if (!error && data?.id) { convId = data.id; break }
     lastErr = error
   }
-  if (!convId) throw lastErr || new Error('Không tạo được cuộc trò chuyện')
+  // A direct-message thread can still work through sender_id/recipient_id
+  // when conversation creation is denied by the database's RLS policies.
+  if (!convId) return null
   const { error: pErr } = await supabase.from('conversation_participants').insert([
     { conversation_id: convId, user_id: userId },
     { conversation_id: convId, user_id: peerId },
   ])
-  if (pErr) throw pErr
+  if (pErr) return null
   return convId
 }
 
@@ -140,18 +142,19 @@ export function Chat({ userId }) {
       let convId = null
       try {
         convId = await ensureDmConversation(userId, active.id)
-        if (alive) setConversationId(convId)
-      } catch (err) {
-        if (!alive) return
-        setThreadError(err.message || 'Không mở được cuộc trò chuyện')
-        setThreadLoading(false)
-        return
+      } catch {
+        // Keep the chat usable even when conversations RLS denies creation.
+        convId = null
       }
+      if (alive) setConversationId(convId)
       let data = null, error = null
-      const byConv = await supabase.from('messages').select('id,sender_id,recipient_id,conversation_id,content,media_url,media_type,created_at,read_at,deleted_at,reply_to_id').eq('conversation_id', convId).order('created_at', { ascending: true }).limit(250)
-      if (!byConv.error) data = byConv.data
-      else {
-        const byPair = await supabase.from('messages').select('id,sender_id,recipient_id,content,media_url,media_type,created_at,read_at,deleted_at,reply_to_id').or(`and(sender_id.eq.${userId},recipient_id.eq.${active.id}),and(sender_id.eq.${active.id},recipient_id.eq.${userId})`).order('created_at', { ascending: true }).limit(250)
+      if (convId) {
+        const byConv = await supabase.from('messages').select('id,sender_id,recipient_id,conversation_id,content,media_url,media_type,created_at,read_at,deleted_at,deleted_by,reply_to_id').eq('conversation_id', convId).order('created_at', { ascending: true }).limit(250)
+        if (!byConv.error) data = byConv.data
+        else error = byConv.error
+      }
+      if (!convId || error) {
+        const byPair = await supabase.from('messages').select('id,sender_id,recipient_id,content,media_url,media_type,created_at,read_at,deleted_at,deleted_by,reply_to_id').or(`and(sender_id.eq.${userId},recipient_id.eq.${active.id}),and(sender_id.eq.${active.id},recipient_id.eq.${userId})`).order('created_at', { ascending: true }).limit(250)
         data = byPair.data; error = byPair.error
       }
       if (!alive) return
@@ -230,14 +233,13 @@ export function Chat({ userId }) {
         media_type = pendingFile.type.startsWith('video/') ? 'video' : 'image'
       }
       let convId = conversationId
-      if (!convId) { convId = await ensureDmConversation(userId, active.id); setConversationId(convId) }
-      const content = body || (media_type === 'video' ? '[Video]' : media_type === 'image' ? '[Ảnh]' : '.')
-      let row = { sender_id: userId, recipient_id: active.id, conversation_id: convId, content, media_url, media_type, reply_to_id: replyTo?.id || null }
-      let { error } = await supabase.from('messages').insert(row)
-      if (error && /recipient_id|schema cache|column/i.test(error.message || '')) {
-        const r2 = await supabase.from('messages').insert({ sender_id: userId, conversation_id: convId, content, media_url, media_type, reply_to_id: replyTo?.id || null })
-        error = r2.error
+      if (!convId) {
+        try { convId = await ensureDmConversation(userId, active.id) } catch { convId = null }
+        setConversationId(convId)
       }
+      const content = body || (media_type === 'video' ? '[Video]' : media_type === 'image' ? '[Ảnh]' : '.')
+      const row = { sender_id: userId, recipient_id: active.id, ...(convId ? { conversation_id: convId } : {}), content, media_url, media_type, reply_to_id: replyTo?.id || null }
+      let { error } = await supabase.from('messages').insert(row)
       if (error) throw error
       try { await supabase.rpc('create_notification', { p_user_id: active.id, p_actor_id: userId, p_type: 'message', p_title: 'Tin nhắn mới', p_body: body ? body.slice(0, 120) : (media_type === 'video' ? 'Đã gửi một video' : 'Đã gửi một ảnh') }) } catch {}
       setText(''); setPendingFile(null); setReplyTo(null); setShowEmoji(false); loadPeople()
@@ -258,7 +260,7 @@ export function Chat({ userId }) {
   const startDxCall = async (video = true) => {
     if (!active || !userId || !supabase) return
     const ids = [String(userId), String(active.id)].sort()
-    const roomId = 'dm-' + ids.join('-').replace(/[^a-zA-Z0-9-]/g, '').slice(0, 56)
+    const roomId = 'dm-' + ids.join('-')
     let myName = 'User'
     let email = ''
     try {
