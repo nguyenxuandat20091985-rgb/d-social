@@ -40,6 +40,7 @@ function previewText(m) {
   if (m.deleted_at) return 'Tin nhắn đã thu hồi'
   if (m.media_type === 'image') return '📷 Ảnh'
   if (m.media_type === 'video') return '🎬 Video'
+  if (m.media_type === 'call') return m.content?.includes('__CALL__') ? '📞 Cuộc gọi' : 'Cuộc gọi'
   return (m.content || '').trim() || '...'
 }
 
@@ -241,10 +242,34 @@ export function Chat({ userId }) {
   const closeChat = () => { setMobileOpen(false); setActive(null); setReplyTo(null) }
 
   // Keep the user inside D-Social and return to the friends list, highlighting the selected contact.
-  const startDxCall = (video = false) => {
+  const startDxCall = async (video = false) => {
     if (!active || !userId) return
     setSendError('')
-    setCallMode(video ? 'video' : 'audio')
+    try {
+      const convId = conversationId || await ensureDmConversation(userId, active.id)
+      if (convId && convId !== conversationId) setConversationId(convId)
+      setCallMode({ mode: video ? 'video' : 'audio', conversationId: convId })
+    } catch (e) {
+      setSendError(e?.message || 'Không thể bắt đầu cuộc gọi')
+    }
+  }
+
+  const saveCallLog = async ({ status, duration, video }) => {
+    if (!supabase || !active || !userId) return
+    const kind = video ? 'video' : 'audio'
+    const safeDuration = Number.isFinite(duration) ? duration : 0
+    const content = `__CALL__${kind}__${status}__${safeDuration}`
+    try {
+      await supabase.from('messages').insert({
+        sender_id: userId,
+        recipient_id: active.id,
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        content,
+        media_type: 'call',
+        media_url: null,
+      })
+      loadPeople()
+    } catch {}
   }
 
 
@@ -321,6 +346,7 @@ export function Chat({ userId }) {
                         {deleted ? <div className="italic opacity-70">Tin nhắn đã thu hồi</div> : (
                           <>
                             {m.media_type === 'image' && m.media_url && <img src={m.media_url} alt="" className="chat-media-img" />}
+                            {m.media_type === 'call' ? (() => { const p=(m.content||'').split('__'); const kind=p[2] === 'video' ? 'video' : 'audio'; const status=p[3] || 'completed'; const sec=Number(p[4] || 0); const label=status === 'missed' ? 'Cuộc gọi nhỡ' : mine ? 'Cuộc gọi đi' : 'Cuộc gọi đến'; return <div className="flex items-center gap-2 font-semibold"><span>{kind === 'video' ? '🎥' : '📞'}</span><span>{label}</span>{status === 'completed' && <span className="text-xs opacity-70">{Math.floor(sec/60)}:{String(sec%60).padStart(2,'0')}</span>}</div> })() : null}
                             {m.media_type === 'video' && m.media_url && <video src={m.media_url} controls className="chat-media-video" />}
                             {m.content && m.content !== '[Ảnh]' && m.content !== '[Video]' && <div className="whitespace-pre-wrap break-words">{m.content}</div>}
                           </>
@@ -352,7 +378,9 @@ export function Chat({ userId }) {
         <CallOverlay
           userId={userId}
           peer={active}
-          video={callMode === 'video'}
+          conversationId={callMode.conversationId}
+          video={callMode.mode === 'video'}
+          onEnd={saveCallLog}
           onClose={() => setCallMode(null)}
         />
       )}
