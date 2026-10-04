@@ -348,7 +348,7 @@ export function Chat({ userId }) {
                             {m.media_type === 'image' && m.media_url && <img src={m.media_url} alt="" className="chat-media-img" />}
                             {m.media_type === 'call' ? (() => { const p=(m.content||'').split('__'); const kind=p[2] === 'video' ? 'video' : 'audio'; const status=p[3] || 'completed'; const sec=Number(p[4] || 0); return <div className="flex items-center gap-2 font-semibold"><span>{kind === 'video' ? '🎥' : '📞'}</span>{status === 'completed' && <span className="text-xs opacity-70">{Math.floor(sec/60)}:{String(sec%60).padStart(2,'0')}</span>}</div> })() : null}
                             {m.media_type === 'video' && m.media_url && <video src={m.media_url} controls className="chat-media-video" />}
-                            {m.content && m.content !== '[Ảnh]' && m.content !== '[Video]' && <div className="whitespace-pre-wrap break-words">{m.content}</div>}
+                            {m.media_type !== 'call' && m.content && m.content !== '[Ảnh]' && m.content !== '[Video]' && <div className="whitespace-pre-wrap break-words">{m.content}</div>}
                           </>
                         )}
                         <div className="chat-meta"><span>{formatClock(m.created_at)}</span>{mine && !deleted && (m.read_at ? <CheckCheck size={12} /> : <Check size={12} />)}</div>
