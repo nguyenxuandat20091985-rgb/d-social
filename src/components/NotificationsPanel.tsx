@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell, UserPlus, UserCheck, UserX } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 function Avatar({ src, name, size = 40, ring = false }) {
@@ -29,6 +29,8 @@ function timeAgo(iso) {
 export function Notifications({ userId }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [friendRequests, setFriendRequests] = useState([])
+  const [friendBusy, setFriendBusy] = useState(null)
   useEffect(() => {
     if (!supabase) return
     ;(async () => {
