@@ -13,6 +13,7 @@ import { ProfilePage } from './components/ProfilePage'
 import { Chat } from './components/ChatPanel'
 import { Discover } from './components/DiscoverPanel'
 import { Notifications } from './components/NotificationsPanel'
+import { PublicProfilePage } from './components/PublicProfilePage'
 import { ShareMenu } from './components/ShareMenu'
 import { LOGO_SRC } from './lib/brand'
 
@@ -442,6 +443,7 @@ export default function App() {
   const [legal, setLegal] = useState(null)
   const { theme, toggle: toggleTheme } = useTheme()
   const [chatBadge, setChatBadge] = useState(0)
+  const [viewedProfileId, setViewedProfileId] = useState(null)
 
   useEffect(() => {
     const onBadge = e => setChatBadge(e.detail || 0)
@@ -473,9 +475,9 @@ export default function App() {
   const logout = async () => { await supabase?.auth.signOut() }
 
   return (
-    <Shell tab={tab} setTab={setTab} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} chatBadge={chatBadge}>
+    <Shell tab={tab} setTab={(next) => { setViewedProfileId(null); setTab(next) }} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} chatBadge={chatBadge}>
       {tab === 'feed' && <Feed userId={session.user.id} />}
-      {tab === 'discover' && <Discover userId={session.user.id} />}
+      {tab === 'discover' && (viewedProfileId ? <PublicProfilePage userId={session.user.id} profileId={viewedProfileId} onBack={() => setViewedProfileId(null)} /> : <Discover userId={session.user.id} onOpenProfile={setViewedProfileId} />)}
       {tab === 'chat' && <Chat userId={session.user.id} />}
       {tab === 'notifs' && <Notifications userId={session.user.id} />}
       {tab === 'profile' && <ProfilePage userId={session.user.id} />}
