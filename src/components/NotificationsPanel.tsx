@@ -35,6 +35,8 @@ export function Notifications({ userId }) {
     if (!supabase) return
     ;(async () => {
       setLoading(true)
+      const { data: incomingFriends } = await supabase.from('friend_requests').select('id,requester_id,created_at,profiles:requester_id(full_name,username,avatar_url)').eq('addressee_id', userId).eq('status', 'pending').order('created_at', { ascending: false }).limit(30)
+      setFriendRequests(incomingFriends || [])
       const { data: myPosts } = await supabase.from('posts').select('id').eq('author_id', userId).limit(40)
       const ids = (myPosts || []).map(p => p.id)
       let notifs = []
