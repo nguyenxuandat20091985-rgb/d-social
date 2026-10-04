@@ -4,6 +4,7 @@ import { Send, Search, MessageSquare, MessageCircle, Image as ImageIcon, X, Arro
 import { supabase } from '../lib/supabase'
 import { moderateText } from '../lib/moderation'
 import { messageRateLimit } from '../lib/ratelimit'
+import CallOverlay from './CallOverlay'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -63,6 +64,7 @@ export function Chat({ userId }) {
   const [showEmoji, setShowEmoji] = useState(false)
   const [pendingFile, setPendingFile] = useState(null)
   const [conversationId, setConversationId] = useState(null)
+  const [callMode, setCallMode] = useState(null)
   const bottomRef = useRef(null)
   const textRef = useRef(null)
   const typingTimer = useRef(null)
@@ -242,11 +244,7 @@ export function Chat({ userId }) {
   const startDxCall = (video = false) => {
     if (!active || !userId) return
     setSendError('')
-    // Keep the call target inside the current Chat thread. D-XPhone uses the
-    // deterministic room id so both sides can join the same 1-to-1 call.
-    const roomId = `dm-${[userId, active.id].sort().join('-')}`
-    const url = `https://d-xphone.vercel.app/?room=${encodeURIComponent(roomId)}&mode=${video ? 'video' : 'audio'}&video=${video ? '1' : '0'}`
-    window.location.assign(url)
+    setCallMode(video ? 'video' : 'audio')
   }
 
 
