@@ -66,10 +66,10 @@ export function PublicProfilePage({ userId, profileId, onBack }) {
     if (!supabase || !requestId || busy) return
     setBusy(true)
     try {
-      const { error } = await supabase.from('friend_requests').update({ status: nextStatus, responded_at: new Date().toISOString() }).eq('id', requestId).eq('addressee_id', userId)
+      const { data, error } = await supabase.rpc('friend_request_respond', { p_request_id: requestId, p_status: nextStatus })
       if (error) throw error
+      if (!data) throw new Error('Lời mời không còn hiệu lực.')
       if (nextStatus === 'accepted') {
-        try { await supabase.rpc('create_notification', { p_user_id: profileId, p_actor_id: userId, p_type: 'system', p_target_type: 'friend_request', p_target_id: requestId, p_title: 'Lời mời kết bạn được chấp nhận', p_body: 'đã chấp nhận lời mời kết bạn của bạn', p_meta: { action: 'friend_accepted', friend_request_id: requestId } }) } catch {}
         setStatus('friends')
         setFriends(x => x + 1)
       } else { setStatus('none'); setRequestId(null) }
