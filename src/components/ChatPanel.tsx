@@ -79,9 +79,6 @@ export function Chat({ userId }) {
   const [threadError, setThreadError] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
-  const [call, setCall] = useState(null)
-  const [incomingCall, setIncomingCall] = useState(null)
-  const callChannelRef = useRef(null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [replyTo, setReplyTo] = useState(null)
   const [peerTyping, setPeerTyping] = useState(false)
@@ -198,20 +195,6 @@ export function Chat({ userId }) {
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, peerTyping, threadLoading])
 
-  // Direct 1-1 call signaling inside D-Social: no lobby/room page is shown to users.
-  useEffect(() => {
-    if (!supabase || !userId) return
-    const ch = supabase.channel(`call-user-${userId}`, { config: { broadcast: { self: false } } })
-    ch.on('broadcast', { event: 'call-invite' }, ({ payload }) => {
-      if (!payload || payload.to !== String(userId) || !payload.roomId) return
-      setIncomingCall(payload)
-    })
-    ch.subscribe()
-    callChannelRef.current = ch
-    return () => { supabase.removeChannel(ch); callChannelRef.current = null }
-  }, [userId])
-
-
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
     if (!s) return users
@@ -274,47 +257,12 @@ export function Chat({ userId }) {
   const openChat = (u) => { setActive(u); setMobileOpen(true); setReplyTo(null); setSendError('') }
   const closeChat = () => { setMobileOpen(false); setActive(null); setReplyTo(null) }
 
-  const startDxCall = async (video = true) => {
-    if (!active || !userId || !supabase) return
-    const ids = [String(userId), String(active.id)].sort()
-    const roomId = 'dm-' + ids.join('-')
-    let myName = 'User', email = ''
-    try {
-      const { data } = await supabase.auth.getSession()
-      const u = data?.session?.user
-      myName = u?.user_metadata?.full_name || u?.user_metadata?.name || u?.email || 'User'
-      email = u?.email || ''
-    } catch {}
-    const url = new URL('https://d-xphone.vercel.app/')
-    url.searchParams.set('room', roomId)
-    url.searchParams.set('name', myName)
-    url.searchParams.set('uid', String(userId))
-    if (email) url.searchParams.set('email', email)
-    url.searchParams.set('peer', active.full_name || active.username || 'Peer')
-    url.searchParams.set('peerId', String(active.id))
-    url.searchParams.set('from', 'd-social')
-    url.searchParams.set('auto', '1')
-    url.searchParams.set('mode', video ? 'video' : 'audio')
-    const invite = { from: String(userId), to: String(active.id), roomId, name: myName, email, peer: active.full_name || active.username || 'Peer', peerId: String(active.id), video: !!video, url: url.toString() }
-    const target = supabase.channel(`call-user-${active.id}`, { config: { broadcast: { self: false } } })
-    target.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await target.send({ type: 'broadcast', event: 'call-invite', payload: invite })
-        setCall({ ...invite, accepted: true })
-        setTimeout(() => supabase.removeChannel(target), 1500)
-      }
-    })
+  // Keep the user inside D-Social and return to the friends list, highlighting the selected contact.
+  const startDxCall = () => {
+    setSendError('')
+    setMobileOpen(false)
   }
 
-  const acceptIncomingCall = () => {
-    if (!incomingCall) return
-    setCall({ ...incomingCall, accepted: true })
-    setIncomingCall(null)
-  }
-
-  const declineIncomingCall = () => setIncomingCall(null)
-
-  const closeCall = () => setCall(null)
 
   const replyLookup = useMemo(() => { const map = {}; for (const m of messages) map[m.id] = m; return map }, [messages])
 
@@ -418,28 +366,5 @@ export function Chat({ userId }) {
       </div>
     </section>
 
-      {incomingCall && (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4">
-          <div className="d-card w-full max-w-sm p-5 text-center shadow-2xl">
-            <div className="mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full" style={{ background: 'var(--d-primary)', color: '#fff' }}>
-              {incomingCall.video ? <Video size={28} /> : <Phone size={28} />}
-            </div>
-            <h3 className="text-lg font-black">{incomingCall.name || 'Người dùng'}</h3>
-            <p className="d-muted text-sm mt-1">{incomingCall.video ? 'Cuộc gọi video đến...' : 'Cuộc gọi thoại đến...'}</p>
-            <div className="mt-5 flex gap-3 justify-center">
-              <button type="button" onClick={declineIncomingCall} className="d-btn-secondary px-5 py-2">Từ chối</button>
-              <button type="button" onClick={acceptIncomingCall} className="d-btn-primary px-5 py-2 flex items-center gap-2"><Phone size={16} /> Nhận cuộc gọi</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {call && (
-        <div className="fixed inset-0 z-[110] bg-black">
-          <div className="absolute right-3 top-3 z-[111]">
-            <button type="button" onClick={closeCall} className="grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white" aria-label="Đóng cuộc gọi"><X size={20} /></button>
-          </div>
-          <iframe title={call.video ? 'Cuộc gọi video' : 'Cuộc gọi thoại'} src={call.url} allow="camera; microphone; autoplay; display-capture" className="h-full w-full border-0" />
-        </div>
-      )}
   )
 }
