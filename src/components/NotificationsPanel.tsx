@@ -80,13 +80,8 @@ export function Notifications({ userId }) {
   const respondFriend = async (id, requesterId, status) => {
     if (!supabase || friendBusy) return
     setFriendBusy(id)
-    const { error } = await supabase.from('friend_requests').update({ status, responded_at: new Date().toISOString() }).eq('id', id).eq('addressee_id', userId)
-    if (!error) {
-      if (status === 'accepted') {
-        try { await supabase.rpc('create_notification', { p_user_id: requesterId, p_actor_id: userId, p_type: 'system', p_target_type: 'friend_request', p_target_id: id, p_title: 'Kết bạn thành công', p_body: 'đã chấp nhận lời mời kết bạn của bạn', p_meta: { action: 'friend_accepted', friend_request_id: id } }) } catch {}
-      }
-      setFriendRequests(x => x.filter(r => r.id !== id))
-    }
+    const { data, error } = await supabase.rpc('friend_request_respond', { p_request_id: id, p_status: status })
+    if (!error && data) setFriendRequests(x => x.filter(r => r.id !== id))
     setFriendBusy(null)
   }
 
