@@ -11,32 +11,10 @@ const EMOJIS = ['😀','😂','🥰','😍','👍','❤️','🔥','🎉','😮'
 
 async function ensureDmConversation(userId, peerId) {
   if (!supabase) throw new Error('Supabase chưa sẵn sàng')
-  const { data: myParts, error: e1 } = await supabase.from('conversation_participants').select('conversation_id').eq('user_id', userId)
-  if (e1) throw e1
-  const myIds = (myParts || []).map(p => p.conversation_id).filter(Boolean)
-  if (myIds.length) {
-    const { data: peerParts, error: e2 } = await supabase.from('conversation_participants').select('conversation_id').eq('user_id', peerId).in('conversation_id', myIds)
-    if (e2) throw e2
-    for (const row of peerParts || []) {
-      const { count } = await supabase.from('conversation_participants').select('*', { count: 'exact', head: true }).eq('conversation_id', row.conversation_id)
-      if (count === 2) return row.conversation_id
-    }
-  }
-  let convId = null, lastErr = null
-  for (const payload of [{ is_group: false }, { type: 'dm' }, {}]) {
-    const { data, error } = await supabase.from('conversations').insert(payload).select('id').single()
-    if (!error && data?.id) { convId = data.id; break }
-    lastErr = error
-  }
-  // A direct-message thread can still work through sender_id/recipient_id
-  // when conversation creation is denied by the database's RLS policies.
-  if (!convId) return null
-  const { error: pErr } = await supabase.from('conversation_participants').insert([
-    { conversation_id: convId, user_id: userId },
-    { conversation_id: convId, user_id: peerId },
-  ])
-  if (pErr) return null
-  return convId
+  const { data, error } = await supabase.rpc('ensure_direct_conversation', { p_peer_id: peerId })
+  if (error) throw error
+  if (!data) throw new Error('Không tạo được cuộc trò chuyện')
+  return data
 }
 
 function Avatar({ src, name, size = 40, online = false }) {
