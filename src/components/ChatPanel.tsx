@@ -350,5 +350,13 @@ export function Chat({ userId }) {
       </div>
     </section>
 
+    {callMode && active && (
+      <CallOverlay
+        userId={userId}
+        peer={active}
+        video={callMode === 'video'}
+        onClose={() => setCallMode(null)}
+      />
+    )}
   )
 }
