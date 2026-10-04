@@ -297,13 +297,22 @@ export function Chat({ userId }) {
             {!listLoading && listError && <div className="chat-state"><p className="text-sm" style={{ color: 'var(--d-danger)' }}>{listError}</p><button type="button" className="d-btn-primary text-xs mt-2" onClick={loadPeople}>Thử lại</button></div>}
             {!listLoading && !listError && filtered.length === 0 && <div className="chat-state"><MessageSquare size={28} className="opacity-40 mb-2" /><p className="text-sm d-muted">{q ? 'Không tìm thấy ai' : 'Chưa có thành viên để chat'}</p></div>}
             {!listLoading && !listError && filtered.map(u => {
-              const last = lastMap[u.id], unread = unreadMap[u.id] || 0, online = onlineIds.has(u.id)
+              const last = lastMap[u.id]
+              const unread = unreadMap[u.id] || 0
+              const online = onlineIds.has(u.id)
+              const displayName = u.full_name || u.username || 'User'
               return (
-                <button key={u.id} type="button" onClick={() => openChat(u)} className={`chat-row ${active?.id === u.id ? 'active' : ''}`}>
-                  <Avatar src={u.avatar_url} name={u.full_name || u.username} size={46} online={online} />
+                <button key={u.id} type="button" onClick={() => openChat(u)} className={active && active.id === u.id ? 'chat-row active' : 'chat-row'}>
+                  <Avatar src={u.avatar_url} name={displayName} size={46} online={online} />
                   <div className="min-w-0 flex-1 text-left">
-                    <div className="flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold">{u.full_name || u.username || 'User'}</span>{last && <span className="text-[10px] d-muted shrink-0">{timeAgo(last.created_at)}</span></div>
-                    <div className="flex items-center justify-between gap-2 mt-0.5"><span className={`truncate text-xs ${unread ? 'font-semibold' : 'd-muted'}`}>{previewText(last)}</span>{unread > 0 && <span className="chat-badge">{unread > 9 ? '9+' : unread}</span>}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold">{displayName}</span>
+                      {last ? <span className="text-xs d-muted shrink-0">{timeAgo(last.created_at)}</span> : null}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <span className={unread ? 'truncate text-xs font-semibold' : 'truncate text-xs d-muted'}>{previewText(last)}</span>
+                      {unread > 0 ? <span className="chat-badge">{unread > 9 ? '9+' : unread}</span> : null}
+                    </div>
                   </div>
                 </button>
               )
@@ -318,7 +327,13 @@ export function Chat({ userId }) {
               <header className="chat-thread-head">
                 <button type="button" className="d-icon-btn chat-back" onClick={closeChat} aria-label="Quay lại"><ArrowLeft size={18} /></button>
                 <Avatar src={active.avatar_url} name={active.full_name || active.username} size={40} online={onlineIds.has(active.id)} />
-                <div className="min-w-0 flex-1"><div className="font-bold text-sm truncate">{active.full_name || active.username}</div><div className="text-[11px] d-muted">{onlineIds.has(active.id) ? 'Đang hoạt động' : 'Ngoại tuyến'}{peerTyping ? ' · đang nhập...' : ''}</div></div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm truncate">{active.full_name || active.username}</div>
+                  <div className="text-xs d-muted">
+                    {onlineIds.has(active.id) ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                    {peerTyping ? ' · đang nhập...' : ''}
+                  </div>
+                </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button type="button" className="d-icon-btn" title="Gọi thoại" aria-label="Gọi thoại" onClick={() => startDxCall(false)}><Phone size={18} /></button>
                   <button type="button" className="d-icon-btn" title="Gọi video" aria-label="Gọi video" onClick={() => startDxCall(true)}><Video size={18} /></button>
