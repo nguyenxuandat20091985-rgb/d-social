@@ -120,9 +120,12 @@ export function Chat({ userId }) {
       let convId = null
       try {
         convId = await ensureDmConversation(userId, active.id)
-      } catch {
-        // Keep the chat usable even when conversations RLS denies creation.
-        convId = null
+      } catch (e) {
+        if (alive) {
+          setThreadError(e?.message || 'Không tạo được cuộc trò chuyện')
+          setThreadLoading(false)
+        }
+        return
       }
       if (alive) setConversationId(convId)
       let data = null, error = null
@@ -212,7 +215,7 @@ export function Chat({ userId }) {
       }
       let convId = conversationId
       if (!convId) {
-        try { convId = await ensureDmConversation(userId, active.id) } catch { convId = null }
+        convId = await ensureDmConversation(userId, active.id)
         setConversationId(convId)
       }
       const content = body || (media_type === 'video' ? '[Video]' : media_type === 'image' ? '[Ảnh]' : '.')
