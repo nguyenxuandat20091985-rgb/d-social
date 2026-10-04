@@ -94,8 +94,24 @@ export function Notifications({ userId }) {
     <div className="space-y-3">
       <div className="d-card p-4">
         <h2 className="font-black text-lg flex items-center gap-2"><Bell size={18} className="text-violet-300" /> Thông báo</h2>
-        <p className="text-xs text-slate-500 mt-1">Like, bình luận, theo dõi và tin nhắn mới.</p>
+        <p className="text-xs text-slate-500 mt-1">Lời mời kết bạn, like, bình luận, theo dõi và tin nhắn mới.</p>
       </div>
+      {friendRequests.length > 0 && <section className="d-card p-4">
+        <div className="flex items-center justify-between mb-3"><h3 className="font-black flex items-center gap-2"><UserPlus size={17}/> Lời mời kết bạn</h3><span className="text-xs d-muted">{friendRequests.length}</span></div>
+        <div className="space-y-3">
+          {friendRequests.map(r => {
+            const name = r.profiles?.full_name || r.profiles?.username || 'Thành viên D'
+            return <div key={r.id} className="flex gap-3 items-center">
+              <Avatar src={r.profiles?.avatar_url} name={name} size={44}/>
+              <div className="min-w-0 flex-1"><div className="font-bold truncate">{name}</div><div className="text-xs d-muted">@{r.profiles?.username || 'username'} · muốn kết bạn với bạn</div></div>
+              <div className="flex gap-1.5 shrink-0">
+                <button type="button" disabled={friendBusy===r.id} onClick={() => respondFriend(r.id, r.requester_id, 'accepted')} className="d-btn-primary !px-3 !py-2 inline-flex items-center gap-1"><UserCheck size={15}/> Chấp nhận</button>
+                <button type="button" disabled={friendBusy===r.id} onClick={() => respondFriend(r.id, r.requester_id, 'rejected')} className="d-btn-ghost !px-2.5 !py-2" aria-label="Từ chối"><UserX size={15}/></button>
+              </div>
+            </div>
+          })}
+        </div>
+      </section>}
       {loading && <div className="text-center text-slate-500 py-8 text-sm">Đang tải...</div>}
       {!loading && !items.length && <div className="d-card p-10 text-center text-slate-500 text-sm">Chưa có thông báo.</div>}
       <div className="space-y-2">
