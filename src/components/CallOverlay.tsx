@@ -24,12 +24,13 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
   const [error, setError] = useState('')
   const connectedRef = useRef(false)
   const endedRef = useRef(false)
-  const connectedRef = useRef(false)
-  const endedRef = useRef(false)
 
   useEffect(() => {
     let alive = true
-    const roomId = conversationId ? `dm-${conversationId}` : `dm-${[userId, peer.id].sort().map(v => String(v).replace(/[^a-zA-Z0-9_-]/g, '')).join('_')}`
+    const rawRoom = conversationId
+      ? String(conversationId)
+      : [userId, peer.id].sort().map(v => String(v).replace(/[^a-zA-Z0-9_-]/g, '')).join('_')
+    const roomId = `dm-${rawRoom.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 57)}`
     roomRef.current = roomId
     let timer = null
 
@@ -57,10 +58,11 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
 
         const tokenRes = await fetch(`${SIGNALING_SERVER}/token`, {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ userId, roomId })
+          body:JSON.stringify({ userId: String(userId), roomId })
         })
-        let token = null
-        if (tokenRes.ok) token = (await tokenRes.json()).token
+        if (!tokenRes.ok) throw new Error('Máy chủ cuộc gọi không cấp được phiên')
+        const token = (await tokenRes.json()).token
+        if (!token) throw new Error('Phiên cuộc gọi không hợp lệ')
 
         const socket = io(SIGNALING_SERVER, {
           transports:['websocket','polling'],
@@ -84,7 +86,6 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
           pc.onconnectionstatechange = () => {
             if (pc.connectionState === 'connected') {
               setStatus('Đã kết nối')
-              connectedRef.current = true
               connectedRef.current = true
               if (!timer) { const started=Date.now(); timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000) }
             } else if (pc.connectionState === 'failed') setStatus('Kết nối thất bại')
@@ -177,10 +178,10 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
     <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'18px 16px 28px',background:'linear-gradient(transparent,#080b12ee)',display:'flex',flexDirection:'column',alignItems:'center',gap:12}}>
       {error && <div style={{fontSize:12,color:'#ff8b8b',background:'#ff000018',padding:'7px 10px',borderRadius:10}}>{error}</div>}
       <div style={{fontSize:13,opacity:.8}}>{status}</div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:16,width:'100%'}}>
-        <button onClick={toggleMic} title={mic?'Tắt mic':'Bật mic'} style={{width:58,height:58,flex:'0 0 58px',border:0,borderRadius:29,background:'#ffffff18',color:'#fff'}}>{mic?<Mic/>:<MicOff/>}</button>
-        {video && <button onClick={toggleCam} title={cam?'Tắt camera':'Bật camera'} style={{width:58,height:58,flex:'0 0 58px',border:0,borderRadius:29,background:'#ffffff18',color:'#fff'}}>{cam?<VideoIcon/>:<VideoOff/>}</button>}
-        <button onClick={hangup} title="Cúp máy" style={{width:58,height:58,flex:'0 0 58px',border:0,borderRadius:29,background:'#ef4444',color:'#fff'}}><PhoneOff/></button>
+      <div style={{display:'grid',gridTemplateColumns:video?'repeat(3,58px)':'repeat(2,58px)',alignItems:'center',justifyContent:'center',gap:18,width:'100%'}}>
+        <button onClick={toggleMic} title={mic?'Tắt mic':'Bật mic'} aria-label={mic?'Tắt mic':'Bật mic'} style={{width:58,height:58,display:'grid',placeItems:'center',border:0,borderRadius:29,background:'#ffffff18',color:'#fff',padding:0}}>{mic?<Mic size={22}/>:<MicOff size={22}/>}</button>
+        {video && <button onClick={toggleCam} title={cam?'Tắt camera':'Bật camera'} aria-label={cam?'Tắt camera':'Bật camera'} style={{width:58,height:58,display:'grid',placeItems:'center',border:0,borderRadius:29,background:'#ffffff18',color:'#fff',padding:0}}>{cam?<VideoIcon size={22}/>:<VideoOff size={22}/>}</button>}
+        <button onClick={hangup} title="Kết thúc cuộc gọi" aria-label="Kết thúc cuộc gọi" style={{width:58,height:58,display:'grid',placeItems:'center',border:0,borderRadius:29,background:'#ef4444',color:'#fff',padding:0}}><PhoneOff size={22}/></button>
       </div>
     </div>
   </div>
