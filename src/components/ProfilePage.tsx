@@ -273,26 +273,28 @@ export function ProfilePage({ userId }) {
         <div className="absolute bottom-3 right-3 text-[10px] text-white/60 font-medium tracking-wide">D SOCIAL</div>
       </div>
       <div className="px-4 pb-4 -mt-12 relative">
-        <div className="flex items-end gap-3">
-          <label className="relative cursor-pointer group shrink-0"><Avatar src={avatar} name={displayName} size={88} ring /><div className="absolute inset-0 rounded-full bg-black/45 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[10px] transition">{uploading ? '...' : <Camera size={18} />}</div><input hidden type="file" accept="image/*" onChange={e => uploadAvatar(e.target.files?.[0])} /></label>
-          <div className="flex-1 min-w-0 pb-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-black truncate">{displayName}</h2>
-              {isVerified && <BadgeCheck size={19} fill="currentColor" style={{ color: 'var(--d-primary)' }} aria-label="Đã xác minh" />}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="flex items-end gap-3 min-w-0">
+            <label className="relative cursor-pointer group shrink-0"><Avatar src={avatar} name={displayName} size={88} ring /><div className="absolute inset-0 rounded-full bg-black/45 opacity-0 group-hover:opacity-100 grid place-items-center text-white text-[10px] transition">{uploading ? '...' : <Camera size={18} />}</div><input hidden type="file" accept="image/*" onChange={e => uploadAvatar(e.target.files?.[0])} /></label>
+            <div className="flex-1 min-w-0 pb-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <h2 className="text-xl font-black truncate">{displayName}</h2>
+                {isVerified && <BadgeCheck size={19} fill="currentColor" className="shrink-0" style={{ color: 'var(--d-primary)' }} aria-label="Đã xác minh" />}
+              </div>
+              <div className="text-sm d-muted truncate">{username ? '@'+username : '@username'}</div>
             </div>
-            <div className="text-sm d-muted">{username ? '@'+username : '@username'}</div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
             {isVerified ? (
-              <span className="text-xs font-bold inline-flex items-center gap-1 px-3 py-2 rounded-xl" style={{ background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}>
+              <span className="text-xs font-bold inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl flex-1 sm:flex-none whitespace-nowrap" style={{ background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}>
                 <BadgeCheck size={15} /> Đã xác minh
               </span>
             ) : (
-              <button type="button" onClick={requestVerification} disabled={verificationBusy || verificationStatus === 'pending'} className="text-xs font-bold inline-flex items-center gap-1 px-3 py-2 rounded-xl" style={{ background: 'var(--d-primary)', color: '#fff', opacity: verificationBusy || verificationStatus === 'pending' ? 0.65 : 1 }}>
+              <button type="button" onClick={requestVerification} disabled={verificationBusy || verificationStatus === 'pending'} className="text-xs font-bold inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl flex-1 sm:flex-none whitespace-nowrap" style={{ background: 'var(--d-primary)', color: '#fff', opacity: verificationBusy || verificationStatus === 'pending' ? 0.65 : 1 }}>
                 <BadgeCheck size={15} /> {verificationBusy ? 'Đang kiểm tra...' : verificationStatus === 'pending' ? 'Đang xét duyệt' : 'Yêu cầu xác minh'}
               </button>
             )}
-            <button type="button" onClick={() => setEditing(v => !v)} className="d-btn-ghost text-xs">{editing ? 'Đóng' : 'Chỉnh sửa'}</button>
+            <button type="button" onClick={() => setEditing(v => !v)} className="d-btn-ghost text-xs flex-1 sm:flex-none whitespace-nowrap">{editing ? 'Đóng' : 'Chỉnh sửa'}</button>
           </div>
         </div>
         {bio && !editing && <p className="mt-3 text-sm leading-relaxed d-muted">{bio}</p>}
