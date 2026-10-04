@@ -258,9 +258,14 @@ export function Chat({ userId }) {
   const closeChat = () => { setMobileOpen(false); setActive(null); setReplyTo(null) }
 
   // Keep the user inside D-Social and return to the friends list, highlighting the selected contact.
-  const startDxCall = () => {
+  const startDxCall = (video = false) => {
+    if (!active || !userId) return
     setSendError('')
-    setMobileOpen(false)
+    // Keep the call target inside the current Chat thread. D-XPhone uses the
+    // deterministic room id so both sides can join the same 1-to-1 call.
+    const roomId = `dm-${[userId, active.id].sort().join('-')}`
+    const url = `https://d-xphone.vercel.app/?room=${encodeURIComponent(roomId)}&mode=${video ? 'video' : 'audio'}&video=${video ? '1' : '0'}`
+    window.location.assign(url)
   }
 
 
