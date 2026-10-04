@@ -24,6 +24,8 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
   const [error, setError] = useState('')
   const connectedRef = useRef(false)
   const endedRef = useRef(false)
+  const connectedRef = useRef(false)
+  const endedRef = useRef(false)
 
   useEffect(() => {
     let alive = true
@@ -82,6 +84,7 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
           pc.onconnectionstatechange = () => {
             if (pc.connectionState === 'connected') {
               setStatus('Đã kết nối')
+              connectedRef.current = true
               connectedRef.current = true
               if (!timer) { const started=Date.now(); timer=setInterval(()=>setElapsed(Math.floor((Date.now()-started)/1000)),1000) }
             } else if (pc.connectionState === 'failed') setStatus('Kết nối thất bại')
@@ -176,7 +179,7 @@ export default function CallOverlay({ userId, peer, conversationId, video = fals
       <div style={{fontSize:13,opacity:.8}}>{status}</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:16,width:'100%'}}>
         <button onClick={toggleMic} title={mic?'Tắt mic':'Bật mic'} style={{width:58,height:58,flex:'0 0 58px',border:0,borderRadius:29,background:'#ffffff18',color:'#fff'}}>{mic?<Mic/>:<MicOff/>}</button>
-        {video && <button onClick={toggleCam} title={cam?'Tắt camera':'Bật camera'} style={{width:54,height:54,border:0,borderRadius:28,background:'#ffffff18',color:'#fff'}}>{cam?<VideoIcon/>:<VideoOff/>}</button>}
+        {video && <button onClick={toggleCam} title={cam?'Tắt camera':'Bật camera'} style={{width:58,height:58,flex:'0 0 58px',border:0,borderRadius:29,background:'#ffffff18',color:'#fff'}}>{cam?<VideoIcon/>:<VideoOff/>}</button>}
         <button onClick={hangup} title="Cúp máy" style={{width:58,height:58,flex:'0 0 58px',border:0,borderRadius:29,background:'#ef4444',color:'#fff'}}><PhoneOff/></button>
       </div>
     </div>
