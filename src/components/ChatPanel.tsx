@@ -207,7 +207,7 @@ export function Chat({ userId }) {
       let media_url = null, media_type = null
       if (pendingFile) {
         const ext = pendingFile.name.split('.').pop()?.toLowerCase() || 'bin'
-        const path = `chat/${userId}/${crypto.randomUUID()}.${ext}`
+        const path = `${userId}/chat/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, pendingFile, { contentType: pendingFile.type, upsert: false })
         if (up.error) throw up.error
         media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
