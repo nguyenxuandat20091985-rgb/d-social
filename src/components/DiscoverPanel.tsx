@@ -118,7 +118,7 @@ export function Discover({ userId, onOpenProfile }) {
       return score(b) - score(a)
     })
     return result
-  }, [posts, tab, normalized, topic])
+  }, [posts, normalized, topic])
 
   return <div className="discover-shell max-w-4xl mx-auto px-3 pb-28 pt-3 space-y-4">
     <header className="discover-hero d-card">
