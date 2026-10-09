@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus, ChevronLeft, ChevronRight
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus, ChevronLeft, ChevronRight, Volume2, VolumeX
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -19,6 +19,9 @@ import { LOGO_SRC } from './lib/brand'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
+
+// Coordinate autoplay only between video posts in the Home feed.
+let activeHomeFeedVideo = null
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
@@ -379,6 +382,8 @@ function StoryViewer({ story, onClose, onPrev, onNext, hasPrev, hasNext, positio
 }
 
 function PostCard({ post, userId, onRemoved }) {
+  const homeVideoRef = React.useRef(null)
+  const [videoMuted, setVideoMuted] = useState(true)
   const [liked, setLiked] = useState(Boolean(userId && post.likes?.some(x => x.user_id === userId)))
   const [count, setCount] = useState(post.likes?.length || 0)
   const [showComments, setShowComments] = useState(false)
@@ -398,6 +403,70 @@ function PostCard({ post, userId, onRemoved }) {
     supabase.from('saved_posts').select('post_id').eq('user_id', userId).eq('post_id', post.id).maybeSingle()
       .then(({ data }) => setSaved(!!data))
   }, [userId, post.id])
+
+  useEffect(() => {
+    if (post.media_type !== 'video' || !post.media_url) return
+    const video = homeVideoRef.current
+    if (!video || typeof IntersectionObserver === 'undefined') return
+
+    let disposed = false
+    video.muted = true
+    setVideoMuted(true)
+
+    const syncMutedState = event => {
+      if (event.detail === video) setVideoMuted(true)
+    }
+    window.addEventListener('d-home-video-muted', syncMutedState)
+
+    const observer = new IntersectionObserver(entries => {
+      if (disposed) return
+      const entry = entries[0]
+      if (!entry) return
+
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+        if (activeHomeFeedVideo && activeHomeFeedVideo !== video) {
+          const previous = activeHomeFeedVideo
+          previous.pause()
+          previous.muted = true
+          window.dispatchEvent(new CustomEvent('d-home-video-muted', { detail: previous }))
+        }
+        activeHomeFeedVideo = video
+        video.muted = true
+        setVideoMuted(true)
+        const playAttempt = video.play()
+        if (playAttempt && typeof playAttempt.catch === 'function') {
+          playAttempt.catch(() => {
+            // Some browsers require a fresh user gesture before playback.
+          })
+        }
+      } else if (entry.intersectionRatio < 0.25 && activeHomeFeedVideo === video) {
+        video.pause()
+        video.muted = true
+        setVideoMuted(true)
+        activeHomeFeedVideo = null
+      }
+    }, { threshold: [0, 0.25, 0.6] })
+
+    observer.observe(video)
+    return () => {
+      disposed = true
+      observer.disconnect()
+      window.removeEventListener('d-home-video-muted', syncMutedState)
+      if (activeHomeFeedVideo === video) activeHomeFeedVideo = null
+      video.pause()
+    }
+  }, [post.id, post.media_type, post.media_url])
+
+  const toggleHomeVideoSound = () => {
+    const video = homeVideoRef.current
+    if (!video) return
+    video.muted = !videoMuted
+    setVideoMuted(!videoMuted)
+    if (video.paused && video.isConnected) {
+      const playAttempt = video.play()
+      if (playAttempt && typeof playAttempt.catch === 'function') playAttempt.catch(() => {})
+    }
+  }
 
   useEffect(() => {
     if (!supabase || !showComments) return
@@ -528,8 +597,28 @@ function PostCard({ post, userId, onRemoved }) {
       </div>
       {content && <p className="px-4 pt-3 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>}
       {post.media_type === 'video' && post.media_url && (
-        <div className="mt-3 w-full overflow-hidden">
-          <video src={post.media_url} controls playsInline preload="metadata" className="block w-full h-auto max-h-[75vh]" style={{ background: 'transparent' }} />
+        <div className="home-feed-video mt-3 w-full overflow-hidden relative bg-black">
+          <video
+            ref={homeVideoRef}
+            src={post.media_url}
+            controls
+            muted={videoMuted}
+            playsInline
+            preload="metadata"
+            className="block w-full h-auto max-h-[75vh]"
+            style={{ background: 'transparent' }}
+            aria-label="Video bài viết trên Trang chủ"
+          />
+          <button
+            type="button"
+            onClick={toggleHomeVideoSound}
+            className="absolute right-3 bottom-14 z-[2] inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2 text-xs font-semibold text-white shadow"
+            aria-label={videoMuted ? 'Bật tiếng video' : 'Tắt tiếng video'}
+            title={videoMuted ? 'Bật tiếng' : 'Tắt tiếng'}
+          >
+            {videoMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            {videoMuted ? 'Bật tiếng' : 'Tắt tiếng'}
+          </button>
         </div>
       )}
       {post.media_type !== 'video' && (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls : (post.media_url ? [post.media_url] : [])).length > 0 && (
