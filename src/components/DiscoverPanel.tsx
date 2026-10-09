@@ -9,12 +9,6 @@ function Avatar({ src, name, size = 44 }) {
     ? <img src={src} alt="" className="rounded-full object-cover shrink-0" style={{ width: size, height: size }} />
     : <div className="rounded-full grid place-items-center shrink-0 font-black text-white" style={{ width: size, height: size, background: 'var(--d-primary)', fontSize: size * .4 }}>{letter}</div>
 }
-const filters = [
-  { id: 'for-you', label: 'Dành cho bạn', icon: Compass },
-  { id: 'latest', label: 'Mới nhất', icon: Clock3 },
-  { id: 'media', label: 'Ảnh & Video', icon: ImageIcon },
-  { id: 'people', label: 'Thành viên', icon: Users },
-]
 const topics = [
   { id: 'all', label: 'Tất cả', terms: [] },
   { id: 'travel', label: 'Du lịch', terms: ['du lịch', 'đi chơi', 'chuyến đi', 'travel'] },
@@ -40,7 +34,6 @@ function PostPreview({ post }) {
 
 export function Discover({ userId, onOpenProfile }) {
   const [q, setQ] = useState('')
-  const [tab, setTab] = useState('for-you')
   const [topic, setTopic] = useState('all')
   const [people, setPeople] = useState([])
   const [posts, setPosts] = useState([])
@@ -110,27 +103,22 @@ export function Discover({ userId, onOpenProfile }) {
   const filteredPeople = useMemo(() => people.filter(p => !normalized || [p.full_name, p.username, p.bio].some(v => (v || '').toLocaleLowerCase('vi').includes(normalized))), [people, normalized])
   const filteredPosts = useMemo(() => {
     let result = posts
-    // Discover's featured feed complements Home: prioritize text and image posts;
-    // video remains available when the user explicitly chooses "Ảnh & Video".
-    if (tab !== 'media') result = result.filter(p => p.media_type !== 'video')
-    if (tab === 'media') result = result.filter(p => p.media_url)
+    // Featured Discover feed complements Home: show text and image posts only.
+    result = result.filter(p => p.media_type !== 'video')
     if (normalized) result = result.filter(p => [p.content, p.profiles?.full_name, p.profiles?.username].some(v => (v || '').toLocaleLowerCase('vi').includes(normalized)))
     const selected = topics.find(t => t.id === topic)
     if (selected?.terms.length) result = result.filter(p => selected.terms.some(term => (p.content || '').toLocaleLowerCase('vi').includes(term)))
-    if (tab === 'for-you') {
-      // Lightweight trending score: engagement first, with a modest recency tie-breaker.
-      const now = Date.now()
-      result = [...result].sort((a, b) => {
-        const score = p => {
-          const ageHours = Math.max(0, (now - new Date(p.created_at || now).getTime()) / 3600000)
-          return (p.likes?.length || 0) * 3 + 1 / (1 + ageHours / 24)
-        }
-        return score(b) - score(a)
-      })
-    }
+    // Rank featured posts by engagement, with recency as a tie-breaker.
+    const now = Date.now()
+    result = [...result].sort((a, b) => {
+      const score = p => {
+        const ageHours = Math.max(0, (now - new Date(p.created_at || now).getTime()) / 3600000)
+        return (p.likes?.length || 0) * 3 + 1 / (1 + ageHours / 24)
+      }
+      return score(b) - score(a)
+    })
     return result
   }, [posts, tab, normalized, topic])
-  const showPeople = tab === 'people' || tab === 'for-you'
 
   return <div className="discover-shell max-w-4xl mx-auto px-3 pb-28 pt-3 space-y-4">
     <header className="discover-hero d-card">
@@ -149,16 +137,13 @@ export function Discover({ userId, onOpenProfile }) {
       <div className="relative mt-4"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 d-muted"/><input value={q} onChange={e => setQ(e.target.value)} placeholder="Tìm thành viên, bài viết, chủ đề..." className="d-input pl-10 pr-10 py-3 text-sm w-full"/>{q && <button type="button" onClick={() => setQ('')} aria-label="Xóa tìm kiếm" className="absolute right-3 top-1/2 -translate-y-1/2 d-muted"><X size={16}/></button>}</div>
     </header>
 
-    <nav className="discover-tabs" aria-label="Bộ lọc khám phá">{filters.map(f => { const Icon=f.icon; return <button key={f.id} type="button" onClick={() => setTab(f.id)} className={tab===f.id ? 'discover-tab active' : 'discover-tab'}><Icon size={15}/>{f.label}</button> })}</nav>
-
-    {tab !== 'people' && <section className="discover-topics"><div className="flex items-center gap-2 mb-2"><Flame size={16} style={{color:'var(--d-primary)'}}/><h2 className="font-extrabold text-sm">Khám phá theo chủ đề</h2></div><div className="flex gap-2 overflow-x-auto pb-1">{topics.map(t => <button key={t.id} type="button" onClick={() => setTopic(t.id)} className={topic===t.id ? 'discover-topic active' : 'discover-topic'}>{t.label}</button>)}</div><p className="text-[11px] d-muted mt-2">Chủ đề được lọc từ nội dung bài viết hiện có.</p></section>}
+    <section className="discover-topics"><div className="flex items-center gap-2 mb-2"><Flame size={16} style={{color:'var(--d-primary)'}}/><h2 className="font-extrabold text-sm">Khám phá theo chủ đề</h2></div><div className="flex gap-2 overflow-x-auto pb-1">{topics.map(t => <button key={t.id} type="button" onClick={() => setTopic(t.id)} className={topic===t.id ? 'discover-topic active' : 'discover-topic'}>{t.label}</button>)}</div><p className="text-[11px] d-muted mt-2">Chủ đề được lọc từ nội dung bài viết hiện có.</p></section>
 
     {error && <div className="d-card p-5 text-center"><p className="text-sm mb-3" style={{color:'var(--d-danger)'}}>{error}</p><button type="button" onClick={load} className="d-btn-primary text-sm">Thử lại</button></div>}
     {loading && <div className="d-card p-5 space-y-3"><div className="discover-skeleton"/><div className="discover-skeleton"/><div className="discover-skeleton"/></div>}
 
-    {!loading && !error && showPeople && <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="font-extrabold">Thành viên gợi ý</h2><span className="text-xs d-muted">{filteredPeople.length} người</span></div><div className="grid sm:grid-cols-2 gap-3">{filteredPeople.slice(0,40).map(p => <article key={p.id} className="d-card p-4 flex gap-3 items-start"><Avatar src={p.avatar_url} name={p.full_name || p.username} size={48}/><div className="min-w-0 flex-1"><div className="font-bold truncate">{p.full_name || p.username || 'Thành viên D'}</div>{p.username && <div className="text-xs d-muted">@{p.username}</div>}{p.bio && <p className="text-xs d-muted mt-1 line-clamp-2">{p.bio}</p>}<div className="flex flex-wrap gap-2 mt-3"><button type="button" onClick={() => onOpenProfile?.(p.id)} className="discover-follow"><UserPlus size={14}/>Xem hồ sơ &amp; kết bạn</button><button type="button" onClick={() => blockUser(p.id)} className="discover-block">Chặn</button></div></div></article>)}</div></section>}
+    {!loading && !error && <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="font-extrabold">Kết nối bạn bè</h2><span className="text-xs d-muted">{filteredPeople.length} người</span></div><div className="grid sm:grid-cols-2 gap-3">{filteredPeople.slice(0,40).map(p => <article key={p.id} className="d-card p-4 flex gap-3 items-start"><Avatar src={p.avatar_url} name={p.full_name || p.username} size={48}/><div className="min-w-0 flex-1"><div className="font-bold truncate">{p.full_name || p.username || 'Thành viên D'}</div>{p.username && <div className="text-xs d-muted">@{p.username}</div>}{p.bio && <p className="text-xs d-muted mt-1 line-clamp-2">{p.bio}</p>}<div className="flex flex-wrap gap-2 mt-3"><button type="button" onClick={() => onOpenProfile?.(p.id)} className="discover-follow"><UserPlus size={14}/>Xem hồ sơ &amp; kết bạn</button><button type="button" onClick={() => blockUser(p.id)} className="discover-block">Chặn</button></div></div></article>)}</div></section>}
 
-    {!loading && !error && tab !== 'people' && <section className="space-y-3"><div className="flex items-center justify-between"><div><h2 className="font-extrabold">{tab==='latest' ? 'Bài viết & ảnh mới nhất' : tab==='media' ? 'Ảnh & Video' : 'Bài viết & ảnh nổi bật'}</h2><p className="text-xs d-muted mt-1">{tab==='for-you' ? 'Ưu tiên bài viết và ảnh được quan tâm; video không lặp ở đây và chỉ xuất hiện trong mục Ảnh & Video.' : tab==='latest' ? 'Bài viết và ảnh mới đăng; video nằm riêng trong mục Ảnh & Video.' : ''}{filteredPosts.length} bài viết phù hợp</p></div></div><div className="grid sm:grid-cols-2 gap-3">{filteredPosts.slice(0,40).map(p => <PostPreview key={p.id} post={p}/>)}</div>{!filteredPosts.length && <div className="d-card p-8 text-center"><div className="discover-empty-icon"><Search size={22}/></div><h3 className="font-bold mt-2">Chưa tìm thấy nội dung</h3><p className="text-sm d-muted mt-1">Thử từ khóa hoặc chủ đề khác nhé.</p></div>}</section>}
-    {!loading && !error && tab==='people' && !filteredPeople.length && <div className="d-card p-8 text-center text-sm d-muted">Không tìm thấy thành viên phù hợp.</div>}
+    {!loading && !error && <section className="space-y-3"><div className="flex items-center justify-between"><div><h2 className="font-extrabold">Bài viết nổi bật</h2><p className="text-xs d-muted mt-1">Ưu tiên bài viết và ảnh được quan tâm; video không lặp với Trang chủ. {filteredPosts.length} bài viết phù hợp</p></div></div><div className="grid sm:grid-cols-2 gap-3">{filteredPosts.slice(0,40).map(p => <PostPreview key={p.id} post={p}/>)}</div>{!filteredPosts.length && <div className="d-card p-8 text-center"><div className="discover-empty-icon"><Search size={22}/></div><h3 className="font-bold mt-2">Chưa tìm thấy nội dung</h3><p className="text-sm d-muted mt-1">Thử từ khóa hoặc chủ đề khác nhé.</p></div>}</section>}
   </div>
 }
