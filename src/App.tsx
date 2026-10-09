@@ -86,7 +86,8 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
   // Stories are loaded newest-first, so keep the newest active story as each owner's cover.
   stories.forEach(s => {
     const profile = Array.isArray(s.profiles) ? s.profiles[0] : s.profiles
-    if (profile && !byId.has(s.user_id)) byId.set(s.user_id, { ...profile, id: s.user_id, story: s })
+    // Keep stories visible even when the optional profile join is unavailable.
+    if (!byId.has(s.user_id)) byId.set(s.user_id, { ...(profile || {}), id: s.user_id, story: s })
   })
   const ownProfile = people.find(p => p.id === userId) || [...byId.values()].find(p => p.id === userId)
   const ownStory = stories.find(s => s.user_id === userId)
@@ -489,6 +490,31 @@ function Feed({ userId }) {
   const [loadError, setLoadError] = useState('')
   const [feedMode, setFeedMode] = useState('latest')
 
+  const loadStories = async () => {
+    if (!supabase) return
+    try {
+      let { data, error } = await supabase.from('stories')
+        .select('id,user_id,media_url,media_type,caption,created_at,expires_at,profiles!stories_user_id_fkey(full_name,username,avatar_url)')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (error) {
+        const fallback = await supabase.from('stories')
+          .select('id,user_id,media_url,media_type,caption,created_at,expires_at')
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(100)
+        data = fallback.data
+        error = fallback.error
+      }
+      if (error) throw error
+      setStories(data || [])
+    } catch (error) {
+      // Keep the rest of the Home feed usable if stories cannot be fetched.
+      console.error('Không tải được Tin 24 giờ:', error)
+    }
+  }
+
   const load = async ({ append = false, mode = feedMode } = {}) => {
     if (!supabase) {
       setLoading(false)
@@ -540,14 +566,7 @@ function Feed({ userId }) {
       })
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
       setPeople(peeps || [])
-      // Load active 24-hour stories independently; retry without the profile join if the FK relation is unavailable.
-      let { data: activeStories, error: storyError } = await supabase.from('stories').select('id,user_id,media_url,media_type,caption,created_at,expires_at,profiles!stories_user_id_fkey(full_name,username,avatar_url)').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
-      if (storyError) {
-        const fallback = await supabase.from('stories').select('id,user_id,media_url,media_type,caption,created_at,expires_at').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
-        activeStories = fallback.data
-        storyError = fallback.error
-      }
-      if (!storyError) setStories(activeStories || [])
+      // Tin 24 giờ is loaded independently by loadStories().
     } catch (e) {
       setLoadError(e?.message || 'Không thể tải bảng tin. Vui lòng thử lại.')
     } finally {
@@ -556,7 +575,7 @@ function Feed({ userId }) {
     }
   }
 
-  useEffect(() => { load({ mode: feedMode }) }, [userId, feedMode])
+  useEffect(() => { load({ mode: feedMode }); loadStories() }, [userId, feedMode])
 
   const changeMode = mode => {
     if (mode === feedMode) return
@@ -569,7 +588,7 @@ function Feed({ userId }) {
     <div className="home-feed max-w-3xl mx-auto px-3 pb-24 pt-3">
       <InstallBanner />
       <StoryRail people={people} stories={stories} userId={userId} onAddStory={() => setShowStoryComposer(true)} onViewStory={setViewingStory} />
-      {showStoryComposer && <StoryComposer userId={userId} onClose={() => setShowStoryComposer(false)} onPublished={() => load({ mode: feedMode })} />}
+      {showStoryComposer && <StoryComposer userId={userId} onClose={() => setShowStoryComposer(false)} onPublished={async () => { await loadStories(); await load({ mode: feedMode }) }} />}
       {viewingStory && <StoryViewer story={viewingStory} position={stories.findIndex(s => s.id === viewingStory.id)} total={stories.length} hasPrev={stories.findIndex(s => s.id === viewingStory.id) > 0} hasNext={stories.findIndex(s => s.id === viewingStory.id) < stories.length - 1} onPrev={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i > 0) setViewingStory(stories[i - 1]) }} onNext={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i >= 0 && i < stories.length - 1) setViewingStory(stories[i + 1]) }} onClose={() => setViewingStory(null)} />}
       {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
