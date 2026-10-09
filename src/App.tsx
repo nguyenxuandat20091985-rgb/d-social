@@ -94,34 +94,28 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
   // otherwise incorrectly open the story composer when tapped.
   const otherOwners = [...byId.values()].filter(p => p.id !== userId)
   const openStory = story => { if (story) onViewStory(story) }
-  const StoryTile = ({ profile, story, own = false }) => (
+  const StoryTile = ({ profile, story, own = false }) => {
+    const [mediaFailed, setMediaFailed] = useState(false)
+    useEffect(() => setMediaFailed(false), [story?.id, story?.media_url])
+    return (
     <button type="button" key={profile?.id || 'own-story'} onClick={() => story ? openStory(story) : onAddStory()} className="relative flex flex-col justify-between overflow-hidden rounded-2xl shrink-0 w-[88px] h-[138px] text-left border d-border-c" style={{ background: 'var(--d-surface-2)' }} aria-label={story ? 'Xem tin của ' + (profile?.full_name || profile?.username || 'bạn') : 'Đăng tin 24 giờ'}>
-      {story && story.media_type === 'image' && story.media_url
-        ? <img src={story.media_url} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
-        : story && story.media_type === 'video' && story.media_url
+      {story && story.media_type === 'image' && story.media_url && !mediaFailed
+        ? <img src={story.media_url} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" onError={() => setMediaFailed(true)} />
+        : story && story.media_type === 'video' && story.media_url && !mediaFailed
           ? <div className="absolute inset-0 overflow-hidden bg-black">
-              <video
-                src={story.media_url}
-                muted
-                autoPlay
-                loop
-                playsInline
-                preload="auto"
-                aria-hidden="true"
-                className="absolute inset-0 h-full w-full object-cover pointer-events-none"
-                onError={e => { e.currentTarget.style.display = 'none' }}
-              />
+              <video src={story.media_url} muted autoPlay loop playsInline preload="metadata" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover pointer-events-none" onError={() => setMediaFailed(true)} />
               <span className="absolute right-2 top-2 z-[1] grid place-items-center rounded-full bg-black/55 p-1.5 text-white" aria-hidden="true"><Video size={14} /></span>
             </div>
-          : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/></div>}
+          : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/>{mediaFailed && <span className="absolute bottom-10 rounded bg-black/65 px-2 py-1 text-[9px] text-white">Không tải được</span>}</div>}
       {story && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />}
       {!story && <div className="absolute inset-x-0 bottom-0 h-12 bg-[var(--d-surface)]" />}
       {own && !story && <span className="absolute z-[2] left-1/2 top-1/2 -translate-x-1/2 -translate-y-[135%] grid place-items-center w-9 h-9 rounded-full text-white shadow-lg" style={{ background: 'var(--d-primary)' }} aria-hidden="true"><Plus size={22} strokeWidth={2.8} /></span>}
       <div className="relative z-[1] mt-auto p-2 w-full">
-        <span className="block text-[10px] leading-tight font-bold line-clamp-2" style={{ color: story ? '#fff' : 'var(--d-text)' }}>{own ? 'Tin của bạn' : (profile?.full_name || profile?.username || 'Thành viên').split(' ').slice(-2).join(' ')}</span>
+        <span className="block text-[10px] leading-tight font-bold line-clamp-2" style={{ color: story && !mediaFailed ? '#fff' : 'var(--d-text)' }}>{own ? 'Tin của bạn' : (profile?.full_name || profile?.username || 'Thành viên').split(' ').slice(-2).join(' ')}</span>
       </div>
     </button>
-  )
+    )
+  }
   return (
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-3 px-1">
@@ -560,8 +554,9 @@ function Feed({ userId }) {
       if (error) {
         let altQuery = supabase
           .from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,deleted_at,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
           .eq('is_published', true)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
         if (followedIds) altQuery = altQuery.in('user_id', followedIds)
         const alt = await altQuery.range(offset, offset + 19)
@@ -588,6 +583,8 @@ function Feed({ userId }) {
 
   useEffect(() => { load({ mode: feedMode }); loadStories() }, [userId, feedMode])
 
+  const currentProfile = people.find(p => p.id === userId)
+
   const changeMode = mode => {
     if (mode === feedMode) return
     setFeedMode(mode)
@@ -603,7 +600,7 @@ function Feed({ userId }) {
       {viewingStory && <StoryViewer story={viewingStory} position={stories.findIndex(s => s.id === viewingStory.id)} total={stories.length} hasPrev={stories.findIndex(s => s.id === viewingStory.id) > 0} hasNext={stories.findIndex(s => s.id === viewingStory.id) < stories.length - 1} onPrev={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i > 0) setViewingStory(stories[i - 1]) }} onNext={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i >= 0 && i < stories.length - 1) setViewingStory(stories[i + 1]) }} onClose={() => setViewingStory(null)} />}
       {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
-        <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
+        <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar"><Avatar src={currentProfile?.avatar_url} name={currentProfile?.full_name || currentProfile?.username || 'D'} size={38} /></span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
       )}
       <section className="d-card p-2 mb-3" aria-label="Lọc bảng tin">
         <div className="grid grid-cols-3 gap-2">

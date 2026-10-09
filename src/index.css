@@ -337,3 +337,16 @@ body {
  .discover-topics{padding:12px}
 }
 @media(min-width:768px){.discover-shell{padding-top:18px}}
+
+
+/* Home-only accessibility and media polish */
+.home-feed .home-compose-avatar{overflow:hidden;flex:0 0 38px;padding:0}
+.home-feed .home-compose-avatar>div{width:38px;height:38px}
+.home-feed [aria-label="Lọc bảng tin"] button{min-height:44px;line-height:1.25}
+.home-feed .home-compose-actions button{min-height:44px}
+.home-feed .home-refresh{min-width:44px;min-height:44px}
+.home-feed .home-compose-open:focus-visible,
+.home-feed .home-compose-actions button:focus-visible,
+.home-feed [aria-label="Lọc bảng tin"] button:focus-visible,
+.home-feed .home-refresh:focus-visible{outline:2px solid var(--d-primary);outline-offset:2px}
+.home-feed img,.home-feed video{max-width:100%}
