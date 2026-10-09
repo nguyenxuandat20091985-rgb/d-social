@@ -786,8 +786,7 @@ export function AdminPage({ userId }) {
             <div className="space-y-4">
               <section className="d-card p-4">
                 <h2 className="font-bold text-sm mb-2 flex items-center gap-2"><Settings size={16} /> Cài đặt Admin</h2>
-                <p className="text-sm d-muted leading-relaxed">Quyền admin dựa trên cột <code>profiles.is_admin</code>. Cấp quyền bằng SQL trên Supabase:</p>
-                <pre className="mt-3 text-xs rounded-xl p-3 overflow-auto font-mono" style={{ background: 'var(--d-surface-2)' }}>{`update public.profiles\nset is_admin = true\nwhere id = '${userId}';`}</pre>
+                <p className="text-sm d-muted leading-relaxed">Quyền admin được kiểm tra phía máy chủ. Chỉ chủ quản hệ thống được cấp hoặc thu hồi quyền quản trị qua quy trình bảo mật; không tự cấp quyền từ giao diện này.</p>
                 <p className="text-xs d-muted mt-3">Realtime monitor tự refresh mỗi 60s + khi có report/AI log mới.</p>
               </section>
             </div>
