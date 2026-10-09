@@ -114,6 +114,7 @@ function Composer({ userId, onPublished, onClose }) {
   }
   const publish = async () => {
     if (busy) return
+    setError('')
     if (!supabase) return setError('Kết nối dịch vụ bài viết chưa sẵn sàng. Vui lòng tải lại ứng dụng.')
     if (!userId) return setError('Anh cần đăng nhập lại trước khi đăng bài.')
     if (!text.trim() && !file) return setError('Nhập nội dung hoặc đính kèm ảnh/video trước khi đăng.')
@@ -122,7 +123,6 @@ function Composer({ userId, onPublished, onClose }) {
     if (!postRateLimit(userId)) return setError('Anh đăng quá nhanh. Vui lòng chờ 60 giây rồi thử lại.')
 
     setBusy(true)
-    setError('')
     try {
       let media_url = null, media_type = null
       if (file) {
@@ -148,22 +148,30 @@ function Composer({ userId, onPublished, onClose }) {
     }
   }
   return (
-    <section className="d-card p-4 mb-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-bold text-sm">Tạo bài viết</div>
-        {onClose && <button type="button" onClick={onClose} className="d-muted p-1"><X size={16} /></button>}
-      </div>
-      <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px]" autoFocus />
-      {file && <div className="flex items-center justify-between p-2 rounded-xl text-sm mb-2" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.name}</span><button type="button" onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
-      {error && <p className="text-sm mb-2" style={{ color: 'var(--d-danger)' }}>{error}</p>}
-      <div className="flex items-center justify-between pt-2 border-t d-border-c">
-        <label className="flex gap-3 d-muted cursor-pointer">
-          <ImageIcon size={20} /><Video size={20} />
-          <input hidden type="file" accept="image/*,video/*" onChange={e => pick(e.target.files?.[0])} />
-        </label>
-        <button type="button" disabled={busy} onClick={publish} className="d-btn-primary text-sm">{busy ? 'Đang đăng...' : 'Đăng'}</button>
-      </div>
-    </section>
+    <div
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-3"
+      style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+      onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}
+    >
+      <section className="d-card w-full max-w-2xl max-h-[88vh] overflow-y-auto p-4 mb-0 shadow-2xl" role="dialog" aria-modal="true" aria-label="Tạo bài viết">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-bold text-sm">Tạo bài viết</div>
+          {onClose && <button type="button" onClick={onClose} className="d-muted p-2" aria-label="Đóng"><X size={18} /></button>}
+        </div>
+        <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-y outline-none min-h-[120px] text-[15px]" autoFocus />
+        {file && <div className="flex items-center justify-between p-2 rounded-xl text-sm mb-2" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.name}</span><button type="button" onClick={() => setFile(null)} className="d-muted p-1" aria-label="Bỏ tệp"><X size={16} /></button></div>}
+        {error && <p role="alert" aria-live="polite" className="text-sm mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
+        <div className="flex items-center justify-between gap-3 pt-3 border-t d-border-c">
+          <label className="flex gap-3 d-muted cursor-pointer items-center min-h-11 px-2" aria-label="Chọn ảnh hoặc video">
+            <ImageIcon size={20} /><Video size={20} />
+            <input hidden type="file" accept="image/*,video/*" onChange={e => pick(e.target.files?.[0])} />
+          </label>
+          <button type="button" disabled={busy} onClick={publish} className="d-btn-primary text-sm min-w-24 min-h-11">
+            {busy ? 'Đang đăng...' : 'Đăng'}
+          </button>
+        </div>
+      </section>
+    </div>
   )
 }
 
