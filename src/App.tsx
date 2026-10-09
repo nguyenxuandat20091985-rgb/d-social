@@ -191,6 +191,8 @@ function PostCard({ post, userId, onRemoved }) {
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState([])
   const [comment, setComment] = useState('')
+  const [commentError, setCommentError] = useState('')
+  const [commentBusy, setCommentBusy] = useState(false)
   const [menu, setMenu] = useState(false)
   const [saved, setSaved] = useState(false)
   const [content, setContent] = useState(post.content)
@@ -234,16 +236,26 @@ function PostCard({ post, userId, onRemoved }) {
   }
 
   const addComment = async () => {
-    if (!supabase || !userId || !comment.trim() || !commentRateLimit(userId)) return
+    setCommentError('')
+    if (commentBusy) return
+    if (!supabase || !userId) return setCommentError('Anh cần đăng nhập để bình luận.')
+    if (!comment.trim()) return setCommentError('Nhập nội dung bình luận trước khi gửi.')
+    if (!commentRateLimit(userId)) return setCommentError('Anh bình luận quá nhanh. Vui lòng chờ rồi thử lại.')
     const mod = moderateText(comment)
-    if (!mod.allowed) return
+    if (!mod.allowed) return setCommentError(mod.reason || 'Bình luận chưa được chấp nhận.')
     const body = comment.trim()
-    const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: body })
-    if (!error) {
+    setCommentBusy(true)
+    try {
+      const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: body })
+      if (error) throw new Error(error.message || 'Không gửi được bình luận.')
       setComment('')
       if (post.author_id && post.author_id !== userId) {
         try { await supabase.rpc('create_notification', { p_user_id: post.author_id, p_actor_id: userId, p_type: 'comment', p_target_type: 'post', p_target_id: post.id, p_title: 'Bình luận mới', p_body: body.slice(0, 120) }) } catch {}
       }
+    } catch (e) {
+      setCommentError(e?.message || 'Không gửi được bình luận. Vui lòng thử lại.')
+    } finally {
+      setCommentBusy(false)
     }
   }
 
@@ -355,9 +367,10 @@ function PostCard({ post, userId, onRemoved }) {
               </div>
             </div>
           ))}
+          {commentError && <p role="alert" aria-live="polite" className="text-xs break-words" style={{ color: 'var(--d-danger)' }}>{commentError}</p>}
           <div className="flex gap-2 mt-2">
-            <input className="d-input flex-1 text-sm py-2" value={comment} onChange={e => setComment(e.target.value)} placeholder="Viết bình luận..." onKeyDown={e => e.key === 'Enter' && addComment()} />
-            <button type="button" className="d-btn-primary text-xs px-3" onClick={addComment}>Gửi</button>
+            <input className="d-input flex-1 text-sm py-2" value={comment} onChange={e => { setComment(e.target.value); if (commentError) setCommentError('') }} placeholder="Viết bình luận..." onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addComment()} />
+            <button type="button" className="d-btn-primary text-xs px-3 min-h-10" disabled={commentBusy} onClick={addComment}>{commentBusy ? 'Đang gửi...' : 'Gửi'}</button>
           </div>
         </div>
       )}
