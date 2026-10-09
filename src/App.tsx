@@ -227,43 +227,85 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [file, setFile] = useState(null)
   const [caption, setCaption] = useState('')
   const [busy, setBusy] = useState(false)
+  const [stage, setStage] = useState('')
   const [error, setError] = useState('')
+  const [previewUrl, setPreviewUrl] = useState('')
+
+  useEffect(() => {
+    if (!file) { setPreviewUrl(''); return }
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const chooseFile = selected => {
+    const next = selected?.[0] || null
+    setError('')
+    if (!next) return
+    if (!['image/', 'video/'].some(x => next.type.startsWith(x))) {
+      setError('Chỉ hỗ trợ ảnh và video.')
+      return
+    }
+    if (next.size > (next.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE)) {
+      setError('Ảnh tối đa 8MB, video tối đa 30MB.')
+      return
+    }
+    setFile(next)
+  }
+
   const publish = async () => {
     if (busy) return
     if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
     if (!file) return setError('Chọn một ảnh hoặc video để đăng tin.')
-    if (!['image/', 'video/'].some(x => file.type.startsWith(x))) return setError('Chỉ hỗ trợ ảnh và video.')
-    if (file.size > (file.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE)) return setError('Ảnh tối đa 8MB, video tối đa 30MB.')
     const mod = moderateText(caption)
     if (!mod.allowed) return setError(mod.reason)
-    setBusy(true); setError('')
+    setBusy(true)
+    setError('')
+    setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
       const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+      setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
         caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
       if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
-      await onPublished?.()
+
+      // Close the composer as soon as the story is saved; refresh the rail in the background.
       onClose?.()
-    } catch (e) { setError(e?.message || 'Không đăng được tin. Vui lòng thử lại.') }
-    finally { setBusy(false) }
+      Promise.resolve().then(() => onPublished?.()).catch(err => console.error('Không làm mới Tin 24 giờ:', err))
+    } catch (e) {
+      setError(e?.message || 'Không đăng được tin. Vui lòng thử lại.')
+    } finally {
+      setBusy(false)
+      setStage('')
+    }
   }
+
+  const fileSize = file ? (file.size >= 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(file.size / 1024)) + ' KB') : ''
+
   return <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center bg-black/55 p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}>
-    <section className="d-card w-full max-w-lg p-4 max-h-[88vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
-      <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" className="d-muted p-2" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
-      <p className="text-xs d-muted mb-3">Tin sẽ tự ẩn sau 24 giờ. Chọn một ảnh hoặc video cho mỗi tin.</p>
-      <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 min-h-36 cursor-pointer d-border-c" style={{ background: 'var(--d-surface-2)' }}>
-        <ImageIcon size={28} style={{ color: 'var(--d-primary)' }}/><span className="text-sm font-semibold">{file ? file.name : 'Chọn ảnh hoặc video'}</span>
-        <input hidden type="file" accept="image/*,video/*" onChange={e => { setFile(e.target.files?.[0] || null); e.target.value = '' }}/>
+    <section className="d-card home-story-composer w-full max-w-lg p-4 max-h-[90dvh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
+      <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" disabled={busy} className="d-muted p-2 disabled:opacity-40" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
+      <p className="text-xs d-muted mb-3">Chọn một ảnh hoặc video. Tin sẽ tự ẩn sau 24 giờ.</p>
+      <label className="home-story-file-picker flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 min-h-36 cursor-pointer d-border-c" style={{ background: 'var(--d-surface-2)' }}>
+        {previewUrl && file?.type.startsWith('image/') ? <img src={previewUrl} alt="Xem trước ảnh tin" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
+          previewUrl && file?.type.startsWith('video/') ? <video src={previewUrl} controls playsInline preload="metadata" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
+          <ImageIcon size={28} style={{ color: 'var(--d-primary)' }}/>}
+        <span className="text-sm font-semibold text-center break-all">{file ? file.name : 'Chạm để chọn ảnh hoặc video'}</span>
+        {file && <span className="text-xs d-muted">{fileSize} · Chạm để đổi tệp</span>}
+        <input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e => { chooseFile(e.target.files); e.target.value = '' }}/>
       </label>
-      <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" className="d-input mt-3 resize-y min-h-20"/>
-      {error && <p role="alert" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
-      <button type="button" disabled={busy} onClick={publish} className="d-btn-primary w-full mt-3">{busy ? 'Đang đăng tin...' : 'Đăng tin'}</button>
+      <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
+      {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
+      {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
+      <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
+        {busy ? 'Đang đăng tin…' : 'Đăng tin'}
+      </button>
     </section>
   </div>
 }
