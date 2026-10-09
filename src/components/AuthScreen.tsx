@@ -69,7 +69,8 @@ export function AuthScreen({ onLegal }: Props) {
     setError('')
     setInfo('')
     if (!email.trim() || !email.includes('@')) return setError('Vui lòng nhập email hợp lệ.')
-    if (password.length < 6) return setError('Mật khẩu tối thiểu 6 ký tự.')
+    if (mode === 'signup' && password.length < 8) return setError('Khi tạo tài khoản mới, mật khẩu cần tối thiểu 8 ký tự.')
+    if (mode === 'login' && password.length < 6) return setError('Vui lòng nhập mật khẩu hợp lệ.')
     setBusy(true)
     try {
       if (mode === 'login') {
@@ -91,7 +92,7 @@ export function AuthScreen({ onLegal }: Props) {
         else if (data.session) setInfo('Đăng ký thành công!')
         else
           setInfo(
-            'Đăng ký OK. Nếu không vào app: tắt Confirm email trong Supabase Auth, rồi đăng nhập lại.',
+            'Đăng ký thành công. Hãy kiểm tra email để xác nhận tài khoản trước khi đăng nhập nếu hệ thống yêu cầu. Nếu chưa nhận được thư, kiểm tra thư mục Spam hoặc liên hệ hỗ trợ.',
           )
       }
     } finally {
@@ -183,7 +184,7 @@ export function AuthScreen({ onLegal }: Props) {
                   onChange={e => setPassword(e.target.value)}
                   type={showPw ? 'text' : 'password'}
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  placeholder="Tối thiểu 6 ký tự"
+                  placeholder={mode === 'signup' ? 'Tối thiểu 8 ký tự' : 'Nhập mật khẩu'}
                   onKeyDown={e => { if (e.key === 'Enter') emailAuth() }}
                   className="d-input pr-14"
                 />
