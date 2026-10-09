@@ -418,7 +418,7 @@ function Feed({ userId }) {
         data = (alt.data || []).filter(p => !p.deleted_at)
       }
       const page = data || []
-      setHasMore(page.length > 20)
+      setHasMore(page.length === 20)
       setPosts(current => {
         const combined = append ? [...current, ...page.filter(p => !current.some(old => old.id === p.id))] : page
         if (mode === 'popular') return [...combined].sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0))
