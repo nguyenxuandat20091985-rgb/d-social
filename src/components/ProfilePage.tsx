@@ -92,7 +92,7 @@ export function ProfilePage({ userId }) {
   const loadProfile = async () => {
     if (!supabase) return
     const [{ data: profile }, { data: posts }, { count: followerCount }, { count: followingCount }, { count: friendCount }, { data: mine }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', userId).single(),
+      supabase.rpc('get_my_private_profile'),
       supabase.from('posts').select('id,content,media_url,media_type,created_at,likes(user_id)').eq('author_id', userId).is('deleted_at', null).order('created_at', { ascending: false }).limit(40),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
