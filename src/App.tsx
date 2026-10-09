@@ -560,8 +560,9 @@ function Feed({ userId }) {
       if (error) {
         let altQuery = supabase
           .from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,deleted_at,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
           .eq('is_published', true)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false })
         if (followedIds) altQuery = altQuery.in('user_id', followedIds)
         const alt = await altQuery.range(offset, offset + 19)
@@ -588,6 +589,8 @@ function Feed({ userId }) {
 
   useEffect(() => { load({ mode: feedMode }); loadStories() }, [userId, feedMode])
 
+  const currentProfile = people.find(p => p.id === userId)
+
   const changeMode = mode => {
     if (mode === feedMode) return
     setFeedMode(mode)
@@ -603,7 +606,7 @@ function Feed({ userId }) {
       {viewingStory && <StoryViewer story={viewingStory} position={stories.findIndex(s => s.id === viewingStory.id)} total={stories.length} hasPrev={stories.findIndex(s => s.id === viewingStory.id) > 0} hasNext={stories.findIndex(s => s.id === viewingStory.id) < stories.length - 1} onPrev={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i > 0) setViewingStory(stories[i - 1]) }} onNext={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i >= 0 && i < stories.length - 1) setViewingStory(stories[i + 1]) }} onClose={() => setViewingStory(null)} />}
       {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
-        <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
+        <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar"><Avatar src={currentProfile?.avatar_url} name={currentProfile?.full_name || currentProfile?.username || 'D'} size={38} /></span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
       )}
       <section className="d-card p-2 mb-3" aria-label="Lọc bảng tin">
         <div className="grid grid-cols-3 gap-2">
