@@ -429,7 +429,9 @@ function PostCard({ post, userId, onRemoved }) {
       </div>
       {content && <p className="px-4 pt-3 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>}
       {post.media_type === 'video' && post.media_url && (
-        <div className="mt-3"><video src={post.media_url} controls playsInline preload="metadata" className="w-full max-h-[75vh] bg-black object-contain" /></div>
+        <div className="mt-3 w-full overflow-hidden">
+          <video src={post.media_url} controls playsInline preload="metadata" className="block w-full h-auto max-h-[75vh]" style={{ background: 'transparent' }} />
+        </div>
       )}
       {post.media_type !== 'video' && (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls : (post.media_url ? [post.media_url] : [])).length > 0 && (
         <div className={`mt-3 grid gap-1.5 ${(Array.isArray(post.image_urls) && post.image_urls.length > 1) ? 'grid-cols-2' : 'grid-cols-1'}`}>
