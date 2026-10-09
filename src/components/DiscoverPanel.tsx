@@ -110,11 +110,24 @@ export function Discover({ userId, onOpenProfile }) {
   const filteredPeople = useMemo(() => people.filter(p => !normalized || [p.full_name, p.username, p.bio].some(v => (v || '').toLocaleLowerCase('vi').includes(normalized))), [people, normalized])
   const filteredPosts = useMemo(() => {
     let result = posts
+    // Discover's featured feed complements Home: prioritize text and image posts;
+    // video remains available when the user explicitly chooses "Ảnh & Video".
+    if (tab === 'for-you') result = result.filter(p => p.media_type !== 'video')
     if (tab === 'media') result = result.filter(p => p.media_url)
     if (normalized) result = result.filter(p => [p.content, p.profiles?.full_name, p.profiles?.username].some(v => (v || '').toLocaleLowerCase('vi').includes(normalized)))
     const selected = topics.find(t => t.id === topic)
     if (selected?.terms.length) result = result.filter(p => selected.terms.some(term => (p.content || '').toLocaleLowerCase('vi').includes(term)))
-    if (tab === 'for-you') result = [...result].sort((a,b) => (b.likes?.length || 0) - (a.likes?.length || 0))
+    if (tab === 'for-you') {
+      // Lightweight trending score: engagement first, with a modest recency tie-breaker.
+      const now = Date.now()
+      result = [...result].sort((a, b) => {
+        const score = p => {
+          const ageHours = Math.max(0, (now - new Date(p.created_at || now).getTime()) / 3600000)
+          return (p.likes?.length || 0) * 3 + 1 / (1 + ageHours / 24)
+        }
+        return score(b) - score(a)
+      })
+    }
     return result
   }, [posts, tab, normalized, topic])
   const showPeople = tab === 'people' || (!normalized && tab === 'for-you')
@@ -145,7 +158,7 @@ export function Discover({ userId, onOpenProfile }) {
 
     {!loading && !error && showPeople && <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="font-extrabold">Thành viên gợi ý</h2><span className="text-xs d-muted">{filteredPeople.length} người</span></div><div className="grid sm:grid-cols-2 gap-3">{filteredPeople.slice(0,40).map(p => <article key={p.id} className="d-card p-4 flex gap-3 items-start"><Avatar src={p.avatar_url} name={p.full_name || p.username} size={48}/><div className="min-w-0 flex-1"><div className="font-bold truncate">{p.full_name || p.username || 'Thành viên D'}</div>{p.username && <div className="text-xs d-muted">@{p.username}</div>}{p.bio && <p className="text-xs d-muted mt-1 line-clamp-2">{p.bio}</p>}<div className="flex flex-wrap gap-2 mt-3"><button type="button" onClick={() => onOpenProfile?.(p.id)} className="discover-follow"><UserPlus size={14}/>Xem hồ sơ &amp; kết bạn</button><button type="button" onClick={() => blockUser(p.id)} className="discover-block">Chặn</button></div></div></article>)}</div></section>}
 
-    {!loading && !error && tab !== 'people' && <section className="space-y-3"><div className="flex items-center justify-between"><div><h2 className="font-extrabold">{tab==='latest' ? 'Bài viết mới nhất' : tab==='media' ? 'Ảnh & Video' : 'Nội dung nổi bật'}</h2><p className="text-xs d-muted mt-1">{filteredPosts.length} bài viết phù hợp</p></div></div><div className="grid sm:grid-cols-2 gap-3">{filteredPosts.slice(0,40).map(p => <PostPreview key={p.id} post={p}/>)}</div>{!filteredPosts.length && <div className="d-card p-8 text-center"><div className="discover-empty-icon"><Search size={22}/></div><h3 className="font-bold mt-2">Chưa tìm thấy nội dung</h3><p className="text-sm d-muted mt-1">Thử từ khóa hoặc chủ đề khác nhé.</p></div>}</section>}
+    {!loading && !error && tab !== 'people' && <section className="space-y-3"><div className="flex items-center justify-between"><div><h2 className="font-extrabold">{tab==='latest' ? 'Bài viết mới nhất' : tab==='media' ? 'Ảnh & Video' : 'Nội dung nổi bật · Xu hướng'}</h2><p className="text-xs d-muted mt-1">{tab==='for-you' ? 'Ưu tiên bài viết và ảnh được quan tâm; video xem tại mục Ảnh & Video.' : ''}{filteredPosts.length} bài viết phù hợp</p></div></div><div className="grid sm:grid-cols-2 gap-3">{filteredPosts.slice(0,40).map(p => <PostPreview key={p.id} post={p}/>)}</div>{!filteredPosts.length && <div className="d-card p-8 text-center"><div className="discover-empty-icon"><Search size={22}/></div><h3 className="font-bold mt-2">Chưa tìm thấy nội dung</h3><p className="text-sm d-muted mt-1">Thử từ khóa hoặc chủ đề khác nhé.</p></div>}</section>}
     {!loading && !error && tab==='people' && !filteredPeople.length && <div className="d-card p-8 text-center text-sm d-muted">Không tìm thấy thành viên phù hợp.</div>}
   </div>
 }
