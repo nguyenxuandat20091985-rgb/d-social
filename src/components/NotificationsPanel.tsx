@@ -31,6 +31,7 @@ export function Notifications({ userId }) {
   const [loading, setLoading] = useState(true)
   const [friendRequests, setFriendRequests] = useState([])
   const [friendBusy, setFriendBusy] = useState(null)
+  const [friendError, setFriendError] = useState('')
   useEffect(() => {
     if (!supabase) return
     ;(async () => {
@@ -80,9 +81,17 @@ export function Notifications({ userId }) {
   const respondFriend = async (id, requesterId, status) => {
     if (!supabase || friendBusy) return
     setFriendBusy(id)
-    const { data, error } = await supabase.rpc('friend_request_respond', { p_request_id: id, p_status: status })
-    if (!error && data) setFriendRequests(x => x.filter(r => r.id !== id))
-    setFriendBusy(null)
+    setFriendError('')
+    try {
+      const { data, error } = await supabase.rpc('friend_request_respond', { p_request_id: id, p_status: status })
+      if (error) throw error
+      if (!data) throw new Error('Lời mời không còn hiệu lực. Hãy làm mới danh sách.')
+      setFriendRequests(x => x.filter(r => r.id !== id))
+    } catch (e) {
+      setFriendError(e?.message || 'Không thể xử lý lời mời kết bạn.')
+    } finally {
+      setFriendBusy(null)
+    }
   }
 
   return (
@@ -91,6 +100,7 @@ export function Notifications({ userId }) {
         <h2 className="font-black text-lg flex items-center gap-2"><Bell size={18} className="text-violet-300" /> Thông báo</h2>
         <p className="text-xs text-slate-500 mt-1">Lời mời kết bạn, like, bình luận, theo dõi và tin nhắn mới.</p>
       </div>
+      {friendError && <div className="d-card p-3 text-sm" role="alert" style={{ color: 'var(--d-danger)' }}>{friendError}</div>}
       {friendRequests.length > 0 && <section className="d-card p-4">
         <div className="flex items-center justify-between mb-3"><h3 className="font-black flex items-center gap-2"><UserPlus size={17}/> Lời mời kết bạn</h3><span className="text-xs d-muted">{friendRequests.length}</span></div>
         <div className="space-y-3">
