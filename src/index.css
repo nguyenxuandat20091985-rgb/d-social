@@ -350,3 +350,18 @@ body {
 .home-feed [aria-label="Lọc bảng tin"] button:focus-visible,
 .home-feed .home-refresh:focus-visible{outline:2px solid var(--d-primary);outline-offset:2px}
 .home-feed img,.home-feed video{max-width:100%}
+
+
+/* Home-only story composer: mobile-friendly preview and upload feedback */
+.home-story-composer { overscroll-behavior: contain; }
+.home-story-file-picker { min-height: 150px; transition: border-color .15s ease, background-color .15s ease; }
+.home-story-file-picker:focus-within { outline: 2px solid var(--d-primary); outline-offset: 2px; }
+.home-story-preview { display: block; background: #080b12; }
+.home-story-spinner { width: 16px; height: 16px; flex: 0 0 16px; border: 2px solid var(--d-border); border-top-color: var(--d-primary); border-radius: 9999px; animation: home-story-spin .8s linear infinite; }
+.home-story-progress { height: 4px; background: var(--d-border); }
+.home-story-progress span { display: block; height: 100%; width: 38%; background: var(--d-primary); border-radius: inherit; animation: home-story-progress 1.25s ease-in-out infinite alternate; }
+@keyframes home-story-spin { to { transform: rotate(360deg); } }
+@keyframes home-story-progress { from { transform: translateX(-15%); } to { transform: translateX(180%); } }
+@media (prefers-reduced-motion: reduce) {
+  .home-story-spinner, .home-story-progress span { animation: none; }
+}
