@@ -11,11 +11,20 @@ function Avatar({ src, name, size = 44 }) {
 }
 const topics = [
   { id: 'all', label: 'Tất cả', terms: [] },
-  { id: 'travel', label: 'Du lịch', terms: ['du lịch', 'đi chơi', 'chuyến đi', 'travel'] },
-  { id: 'life', label: 'Đời sống', terms: ['đời sống', 'hôm nay', 'cuộc sống', 'gia đình'] },
-  { id: 'creative', label: 'Sáng tạo', terms: ['sáng tạo', 'ý tưởng', 'thiết kế', 'art'] },
-  { id: 'photo', label: 'Nhiếp ảnh', terms: ['ảnh', 'photography', 'camera'] },
+  { id: 'travel', label: 'Du lịch', terms: ['du lịch', 'đi chơi', 'chuyến đi', 'đi du lịch', 'đi phượt', 'phượt', 'tham quan', 'điểm đến', 'danh lam', 'thắng cảnh', 'phong cảnh', 'biển', 'núi', 'tour', 'travel', 'trip', 'vacation', 'holiday', 'itinerary'] },
+  { id: 'life', label: 'Đời sống', terms: ['đời sống', 'hôm nay', 'cuộc sống', 'gia đình', 'bữa cơm', 'công việc', 'đi làm', 'sinh hoạt', 'hàng ngày', 'hằng ngày', 'bạn bè', 'cộng đồng', 'kỷ niệm', 'tâm sự', 'kinh nghiệm sống', 'daily life', 'family', 'lifestyle'] },
+  { id: 'creative', label: 'Sáng tạo', terms: ['sáng tạo', 'ý tưởng', 'thiết kế', 'nghệ thuật', 'vẽ tranh', 'thủ công', 'tự làm', 'đồ handmade', 'làm đồ', 'đồ họa', 'minh họa', 'thơ', 'truyện', 'âm nhạc', 'chế tác', 'diy', 'design', 'creative', 'artwork', 'craft'] },
+  { id: 'photo', label: 'Nhiếp ảnh', terms: ['nhiếp ảnh', 'chụp ảnh', 'chụp hình', 'ống kính', 'máy ảnh', 'camera', 'photography', 'photographer', 'photo shoot', 'portrait photography', 'ảnh chân dung', 'ảnh phong cảnh', 'bố cục ảnh', 'phơi sáng', 'khẩu độ', 'tốc độ màn trập', 'iso', 'raw', 'lightroom'] },
 ]
+function normalizeSearchText(value) {
+  return (value || '')
+    .toLocaleLowerCase('vi')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
+    .trim()
+}
 function PostPreview({ post }) {
   const profile = post.profiles || {}
   const name = profile.full_name || profile.username || 'Thành viên D'
@@ -99,15 +108,21 @@ export function Discover({ userId, onOpenProfile }) {
     else setPeople(x => x.filter(p => p.id !== targetId))
   }
 
-  const normalized = q.trim().toLocaleLowerCase('vi')
-  const filteredPeople = useMemo(() => people.filter(p => !normalized || [p.full_name, p.username, p.bio].some(v => (v || '').toLocaleLowerCase('vi').includes(normalized))), [people, normalized])
+  const normalized = normalizeSearchText(q)
+  const filteredPeople = useMemo(() => people.filter(p => !normalized || [p.full_name, p.username, p.bio].some(v => normalizeSearchText(v).includes(normalized))), [people, normalized])
   const filteredPosts = useMemo(() => {
     let result = posts
     // Featured Discover feed complements Home: show text and image posts only.
     result = result.filter(p => p.media_type !== 'video')
-    if (normalized) result = result.filter(p => [p.content, p.profiles?.full_name, p.profiles?.username].some(v => (v || '').toLocaleLowerCase('vi').includes(normalized)))
+    if (normalized) result = result.filter(p => [p.content, p.profiles?.full_name, p.profiles?.username].some(v => normalizeSearchText(v).includes(normalized)))
     const selected = topics.find(t => t.id === topic)
-    if (selected?.terms.length) result = result.filter(p => selected.terms.some(term => (p.content || '').toLocaleLowerCase('vi').includes(term)))
+    if (selected?.terms.length) {
+      const terms = selected.terms.map(normalizeSearchText)
+      result = result.filter(p => {
+        const content = normalizeSearchText(p.content)
+        return terms.some(term => content.includes(term))
+      })
+    }
     // Rank featured posts by engagement, with recency as a tie-breaker.
     const now = Date.now()
     result = [...result].sort((a, b) => {
