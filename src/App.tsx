@@ -235,12 +235,12 @@ function Composer({ userId, onPublished, onClose }) {
     <div
       className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-2 sm:p-3"
       style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
-      onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}
+      onClick={e => { if (e.target === e.currentTarget) onClose?.() }}
     >
       <section className="d-card home-post-composer w-full max-w-2xl max-h-[92dvh] overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" role="dialog" aria-modal="true" aria-label="Tạo bài viết">
         <div className="flex items-center justify-between mb-3">
           <div><div className="font-bold text-base">Tạo bài viết</div><div className="text-xs d-muted mt-0.5">Chia sẻ với cộng đồng của bạn</div></div>
-          {onClose && <button type="button" disabled={busy} onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center disabled:opacity-40" aria-label="Đóng"><X size={18} /></button>}
+          {onClose && <button type="button" onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center" aria-label="Đóng" title={busy ? 'Đóng cửa sổ; quá trình đăng tiếp tục ở nền' : 'Đóng'}><X size={18} /></button>}
         </div>
         <textarea value={text} onChange={e => { setText(e.target.value); if (error) setError('') }} maxLength={2000} placeholder="Bạn đang nghĩ gì?" disabled={busy} className="home-post-textarea w-full bg-transparent resize-y outline-none min-h-[112px] text-[15px] disabled:opacity-70" autoFocus />
         {files.length > 0 && <div className="home-post-media-grid mt-3 mb-3">
