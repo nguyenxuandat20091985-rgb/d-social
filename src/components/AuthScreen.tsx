@@ -20,9 +20,13 @@ export function AuthScreen({ onLegal }: Props) {
       const err = q.get('error_description') || q.get('error') || q.get('message')
       if (err) {
         const decoded = decodeURIComponent(err.replace(/\+/g, ' '))
-        if (/exchange external code|invalid_client|unauthorized_client/i.test(decoded)) {
+        if (/deleted_client/i.test(decoded)) {
           setError(
-            'Google chưa khớp Client ID/Secret. Vào Supabase → Authentication → Providers → Google: dán đúng Client ID + Secret của cùng một OAuth client, Save, rồi thử lại.',
+            'Đăng nhập Google đang tạm lỗi vì OAuth Client đã bị xóa hoặc không còn hợp lệ. Chủ dự án cần tạo OAuth Client mới trong Google Cloud Console, sau đó cập nhật đúng Client ID và Client Secret tại Supabase → Authentication → Providers → Google. Không gửi Client Secret qua tin nhắn. Trong lúc chờ, anh có thể chọn “Hoặc dùng email” để đăng nhập bằng email/mật khẩu.',
+          )
+        } else if (/exchange external code|invalid_client|unauthorized_client/i.test(decoded)) {
+          setError(
+            'Cấu hình Google OAuth chưa khớp. Vào Supabase → Authentication → Providers → Google và kiểm tra Client ID cùng Client Secret thuộc cùng một OAuth Client.',
           )
         } else {
           setError(decoded)
