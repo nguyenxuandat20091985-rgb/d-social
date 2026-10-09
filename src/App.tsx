@@ -100,10 +100,11 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
       {story && story.media_type === 'image' && story.media_url
         ? <img src={story.media_url} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
         : story && story.media_type === 'video' && story.media_url
-          ? <div className="absolute inset-0 grid place-items-center bg-black"><Video size={30} className="text-white" /><span className="absolute bottom-12 right-2 text-white"><Video size={15}/></span></div>
+          ? <div className="absolute inset-0 grid place-items-center bg-black"><Video size={30} className="text-white" /></div>
           : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/></div>}
       {story && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />}
       {!story && <div className="absolute inset-x-0 bottom-0 h-12 bg-[var(--d-surface)]" />}
+      {own && !story && <span className="absolute z-[2] left-1/2 top-1/2 -translate-x-1/2 -translate-y-[135%] grid place-items-center w-9 h-9 rounded-full text-white shadow-lg" style={{ background: 'var(--d-primary)' }} aria-hidden="true"><Plus size={22} strokeWidth={2.8} /></span>}
       <div className="relative z-[1] mt-auto p-2 w-full">
         <span className="block text-[10px] leading-tight font-bold line-clamp-2" style={{ color: story ? '#fff' : 'var(--d-text)' }}>{own ? 'Tin của bạn' : (profile?.full_name || profile?.username || 'Thành viên').split(' ').slice(-2).join(' ')}</span>
       </div>
@@ -539,7 +540,13 @@ function Feed({ userId }) {
       })
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
       setPeople(peeps || [])
-      const { data: activeStories, error: storyError } = await supabase.from('stories').select('id,user_id,media_url,media_type,caption,created_at,expires_at,profiles!stories_user_id_fkey(full_name,username,avatar_url)').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
+      // Load active 24-hour stories independently; retry without the profile join if the FK relation is unavailable.
+      let { data: activeStories, error: storyError } = await supabase.from('stories').select('id,user_id,media_url,media_type,caption,created_at,expires_at,profiles!stories_user_id_fkey(full_name,username,avatar_url)').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
+      if (storyError) {
+        const fallback = await supabase.from('stories').select('id,user_id,media_url,media_type,caption,created_at,expires_at').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
+        activeStories = fallback.data
+        storyError = fallback.error
+      }
       if (!storyError) setStories(activeStories || [])
     } catch (e) {
       setLoadError(e?.message || 'Không thể tải bảng tin. Vui lòng thử lại.')
