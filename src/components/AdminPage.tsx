@@ -143,18 +143,17 @@ export function AdminPage({ userId }) {
     setGateError('')
     setLoadingData(true)
     try {
-      const { data: me, error: meErr } = await supabase
-        .from('profiles')
-        .select('is_admin,username,full_name,avatar_url')
-        .eq('id', userId)
-        .single()
-      if (meErr) {
+      const [{ data: adminAllowed, error: adminErr }, { data: me, error: meErr }] = await Promise.all([
+        supabase.rpc('admin_is_current_user'),
+        supabase.from('profiles').select('username,full_name,avatar_url').eq('id', userId).single(),
+      ])
+      if (adminErr || meErr) {
         setOk(false)
         setGate('error')
-        setGateError(meErr.message || 'Không đọc được hồ sơ')
+        setGateError(adminErr?.message || meErr?.message || 'Không kiểm tra được quyền quản trị')
         return
       }
-      if (!me?.is_admin) {
+      if (!adminAllowed) {
         setOk(false)
         setGate('denied')
         return
@@ -175,9 +174,9 @@ export function AdminPage({ userId }) {
         supabase.from('reports').select('id,reporter_id,target_type,target_id,reason,status,ai_score,ai_action,created_at,resolved_at,resolved_by').order('created_at', { ascending: false }).limit(120),
         supabase.from('ai_moderation_log').select('id,user_id,source,input_text,score,action,engine,reasons,created_at').order('created_at', { ascending: false }).limit(120),
         supabase.from('posts').select('id,author_id,user_id,content,is_published,created_at,ai_action,ai_score,ai_moderated_at,profiles!author_id(full_name,username,avatar_url)').order('created_at', { ascending: false }).limit(80),
-        supabase.from('profiles').select('id,username,full_name,avatar_url,is_online,last_seen,is_vip,vip_expires_at,is_admin,is_suspended,suspended_until,created_at').order('created_at', { ascending: false }).limit(100),
+        supabase.rpc('admin_list_profiles', { p_mode: 'users' }),
         supabase.from('admin_audit_log').select('id,admin_id,action,target_type,target_id,meta,created_at').order('created_at', { ascending: false }).limit(100),
-        supabase.from('profiles').select('id,username,full_name,avatar_url,follower_count,is_verified,verification_status,verification_requested_at,verification_reviewed_at,verification_rejection_reason,community_violation_count').neq('verification_status', 'none').order('verification_requested_at', { ascending: false }).limit(100),
+        supabase.rpc('admin_list_profiles', { p_mode: 'verification' }),
       ])
 
       let postRows = recentPostsQ.data || []
