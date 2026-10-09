@@ -401,13 +401,8 @@ export function AdminPage({ userId }) {
           <p className="text-sm d-muted leading-relaxed">
             {gate === 'error'
               ? (gateError || 'Không kiểm tra được quyền.')
-              : 'profiles.is_admin chưa bật. Chạy SQL trên Supabase rồi bấm Thử lại.'}
+              : 'Tài khoản chưa có quyền quản trị. Vui lòng liên hệ chủ quản hệ thống để được kiểm tra và cấp quyền an toàn.'}
           </p>
-          <div className="text-left rounded-xl p-3 text-xs overflow-auto" style={{ background: 'var(--d-surface-2)' }}>
-            <div className="d-muted mb-1">User ID:</div>
-            <code className="break-all font-mono">{userId}</code>
-            <pre className="mt-3 whitespace-pre-wrap font-mono">{`update public.profiles\nset is_admin = true\nwhere id = '${userId}';`}</pre>
-          </div>
           <div className="flex flex-wrap gap-2 justify-center">
             <button type="button" className="d-btn-primary text-sm" onClick={load}>Thử lại</button>
             <a href="/" className="text-sm px-4 py-2 rounded-xl d-muted" style={{ border: '1px solid var(--d-border)' }}>Về trang chủ</a>
