@@ -113,44 +113,55 @@ function Composer({ userId, onPublished, onClose }) {
     setError(''); setFile(f)
   }
   const publish = async () => {
-    if (!supabase) return
-    if (!postRateLimit(userId)) return setError('Bạn đăng quá nhanh, thử lại sau.')
+    if (busy) return
+    if (!supabase) return setError('Kết nối dịch vụ bài viết chưa sẵn sàng. Vui lòng tải lại ứng dụng.')
+    if (!userId) return setError('Anh cần đăng nhập lại trước khi đăng bài.')
+    if (!text.trim() && !file) return setError('Nhập nội dung hoặc đính kèm ảnh/video trước khi đăng.')
     const mod = moderateText(text)
     if (!mod.allowed) return setError(mod.reason)
-    if (!text.trim() && !file) return setError('Nhập nội dung hoặc đính kèm media.')
-    setBusy(true); setError('')
+    if (!postRateLimit(userId)) return setError('Anh đăng quá nhanh. Vui lòng chờ 60 giây rồi thử lại.')
+
+    setBusy(true)
+    setError('')
     try {
       let media_url = null, media_type = null
       if (file) {
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
-        if (up.error) throw up.error
+        if (up.error) throw new Error(`Không tải được ảnh/video: ${up.error.message}`)
         media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
         media_type = file.type.startsWith('video/') ? 'video' : 'image'
       }
       const { error: err } = await supabase.from('posts').insert({
         author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type, is_published: true,
       })
-      if (err) throw err
-      setText(''); setFile(null); onPublished(); onClose?.()
-    } catch (e) { setError(e.message || 'Không thể đăng') } finally { setBusy(false) }
+      if (err) throw new Error(`Không lưu được bài viết: ${err.message}`)
+      setText('')
+      setFile(null)
+      await onPublished?.()
+      onClose?.()
+    } catch (e) {
+      setError(e?.message || 'Không thể đăng bài. Vui lòng thử lại.')
+    } finally {
+      setBusy(false)
+    }
   }
   return (
     <section className="d-card p-4 mb-3">
       <div className="flex items-center justify-between mb-2">
         <div className="font-bold text-sm">Tạo bài viết</div>
-        {onClose && <button onClick={onClose} className="d-muted p-1"><X size={16} /></button>}
+        {onClose && <button type="button" onClick={onClose} className="d-muted p-1"><X size={16} /></button>}
       </div>
       <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-none outline-none min-h-[96px] text-[15px]" autoFocus />
-      {file && <div className="flex items-center justify-between p-2 rounded-xl text-sm mb-2" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.name}</span><button onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
+      {file && <div className="flex items-center justify-between p-2 rounded-xl text-sm mb-2" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.name}</span><button type="button" onClick={() => setFile(null)} className="d-muted p-1"><X size={16} /></button></div>}
       {error && <p className="text-sm mb-2" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <div className="flex items-center justify-between pt-2 border-t d-border-c">
         <label className="flex gap-3 d-muted cursor-pointer">
           <ImageIcon size={20} /><Video size={20} />
           <input hidden type="file" accept="image/*,video/*" onChange={e => pick(e.target.files?.[0])} />
         </label>
-        <button disabled={busy} onClick={publish} className="d-btn-primary text-sm">{busy ? 'Đang đăng...' : 'Đăng'}</button>
+        <button type="button" disabled={busy} onClick={publish} className="d-btn-primary text-sm">{busy ? 'Đang đăng...' : 'Đăng'}</button>
       </div>
     </section>
   )
