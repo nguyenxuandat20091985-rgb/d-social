@@ -80,38 +80,54 @@ function InstallBanner() {
   )
 }
 
-function StoryRail({ people, stories = [], onAddStory, onViewStory }) {
+function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
   const storyOwners = new Set(stories.map(s => s.user_id))
-  const storyProfiles = stories.map(s => {
-    const profile = Array.isArray(s.profiles) ? s.profiles[0] : s.profiles
-    return profile ? { ...profile, id: s.user_id } : null
-  }).filter(Boolean)
   const byId = new Map()
-  storyProfiles.forEach(p => { if (!byId.has(p.id)) byId.set(p.id, p) })
-  people.forEach(p => { if (!byId.has(p.id)) byId.set(p.id, p) })
-  const visiblePeople = [...byId.values()].slice(0, 24)
+  // Stories are loaded newest-first, so keep the newest active story as each owner's cover.
+  stories.forEach(s => {
+    const profile = Array.isArray(s.profiles) ? s.profiles[0] : s.profiles
+    if (profile && !byId.has(s.user_id)) byId.set(s.user_id, { ...profile, id: s.user_id, story: s })
+  })
+  const ownProfile = people.find(p => p.id === userId) || [...byId.values()].find(p => p.id === userId)
+  const ownStory = stories.find(s => s.user_id === userId)
+  const otherOwners = [...byId.values()].filter(p => p.id !== userId)
+  people.forEach(p => {
+    if (p.id !== userId && !byId.has(p.id)) otherOwners.push({ ...p, story: null })
+  })
+  const openStory = story => { if (story) onViewStory(story) }
+  const StoryTile = ({ profile, story, own = false }) => (
+    <button type="button" key={profile?.id || 'own-story'} onClick={() => story ? openStory(story) : onAddStory()} className="relative flex flex-col justify-between overflow-hidden rounded-2xl shrink-0 w-[88px] h-[138px] text-left border d-border-c" style={{ background: 'var(--d-surface-2)' }} aria-label={story ? 'Xem tin của ' + (profile?.full_name || profile?.username || 'bạn') : 'Đăng tin 24 giờ'}>
+      {story && story.media_type === 'image' && story.media_url
+        ? <img src={story.media_url} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        : story && story.media_type === 'video' && story.media_url
+          ? <div className="absolute inset-0 grid place-items-center bg-black"><Video size={30} className="text-white" /><span className="absolute bottom-12 right-2 text-white"><Video size={15}/></span></div>
+          : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/></div>}
+      {story && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />}
+      {!story && <div className="absolute inset-x-0 bottom-0 h-12 bg-[var(--d-surface)]" />}
+      {own && <span className="absolute top-2 left-2 z-10 rounded-full p-1.5 text-white" style={{ background: 'var(--d-primary)' }}><Plus size={15}/></span>}
+      <div className="relative z-[1] mt-auto p-2 w-full">
+        {own && !story && <div className="flex justify-center -mt-7 mb-1"><span className="rounded-full p-1.5 text-white ring-2 ring-[var(--d-surface)]" style={{ background: 'var(--d-primary)' }}><Plus size={17}/></span></div>}
+        <span className="block text-[10px] leading-tight font-bold line-clamp-2" style={{ color: story ? '#fff' : 'var(--d-text)' }}>{own ? 'Tin của bạn' : (profile?.full_name || profile?.username || 'Thành viên').split(' ').slice(-2).join(' ')}</span>
+      </div>
+      {own && story && <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); onAddStory() }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onAddStory() } }} className="absolute top-2 right-2 z-10 rounded-full p-1.5 text-white" style={{ background: 'var(--d-primary)' }} aria-label="Đăng thêm tin"><Plus size={15}/></span>}
+    </button>
+  )
   return (
     <section className="d-card p-3 mb-3">
-      <div className="flex items-center justify-between mb-2 px-1">
+      <div className="flex items-center justify-between mb-3 px-1">
         <div>
           <div className="font-black text-sm">Tin 24 giờ</div>
           <div className="text-[11px] d-muted">Ảnh/video tự hết hạn sau 24 giờ</div>
         </div>
         <button type="button" onClick={onAddStory} className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl px-3 py-2" style={{ color: 'var(--d-primary)', background: 'var(--d-primary-soft)' }}><CirclePlus size={16}/> Đăng tin</button>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-        {visiblePeople.map(p => {
-          const story = stories.find(s => s.user_id === p.id)
-          return <button type="button" key={p.id} onClick={() => story && onViewStory(story)} className="flex flex-col items-center gap-1.5 shrink-0 w-16" aria-label={story ? 'Xem tin của ' + (p.full_name || p.username) : (p.full_name || p.username || 'Thành viên')}>
-            <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring={storyOwners.has(p.id)} />
-            <span className="text-[10px] truncate w-full text-center" style={{ color: 'var(--d-text)' }}>{(p.full_name || p.username || 'User').split(' ').pop()}</span>
-          </button>
-        })}
+      <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
+        <StoryTile profile={ownProfile} story={ownStory} own />
+        {otherOwners.map(p => <StoryTile key={p.id} profile={p} story={p.story} />)}
       </div>
     </section>
   )
 }
-
 function Composer({ userId, onPublished, onClose }) {
   const [text, setText] = useState(() => {
     try { return localStorage.getItem(`d_home_draft_${userId}`) || '' } catch { return '' }
@@ -546,14 +562,7 @@ function Feed({ userId }) {
   return (
     <div className="home-feed max-w-3xl mx-auto px-3 pb-24 pt-3">
       <InstallBanner />
-      <div className="home-welcome mb-3">
-        <div>
-          <div className="text-xs font-semibold opacity-80">D SOCIAL</div>
-          <h1 className="text-xl sm:text-2xl font-black mt-0.5">Bảng tin</h1>
-          <p className="text-xs sm:text-sm opacity-80 mt-1">Cập nhật mới từ cộng đồng của bạn</p>
-        </div>
-      </div>
-      <StoryRail people={people} stories={stories} onAddStory={() => setShowStoryComposer(true)} onViewStory={setViewingStory} />
+      <StoryRail people={people} stories={stories} userId={userId} onAddStory={() => setShowStoryComposer(true)} onViewStory={setViewingStory} />
       {showStoryComposer && <StoryComposer userId={userId} onClose={() => setShowStoryComposer(false)} onPublished={() => load({ mode: feedMode })} />}
       {viewingStory && <StoryViewer story={viewingStory} position={stories.findIndex(s => s.id === viewingStory.id)} total={stories.length} hasPrev={stories.findIndex(s => s.id === viewingStory.id) > 0} hasNext={stories.findIndex(s => s.id === viewingStory.id) < stories.length - 1} onPrev={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i > 0) setViewingStory(stories[i - 1]) }} onNext={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i >= 0 && i < stories.length - 1) setViewingStory(stories[i + 1]) }} onClose={() => setViewingStory(null)} />}
       {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
