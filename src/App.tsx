@@ -195,6 +195,67 @@ function Composer({ userId, onPublished, onClose }) {
   )
 }
 
+function StoryComposer({ userId, onClose, onPublished }) {
+  const [file, setFile] = useState(null)
+  const [caption, setCaption] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const publish = async () => {
+    if (busy) return
+    if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
+    if (!file) return setError('Chọn một ảnh hoặc video để đăng tin.')
+    if (!['image/', 'video/'].some(x => file.type.startsWith(x))) return setError('Chỉ hỗ trợ ảnh và video.')
+    if (file.size > (file.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE)) return setError('Ảnh tối đa 8MB, video tối đa 30MB.')
+    const mod = moderateText(caption)
+    if (!mod.allowed) return setError(mod.reason)
+    setBusy(true); setError('')
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
+      const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
+      const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
+      if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
+      const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+      const { error: insertError } = await supabase.from('stories').insert({
+        user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
+        caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      })
+      if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
+      await onPublished?.()
+      onClose?.()
+    } catch (e) { setError(e?.message || 'Không đăng được tin. Vui lòng thử lại.') }
+    finally { setBusy(false) }
+  }
+  return <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center bg-black/55 p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}>
+    <section className="d-card w-full max-w-lg p-4 max-h-[88vh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
+      <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" className="d-muted p-2" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
+      <p className="text-xs d-muted mb-3">Tin sẽ tự ẩn sau 24 giờ. Chọn một ảnh hoặc video cho mỗi tin.</p>
+      <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 min-h-36 cursor-pointer d-border-c" style={{ background: 'var(--d-surface-2)' }}>
+        <ImageIcon size={28} style={{ color: 'var(--d-primary)' }}/><span className="text-sm font-semibold">{file ? file.name : 'Chọn ảnh hoặc video'}</span>
+        <input hidden type="file" accept="image/*,video/*" onChange={e => { setFile(e.target.files?.[0] || null); e.target.value = '' }}/>
+      </label>
+      <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" className="d-input mt-3 resize-y min-h-20"/>
+      {error && <p role="alert" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
+      <button type="button" disabled={busy} onClick={publish} className="d-btn-primary w-full mt-3">{busy ? 'Đang đăng tin...' : 'Đăng tin'}</button>
+    </section>
+  </div>
+}
+
+function StoryViewer({ story, onClose }) {
+  const profile = Array.isArray(story.profiles) ? story.profiles[0] : story.profiles
+  const name = profile?.full_name || profile?.username || 'Thành viên D'
+  const remaining = Math.max(0, Math.ceil((new Date(story.expires_at).getTime() - Date.now()) / 60000))
+  return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-3" role="dialog" aria-modal="true" aria-label="Xem tin" onClick={onClose}>
+    <div className="relative flex flex-col items-center justify-center w-full max-w-md h-[min(84vh,760px)]" onClick={e => e.stopPropagation()}>
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-3 p-3 text-white bg-gradient-to-b from-black/65 to-transparent rounded-t-2xl">
+        <Avatar src={profile?.avatar_url} name={name} size={36}/><div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{name}</div><div className="text-xs text-white/80">Còn khoảng {remaining} phút</div></div>
+        <button type="button" onClick={onClose} className="p-2" aria-label="Đóng tin"><X size={22}/></button>
+      </div>
+      {story.media_type === 'video' ? <video src={story.media_url} controls autoPlay playsInline className="w-full h-full object-contain rounded-2xl bg-black"/> : <img src={story.media_url} alt={story.caption || 'Tin 24 giờ'} className="w-full h-full object-contain rounded-2xl bg-black"/>}
+      {story.caption && <div className="absolute bottom-0 left-0 right-0 p-4 text-white text-sm whitespace-pre-wrap bg-gradient-to-t from-black/75 to-transparent rounded-b-2xl">{story.caption}</div>}
+    </div>
+  </div>
+}
+
 function PostCard({ post, userId, onRemoved }) {
   const [liked, setLiked] = useState(Boolean(userId && post.likes?.some(x => x.user_id === userId)))
   const [count, setCount] = useState(post.likes?.length || 0)
@@ -344,13 +405,14 @@ function PostCard({ post, userId, onRemoved }) {
         </div>
       </div>
       {content && <p className="px-4 pt-3 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>}
-      {post.media_url && (
-        <div className="mt-3">
-          {post.media_type === 'video' ? (
-            <video src={post.media_url} controls playsInline preload="metadata" className="w-full max-h-[75vh] bg-black object-contain" />
-          ) : (
-            <img src={post.media_url} alt="" className="w-full max-h-[560px] object-cover" loading="lazy" />
-          )}
+      {post.media_type === 'video' && post.media_url && (
+        <div className="mt-3"><video src={post.media_url} controls playsInline preload="metadata" className="w-full max-h-[75vh] bg-black object-contain" /></div>
+      )}
+      {post.media_type !== 'video' && (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls : (post.media_url ? [post.media_url] : [])).length > 0 && (
+        <div className={`mt-3 grid gap-1.5 ${(Array.isArray(post.image_urls) && post.image_urls.length > 1) ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {(Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls : [post.media_url]).slice(0, 10).map((url, index) => <button type="button" key={url + index} onClick={() => window.open(url, '_blank', 'noopener,noreferrer')} className="block w-full overflow-hidden bg-black/5" aria-label={`Mở ảnh ${index + 1}`}>
+            <img src={url} alt={`Ảnh ${index + 1} trong bài viết`} className="w-full max-h-[560px] aspect-auto object-contain" loading="lazy" />
+          </button>)}
         </div>
       )}
       <div className="px-4 pt-3 flex items-center justify-between text-xs d-muted">
@@ -426,7 +488,7 @@ function Feed({ userId }) {
       const offset = append ? posts.length : 0
       let query = supabase
         .from('posts')
-        .select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
+        .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
         .eq('is_published', true)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -435,7 +497,7 @@ function Feed({ userId }) {
       if (error) {
         let altQuery = supabase
           .from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
         if (followedIds) altQuery = altQuery.in('user_id', followedIds)
