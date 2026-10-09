@@ -91,19 +91,17 @@ export function ProfilePage({ userId }) {
 
   const loadProfile = async () => {
     if (!supabase) return
-    const [{ data: profile }, { data: posts }, { count: followerCount }, { count: followingCount }, { data: mine }, { data: theirs }] = await Promise.all([
+    const [{ data: profile }, { data: posts }, { count: followerCount }, { count: followingCount }, { count: friendCount }, { data: mine }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
       supabase.from('posts').select('id,content,media_url,media_type,created_at,likes(user_id)').eq('author_id', userId).is('deleted_at', null).order('created_at', { ascending: false }).limit(40),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
       supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
-      supabase.from('follows').select('following_id').eq('follower_id', userId),
-      supabase.from('follows').select('follower_id').eq('following_id', userId)
+      supabase.from('friend_requests').select('id', { count: 'exact', head: true }).eq('status', 'accepted').or(`requester_id.eq.${userId},addressee_id.eq.${userId}`),
+      supabase.from('follows').select('following_id').eq('follower_id', userId)
     ])
     if (profile) { setName(profile.full_name || ''); setUsername(profile.username || ''); setBio(profile.bio || ''); setAvatar(profile.avatar_url || ''); setIsVerified(Boolean(profile.is_verified)); setVerificationStatus(profile.verification_status || 'none'); setVerificationReason(profile.verification_rejection_reason || '') }
     setMyPosts(posts || [])
-    setFollowers(followerCount || 0); setFollowing(followingCount || 0)
-    const mineSet = new Set((mine || []).map(x => x.following_id))
-    setFriends((theirs || []).filter(x => mineSet.has(x.follower_id)).length)
+    setFollowers(followerCount || 0); setFollowing(followingCount || 0); setFriends(friendCount || 0)
     const fmap = {}
     ;(mine || []).forEach(x => { fmap[x.following_id] = true })
     setFollowingMap(fmap)
@@ -142,13 +140,19 @@ export function ProfilePage({ userId }) {
             .limit(100)
           if (alive) setListPeople((data || []).map(r => r.profiles).filter(Boolean))
         } else if (view === 'friends') {
-          const [{ data: mine }, { data: theirs }] = await Promise.all([
-            supabase.from('follows').select('following_id').eq('follower_id', userId),
-            supabase.from('follows').select('follower_id,profiles:follower_id(id,username,full_name,avatar_url)').eq('following_id', userId).limit(200)
-          ])
-          const mineSet = new Set((mine || []).map(x => x.following_id))
-          const friendsList = (theirs || []).filter(x => mineSet.has(x.follower_id)).map(x => x.profiles).filter(Boolean)
-          if (alive) setListPeople(friendsList)
+          const { data: accepted, error } = await supabase
+            .from('friend_requests')
+            .select('requester_id,addressee_id')
+            .eq('status', 'accepted')
+            .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+            .limit(200)
+          if (error) throw error
+          const friendIds = [...new Set((accepted || []).map(r => r.requester_id === userId ? r.addressee_id : r.requester_id))]
+          const { data: profiles, error: profilesError } = friendIds.length
+            ? await supabase.from('profiles').select('id,username,full_name,avatar_url').in('id', friendIds)
+            : { data: [], error: null }
+          if (profilesError) throw profilesError
+          if (alive) setListPeople(profiles || [])
         }
       } finally {
         if (alive) setListLoading(false)
