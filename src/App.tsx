@@ -104,12 +104,9 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
           : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/></div>}
       {story && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />}
       {!story && <div className="absolute inset-x-0 bottom-0 h-12 bg-[var(--d-surface)]" />}
-      {own && <span className="absolute top-2 left-2 z-10 rounded-full p-1.5 text-white" style={{ background: 'var(--d-primary)' }}><Plus size={15}/></span>}
       <div className="relative z-[1] mt-auto p-2 w-full">
-        {own && !story && <div className="flex justify-center -mt-7 mb-1"><span className="rounded-full p-1.5 text-white ring-2 ring-[var(--d-surface)]" style={{ background: 'var(--d-primary)' }}><Plus size={17}/></span></div>}
         <span className="block text-[10px] leading-tight font-bold line-clamp-2" style={{ color: story ? '#fff' : 'var(--d-text)' }}>{own ? 'Tin của bạn' : (profile?.full_name || profile?.username || 'Thành viên').split(' ').slice(-2).join(' ')}</span>
       </div>
-      {own && story && <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); onAddStory() }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onAddStory() } }} className="absolute top-2 right-2 z-10 rounded-full p-1.5 text-white" style={{ background: 'var(--d-primary)' }} aria-label="Đăng thêm tin"><Plus size={15}/></span>}
     </button>
   )
   return (
@@ -432,7 +429,9 @@ function PostCard({ post, userId, onRemoved }) {
       </div>
       {content && <p className="px-4 pt-3 text-[15px] leading-relaxed whitespace-pre-wrap break-words">{content}</p>}
       {post.media_type === 'video' && post.media_url && (
-        <div className="mt-3"><video src={post.media_url} controls playsInline preload="metadata" className="w-full max-h-[75vh] bg-black object-contain" /></div>
+        <div className="mt-3 w-full overflow-hidden">
+          <video src={post.media_url} controls playsInline preload="metadata" className="block w-full h-auto max-h-[75vh]" style={{ background: 'transparent' }} />
+        </div>
       )}
       {post.media_type !== 'video' && (Array.isArray(post.image_urls) && post.image_urls.length > 0 ? post.image_urls : (post.media_url ? [post.media_url] : [])).length > 0 && (
         <div className={`mt-3 grid gap-1.5 ${(Array.isArray(post.image_urls) && post.image_urls.length > 1) ? 'grid-cols-2' : 'grid-cols-1'}`}>
