@@ -292,14 +292,17 @@ function StoryComposer({ userId, onClose, onPublished }) {
     <section className="d-card home-story-composer w-full max-w-lg p-4 max-h-[90dvh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
       <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" disabled={busy} className="d-muted p-2 disabled:opacity-40" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
       <p className="text-xs d-muted mb-3">Chọn một ảnh hoặc video. Tin sẽ tự ẩn sau 24 giờ.</p>
-      <label className="home-story-file-picker flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 min-h-36 cursor-pointer d-border-c" style={{ background: 'var(--d-surface-2)' }}>
+      <div className="home-story-file-picker flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 min-h-36 d-border-c" style={{ background: 'var(--d-surface-2)' }}>
         {previewUrl && file?.type.startsWith('image/') ? <img src={previewUrl} alt="Xem trước ảnh tin" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
           previewUrl && file?.type.startsWith('video/') ? <video src={previewUrl} controls playsInline preload="metadata" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
           <ImageIcon size={28} style={{ color: 'var(--d-primary)' }}/>}
-        <span className="text-sm font-semibold text-center break-all">{file ? file.name : 'Chạm để chọn ảnh hoặc video'}</span>
-        {file && <span className="text-xs d-muted">{fileSize} · Chạm để đổi tệp</span>}
-        <input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e => { chooseFile(e.target.files); e.target.value = '' }}/>
-      </label>
+        <span className="text-sm font-semibold text-center break-all">{file ? file.name : 'Chưa chọn ảnh hoặc video'}</span>
+        {file && <span className="text-xs d-muted">{fileSize}</span>}
+        <label className="inline-flex items-center justify-center rounded-xl px-4 py-2 min-h-11 text-sm font-semibold cursor-pointer" style={{ background: 'var(--d-primary-soft)', color: 'var(--d-primary)' }}>
+          {file ? 'Đổi ảnh/video' : 'Chạm để chọn ảnh hoặc video'}
+          <input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e => { chooseFile(e.target.files); e.target.value = '' }}/>
+        </label>
+      </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
