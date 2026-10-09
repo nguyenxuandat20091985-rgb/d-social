@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -80,22 +80,25 @@ function InstallBanner() {
   )
 }
 
-function StoryRail({ people, onCompose }) {
+function StoryRail({ people, stories = [], onCompose, onAddStory, onViewStory }) {
+  const storyOwners = new Set(stories.map(s => s.user_id))
   return (
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-2 px-1">
         <div>
-          <div className="font-black text-sm">Thành viên mới</div>
-          <div className="text-[11px] d-muted">Gặp gỡ những người trong cộng đồng</div>
+          <div className="font-black text-sm">Tin 24 giờ</div>
+          <div className="text-[11px] d-muted">Ảnh/video tự hết hạn sau 24 giờ</div>
         </div>
+        <button type="button" onClick={onAddStory} className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl px-3 py-2" style={{ color: 'var(--d-primary)', background: 'var(--d-primary-soft)' }}><CirclePlus size={16}/> Đăng tin</button>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-        {(people || []).slice(0, 12).map(p => (
-          <div key={p.id} className="flex flex-col items-center gap-1.5 shrink-0 w-16">
-            <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring />
+        {people.slice(0, 12).map(p => {
+          const story = stories.find(s => s.user_id === p.id)
+          return <button type="button" key={p.id} onClick={() => story && onViewStory(story)} className="flex flex-col items-center gap-1.5 shrink-0 w-16" aria-label={story ? 'Xem tin của ' + (p.full_name || p.username) : (p.full_name || p.username || 'Thành viên')}>
+            <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring={storyOwners.has(p.id)} />
             <span className="text-[10px] truncate w-full text-center" style={{ color: 'var(--d-text)' }}>{(p.full_name || p.username || 'User').split(' ').pop()}</span>
-          </div>
-        ))}
+          </button>
+        })}
       </div>
     </section>
   )
@@ -105,7 +108,7 @@ function Composer({ userId, onPublished, onClose }) {
   const [text, setText] = useState(() => {
     try { return localStorage.getItem(`d_home_draft_${userId}`) || '' } catch { return '' }
   })
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -115,18 +118,22 @@ function Composer({ userId, onPublished, onClose }) {
       else localStorage.removeItem(key)
     } catch {}
   }, [text, userId])
-  const pick = f => {
-    if (!f) return
-    const limit = f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE
-    if (!['image/', 'video/'].some(x => f.type.startsWith(x)) || f.size > limit) return setError('File không hợp lệ (ảnh ≤8MB, video ≤30MB).')
-    setError(''); setFile(f)
+  const pick = selected => {
+    const incoming = Array.from(selected || [])
+    if (!incoming.length) return
+    const all = [...files, ...incoming]
+    if (all.some(f => !['image/', 'video/'].some(x => f.type.startsWith(x)))) return setError('Chỉ hỗ trợ ảnh và video.')
+    if (all.some(f => f.type.startsWith('video/')) && all.length > 1) return setError('Video phải đăng riêng; mỗi bài tối đa 10 ảnh.')
+    if (all.length > 10) return setError('Mỗi bài đăng tối đa 10 ảnh.')
+    if (all.some(f => f.size > (f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE))) return setError('Mỗi ảnh tối đa 8MB, video tối đa 30MB.')
+    setError(''); setFiles(all)
   }
   const publish = async () => {
     if (busy) return
     setError('')
     if (!supabase) return setError('Kết nối dịch vụ bài viết chưa sẵn sàng. Vui lòng tải lại ứng dụng.')
     if (!userId) return setError('Anh cần đăng nhập lại trước khi đăng bài.')
-    if (!text.trim() && !file) return setError('Nhập nội dung hoặc đính kèm ảnh/video trước khi đăng.')
+    if (!text.trim() && !files.length) return setError('Nhập nội dung hoặc đính kèm ảnh/video trước khi đăng.')
     const mod = moderateText(text)
     if (!mod.allowed) return setError(mod.reason)
     if (!postRateLimit(userId)) return setError('Anh đăng quá nhanh. Vui lòng chờ 60 giây rồi thử lại.')
@@ -134,20 +141,23 @@ function Composer({ userId, onPublished, onClose }) {
     setBusy(true)
     try {
       let media_url = null, media_type = null
-      if (file) {
+      const image_urls = []
+      for (const file of files) {
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
-        if (up.error) throw new Error(`Không tải được ảnh/video: ${up.error.message}`)
-        media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-        media_type = file.type.startsWith('video/') ? 'video' : 'image'
+        if (up.error) throw new Error(`Không tải được ${file.name}: ${up.error.message}`)
+        const url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+        if (file.type.startsWith('video/')) { media_url = url; media_type = 'video' }
+        else { image_urls.push(url); if (!media_url) media_url = url; media_type = 'image' }
       }
       const { error: err } = await supabase.from('posts').insert({
-        author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type, is_published: true,
+        author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type,
+        image_urls: image_urls.length ? image_urls : null, is_published: true,
       })
       if (err) throw new Error(`Không lưu được bài viết: ${err.message}`)
       setText('')
-      setFile(null)
+      setFiles([])
       try { localStorage.removeItem(`d_home_draft_${userId}`) } catch {}
       await onPublished?.()
       onClose?.()
@@ -169,12 +179,12 @@ function Composer({ userId, onPublished, onClose }) {
           {onClose && <button type="button" onClick={onClose} className="d-muted p-2" aria-label="Đóng"><X size={18} /></button>}
         </div>
         <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-y outline-none min-h-[120px] text-[15px]" autoFocus />
-        {file && <div className="flex items-center justify-between p-2 rounded-xl text-sm mb-2" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.name}</span><button type="button" onClick={() => setFile(null)} className="d-muted p-1" aria-label="Bỏ tệp"><X size={16} /></button></div>}
+        {files.length > 0 && <div className="space-y-2 mb-3">{files.map((file, index) => <div key={file.name + file.size + index} className="flex items-center justify-between gap-2 p-2 rounded-xl text-sm" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.type.startsWith('video/') ? '🎬 ' : '🖼️ '}{file.name}</span><button type="button" onClick={() => setFiles(current => current.filter((_, i) => i !== index))} className="d-muted p-2" aria-label="Bỏ tệp"><X size={16} /></button></div>)}</div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         <div className="flex items-center justify-between gap-3 pt-3 border-t d-border-c">
           <label className="flex gap-3 d-muted cursor-pointer items-center min-h-11 px-2" aria-label="Chọn ảnh hoặc video">
             <ImageIcon size={20} /><Video size={20} />
-            <input hidden type="file" accept="image/*,video/*" onChange={e => pick(e.target.files?.[0])} />
+            <input hidden type="file" accept="image/*,video/*" multiple onChange={e => { pick(e.target.files); e.target.value = '' }} />
           </label>
           <button type="button" disabled={busy} onClick={publish} className="d-btn-primary text-sm min-w-24 min-h-11">
             {busy ? 'Đang đăng...' : 'Đăng'}
@@ -381,6 +391,9 @@ function PostCard({ post, userId, onRemoved }) {
 function Feed({ userId }) {
   const [posts, setPosts] = useState([])
   const [people, setPeople] = useState([])
+  const [stories, setStories] = useState([])
+  const [showStoryComposer, setShowStoryComposer] = useState(false)
+  const [viewingStory, setViewingStory] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pageLoading, setPageLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
@@ -439,6 +452,8 @@ function Feed({ userId }) {
       })
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
       setPeople(peeps || [])
+      const { data: activeStories, error: storyError } = await supabase.from('stories').select('id,user_id,media_url,media_type,caption,created_at,expires_at,profiles!stories_user_id_fkey(full_name,username,avatar_url)').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
+      if (!storyError) setStories(activeStories || [])
     } catch (e) {
       setLoadError(e?.message || 'Không thể tải bảng tin. Vui lòng thử lại.')
     } finally {
@@ -466,7 +481,9 @@ function Feed({ userId }) {
           <p className="text-xs sm:text-sm opacity-80 mt-1">Cập nhật mới từ cộng đồng của bạn</p>
         </div>
       </div>
-      <StoryRail people={people} onCompose={() => setShowComposer(true)} />
+      <StoryRail people={people} stories={stories} onCompose={() => setShowComposer(true)} onAddStory={() => setShowStoryComposer(true)} onViewStory={setViewingStory} />
+      {showStoryComposer && <StoryComposer userId={userId} onClose={() => setShowStoryComposer(false)} onPublished={() => load({ mode: feedMode })} />}
+      {viewingStory && <StoryViewer story={viewingStory} onClose={() => setViewingStory(null)} />}
       {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
         <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
