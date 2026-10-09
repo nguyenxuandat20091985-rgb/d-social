@@ -137,8 +137,11 @@ function Composer({ userId, onPublished, onClose }) {
     try { return localStorage.getItem(`d_home_draft_${userId}`) || '' } catch { return '' }
   })
   const [files, setFiles] = useState([])
+  const [previews, setPreviews] = useState([])
   const [busy, setBusy] = useState(false)
+  const [stage, setStage] = useState('')
   const [error, setError] = useState('')
+
   useEffect(() => {
     try {
       const key = `d_home_draft_${userId}`
@@ -146,16 +149,37 @@ function Composer({ userId, onPublished, onClose }) {
       else localStorage.removeItem(key)
     } catch {}
   }, [text, userId])
+
+  useEffect(() => {
+    const urls = files.map(file => URL.createObjectURL(file))
+    setPreviews(urls)
+    return () => urls.forEach(url => URL.revokeObjectURL(url))
+  }, [files])
+
   const pick = selected => {
     const incoming = Array.from(selected || [])
     if (!incoming.length) return
     const all = [...files, ...incoming]
-    if (all.some(f => !['image/', 'video/'].some(x => f.type.startsWith(x)))) return setError('Chỉ hỗ trợ ảnh và video.')
-    if (all.some(f => f.type.startsWith('video/')) && all.length > 1) return setError('Video phải đăng riêng; mỗi bài tối đa 10 ảnh.')
-    if (all.length > 10) return setError('Mỗi bài đăng tối đa 10 ảnh.')
-    if (all.some(f => f.size > (f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE))) return setError('Mỗi ảnh tối đa 8MB, video tối đa 30MB.')
-    setError(''); setFiles(all)
+    if (all.some(f => !['image/', 'video/'].some(x => f.type.startsWith(x)))) {
+      setError('Chỉ hỗ trợ ảnh và video.')
+      return
+    }
+    if (all.some(f => f.type.startsWith('video/')) && all.length > 1) {
+      setError('Video phải đăng riêng; mỗi bài tối đa 10 ảnh.')
+      return
+    }
+    if (all.length > 10) {
+      setError('Mỗi bài đăng tối đa 10 ảnh.')
+      return
+    }
+    if (all.some(f => f.size > (f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE))) {
+      setError('Mỗi ảnh tối đa 8MB, video tối đa 30MB.')
+      return
+    }
+    setError('')
+    setFiles(all)
   }
+
   const publish = async () => {
     if (busy) return
     setError('')
@@ -170,7 +194,9 @@ function Composer({ userId, onPublished, onClose }) {
     try {
       let media_url = null, media_type = null
       const image_urls = []
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
@@ -179,45 +205,66 @@ function Composer({ userId, onPublished, onClose }) {
         if (file.type.startsWith('video/')) { media_url = url; media_type = 'video' }
         else { image_urls.push(url); if (!media_url) media_url = url; media_type = 'image' }
       }
+      setStage('Đang lưu bài viết…')
       const { error: err } = await supabase.from('posts').insert({
         author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type,
         image_urls: image_urls.length ? image_urls : null, is_published: true,
       })
       if (err) throw new Error(`Không lưu được bài viết: ${err.message}`)
+
       setText('')
       setFiles([])
       try { localStorage.removeItem(`d_home_draft_${userId}`) } catch {}
-      await onPublished?.()
       onClose?.()
+      // Close immediately after saving; let the feed refresh without blocking the composer.
+      Promise.resolve().then(() => onPublished?.()).catch(err => console.error('Không làm mới bảng tin:', err))
     } catch (e) {
       setError(e?.message || 'Không thể đăng bài. Vui lòng thử lại.')
     } finally {
       setBusy(false)
+      setStage('')
     }
   }
+
+  const formatSize = size => size >= 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(size / 1024)) + ' KB'
+
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-3"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-2 sm:p-3"
       style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}
     >
-      <section className="d-card w-full max-w-2xl max-h-[88vh] overflow-y-auto p-4 mb-0 shadow-2xl" role="dialog" aria-modal="true" aria-label="Tạo bài viết">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-bold text-sm">Tạo bài viết</div>
-          {onClose && <button type="button" onClick={onClose} className="d-muted p-2" aria-label="Đóng"><X size={18} /></button>}
+      <section className="d-card home-post-composer w-full max-w-2xl max-h-[92dvh] overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" role="dialog" aria-modal="true" aria-label="Tạo bài viết">
+        <div className="flex items-center justify-between mb-3">
+          <div><div className="font-bold text-base">Tạo bài viết</div><div className="text-xs d-muted mt-0.5">Chia sẻ với cộng đồng của bạn</div></div>
+          {onClose && <button type="button" disabled={busy} onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center disabled:opacity-40" aria-label="Đóng"><X size={18} /></button>}
         </div>
-        <textarea value={text} onChange={e => setText(e.target.value)} maxLength={2000} placeholder="Bạn đang nghĩ gì?" className="w-full bg-transparent resize-y outline-none min-h-[120px] text-[15px]" autoFocus />
-        {files.length > 0 && <div className="space-y-2 mb-3">{files.map((file, index) => <div key={file.name + file.size + index} className="flex items-center justify-between gap-2 p-2 rounded-xl text-sm" style={{ background: 'var(--d-surface-2)' }}><span className="truncate">{file.type.startsWith('video/') ? '🎬 ' : '🖼️ '}{file.name}</span><button type="button" onClick={() => setFiles(current => current.filter((_, i) => i !== index))} className="d-muted p-2" aria-label="Bỏ tệp"><X size={16} /></button></div>)}</div>}
-        {error && <p role="alert" aria-live="polite" className="text-sm mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t d-border-c">
-          <label className="flex gap-3 d-muted cursor-pointer items-center min-h-11 px-2" aria-label="Chọn ảnh hoặc video">
-            <ImageIcon size={20} /><Video size={20} />
-            <input hidden type="file" accept="image/*,video/*" multiple onChange={e => { pick(e.target.files); e.target.value = '' }} />
+        <textarea value={text} onChange={e => { setText(e.target.value); if (error) setError('') }} maxLength={2000} placeholder="Bạn đang nghĩ gì?" disabled={busy} className="home-post-textarea w-full bg-transparent resize-y outline-none min-h-[112px] text-[15px] disabled:opacity-70" autoFocus />
+        {files.length > 0 && <div className="home-post-media-grid mt-3 mb-3">
+          {files.map((file, index) => <div key={file.name + file.size + index} className="home-post-media-item">
+            {file.type.startsWith('image/') && previews[index]
+              ? <img src={previews[index]} alt={`Xem trước ${file.name}`} className="home-post-media-preview" />
+              : file.type.startsWith('video/') && previews[index]
+                ? <video src={previews[index]} controls playsInline preload="metadata" className="home-post-media-preview home-post-video-preview" />
+                : null}
+            <div className="flex items-center justify-between gap-2 p-2">
+              <div className="min-w-0"><span className="block text-xs font-semibold truncate">{file.name}</span><span className="block text-[11px] d-muted">{formatSize(file.size)}</span></div>
+              <button type="button" disabled={busy} onClick={() => setFiles(current => current.filter((_, i) => i !== index))} className="d-muted p-2 min-w-10 min-h-10 grid place-items-center disabled:opacity-40" aria-label={`Bỏ ${file.name}`}><X size={16} /></button>
+            </div>
+          </div>)}
+        </div>}
+        {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
+        {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
+        <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
+          <label className="home-post-attach flex gap-2 d-muted cursor-pointer items-center min-h-11 px-3 rounded-xl" aria-label="Chọn ảnh hoặc video">
+            <ImageIcon size={19} /><Video size={19} /><span className="text-xs font-semibold">{files.length ? 'Thêm tệp' : 'Ảnh/video'}</span>
+            <input hidden type="file" accept="image/*,video/*" multiple disabled={busy} onChange={e => { pick(e.target.files); e.target.value = '' }} />
           </label>
-          <button type="button" disabled={busy} onClick={publish} className="d-btn-primary text-sm min-w-24 min-h-11">
-            {busy ? 'Đang đăng...' : 'Đăng'}
+          <button type="button" disabled={busy || (!text.trim() && !files.length)} onClick={publish} className="d-btn-primary home-post-submit text-sm min-w-28 min-h-11">
+            {busy ? 'Đang đăng…' : 'Đăng bài'}
           </button>
         </div>
+        <p className="text-[11px] d-muted mt-2">Tối đa 10 ảnh mỗi bài; video đăng riêng. Bản nháp được lưu trên thiết bị.</p>
       </section>
     </div>
   )
