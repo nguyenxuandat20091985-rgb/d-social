@@ -89,7 +89,7 @@ function StoryRail({ people, stories = [], onAddStory, onViewStory }) {
   const byId = new Map()
   storyProfiles.forEach(p => { if (!byId.has(p.id)) byId.set(p.id, p) })
   people.forEach(p => { if (!byId.has(p.id)) byId.set(p.id, p) })
-  const visiblePeople = [...byId.values()].slice(0, 24)
+  const visiblePeople = [...byId.values()]
   return (
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-2 px-1">
