@@ -104,12 +104,9 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
           : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/></div>}
       {story && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />}
       {!story && <div className="absolute inset-x-0 bottom-0 h-12 bg-[var(--d-surface)]" />}
-      {own && <span className="absolute top-2 left-2 z-10 rounded-full p-1.5 text-white" style={{ background: 'var(--d-primary)' }}><Plus size={15}/></span>}
       <div className="relative z-[1] mt-auto p-2 w-full">
-        {own && !story && <div className="flex justify-center -mt-7 mb-1"><span className="rounded-full p-1.5 text-white ring-2 ring-[var(--d-surface)]" style={{ background: 'var(--d-primary)' }}><Plus size={17}/></span></div>}
         <span className="block text-[10px] leading-tight font-bold line-clamp-2" style={{ color: story ? '#fff' : 'var(--d-text)' }}>{own ? 'Tin của bạn' : (profile?.full_name || profile?.username || 'Thành viên').split(' ').slice(-2).join(' ')}</span>
       </div>
-      {own && story && <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); onAddStory() }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onAddStory() } }} className="absolute top-2 right-2 z-10 rounded-full p-1.5 text-white" style={{ background: 'var(--d-primary)' }} aria-label="Đăng thêm tin"><Plus size={15}/></span>}
     </button>
   )
   return (
