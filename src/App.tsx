@@ -81,7 +81,6 @@ function InstallBanner() {
 }
 
 function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
-  const storyOwners = new Set(stories.map(s => s.user_id))
   const byId = new Map()
   // Stories are loaded newest-first, so keep the newest active story as each owner's cover.
   stories.forEach(s => {
@@ -91,17 +90,29 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
   })
   const ownProfile = people.find(p => p.id === userId) || [...byId.values()].find(p => p.id === userId)
   const ownStory = stories.find(s => s.user_id === userId)
+  // Only show members who actually have an active story; empty profile tiles
+  // otherwise incorrectly open the story composer when tapped.
   const otherOwners = [...byId.values()].filter(p => p.id !== userId)
-  people.forEach(p => {
-    if (p.id !== userId && !byId.has(p.id)) otherOwners.push({ ...p, story: null })
-  })
   const openStory = story => { if (story) onViewStory(story) }
   const StoryTile = ({ profile, story, own = false }) => (
     <button type="button" key={profile?.id || 'own-story'} onClick={() => story ? openStory(story) : onAddStory()} className="relative flex flex-col justify-between overflow-hidden rounded-2xl shrink-0 w-[88px] h-[138px] text-left border d-border-c" style={{ background: 'var(--d-surface-2)' }} aria-label={story ? 'Xem tin của ' + (profile?.full_name || profile?.username || 'bạn') : 'Đăng tin 24 giờ'}>
       {story && story.media_type === 'image' && story.media_url
         ? <img src={story.media_url} alt="" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
         : story && story.media_type === 'video' && story.media_url
-          ? <div className="absolute inset-0 grid place-items-center bg-black"><Video size={30} className="text-white" /></div>
+          ? <div className="absolute inset-0 overflow-hidden bg-black">
+              <video
+                src={story.media_url}
+                muted
+                autoPlay
+                loop
+                playsInline
+                preload="auto"
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                onError={e => { e.currentTarget.style.display = 'none' }}
+              />
+              <span className="absolute right-2 top-2 z-[1] grid place-items-center rounded-full bg-black/55 p-1.5 text-white" aria-hidden="true"><Video size={14} /></span>
+            </div>
           : <div className="absolute inset-0 grid place-items-center" style={{ background: 'var(--d-surface-2)' }}><Avatar src={profile?.avatar_url} name={profile?.full_name || profile?.username || 'D'} size={44}/></div>}
       {story && <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />}
       {!story && <div className="absolute inset-x-0 bottom-0 h-12 bg-[var(--d-surface)]" />}
