@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -102,10 +102,19 @@ function StoryRail({ people, onCompose }) {
 }
 
 function Composer({ userId, onPublished, onClose }) {
-  const [text, setText] = useState('')
+  const [text, setText] = useState(() => {
+    try { return localStorage.getItem(`d_home_draft_${userId}`) || '' } catch { return '' }
+  })
   const [file, setFile] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => {
+    try {
+      const key = `d_home_draft_${userId}`
+      if (text.trim()) localStorage.setItem(key, text)
+      else localStorage.removeItem(key)
+    } catch {}
+  }, [text, userId])
   const pick = f => {
     if (!f) return
     const limit = f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE
@@ -139,6 +148,7 @@ function Composer({ userId, onPublished, onClose }) {
       if (err) throw new Error(`Không lưu được bài viết: ${err.message}`)
       setText('')
       setFile(null)
+      try { localStorage.removeItem(`d_home_draft_${userId}`) } catch {}
       await onPublished?.()
       onClose?.()
     } catch (e) {
@@ -181,6 +191,8 @@ function PostCard({ post, userId, onRemoved }) {
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState([])
   const [comment, setComment] = useState('')
+  const [commentError, setCommentError] = useState('')
+  const [commentBusy, setCommentBusy] = useState(false)
   const [menu, setMenu] = useState(false)
   const [saved, setSaved] = useState(false)
   const [content, setContent] = useState(post.content)
@@ -224,16 +236,26 @@ function PostCard({ post, userId, onRemoved }) {
   }
 
   const addComment = async () => {
-    if (!supabase || !userId || !comment.trim() || !commentRateLimit(userId)) return
+    setCommentError('')
+    if (commentBusy) return
+    if (!supabase || !userId) return setCommentError('Anh cần đăng nhập để bình luận.')
+    if (!comment.trim()) return setCommentError('Nhập nội dung bình luận trước khi gửi.')
+    if (!commentRateLimit(userId)) return setCommentError('Anh bình luận quá nhanh. Vui lòng chờ rồi thử lại.')
     const mod = moderateText(comment)
-    if (!mod.allowed) return
+    if (!mod.allowed) return setCommentError(mod.reason || 'Bình luận chưa được chấp nhận.')
     const body = comment.trim()
-    const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: body })
-    if (!error) {
+    setCommentBusy(true)
+    try {
+      const { error } = await supabase.from('comments').insert({ post_id: post.id, author_id: userId, content: body })
+      if (error) throw new Error(error.message || 'Không gửi được bình luận.')
       setComment('')
       if (post.author_id && post.author_id !== userId) {
         try { await supabase.rpc('create_notification', { p_user_id: post.author_id, p_actor_id: userId, p_type: 'comment', p_target_type: 'post', p_target_id: post.id, p_title: 'Bình luận mới', p_body: body.slice(0, 120) }) } catch {}
       }
+    } catch (e) {
+      setCommentError(e?.message || 'Không gửi được bình luận. Vui lòng thử lại.')
+    } finally {
+      setCommentBusy(false)
     }
   }
 
@@ -345,9 +367,10 @@ function PostCard({ post, userId, onRemoved }) {
               </div>
             </div>
           ))}
+          {commentError && <p role="alert" aria-live="polite" className="text-xs break-words" style={{ color: 'var(--d-danger)' }}>{commentError}</p>}
           <div className="flex gap-2 mt-2">
-            <input className="d-input flex-1 text-sm py-2" value={comment} onChange={e => setComment(e.target.value)} placeholder="Viết bình luận..." onKeyDown={e => e.key === 'Enter' && addComment()} />
-            <button type="button" className="d-btn-primary text-xs px-3" onClick={addComment}>Gửi</button>
+            <input className="d-input flex-1 text-sm py-2" value={comment} onChange={e => { setComment(e.target.value); if (commentError) setCommentError('') }} placeholder="Viết bình luận..." onKeyDown={e => e.key === 'Enter' && !e.shiftKey && addComment()} />
+            <button type="button" className="d-btn-primary text-xs px-3 min-h-10" disabled={commentBusy} onClick={addComment}>{commentBusy ? 'Đang gửi...' : 'Gửi'}</button>
           </div>
         </div>
       )}
@@ -359,36 +382,79 @@ function Feed({ userId }) {
   const [posts, setPosts] = useState([])
   const [people, setPeople] = useState([])
   const [loading, setLoading] = useState(true)
+  const [pageLoading, setPageLoading] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [showComposer, setShowComposer] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [feedMode, setFeedMode] = useState('latest')
 
-  const load = async () => {
-    if (!supabase) return
-    setLoading(true); setLoadError('')
+  const load = async ({ append = false, mode = feedMode } = {}) => {
+    if (!supabase) {
+      setLoading(false)
+      setLoadError('Dịch vụ bảng tin chưa kết nối. Vui lòng tải lại ứng dụng.')
+      return
+    }
+    if (append) setPageLoading(true)
+    else { setLoading(true); setLoadError(''); setHasMore(true) }
     try {
-      let { data, error } = await supabase
+      let followedIds = null
+      if (mode === 'following') {
+        const follows = await supabase.from('follows').select('following_id').eq('follower_id', userId)
+        if (follows.error) throw new Error('Chưa tải được danh sách đang theo dõi. Vui lòng thử lại.')
+        followedIds = (follows.data || []).map(x => x.following_id).filter(Boolean)
+        if (!followedIds.length) {
+          setPosts([])
+          setHasMore(false)
+          const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
+          setPeople(peeps || [])
+          return
+        }
+      }
+      const offset = append ? posts.length : 0
+      let query = supabase
         .from('posts')
         .select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
         .eq('is_published', true)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
-        .limit(40)
-      if (error || !data?.length) {
-        const alt = await supabase
+      if (followedIds) query = query.in('author_id', followedIds)
+      let { data, error } = await query.range(offset, offset + 19)
+      if (error) {
+        let altQuery = supabase
           .from('posts')
           .select('id,author_id,user_id,content,media_url,media_type,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .order('created_at', { ascending: false })
-          .limit(40)
+        if (followedIds) altQuery = altQuery.in('user_id', followedIds)
+        const alt = await altQuery.range(offset, offset + 19)
+        if (alt.error) throw new Error(alt.error.message || 'Không thể tải bảng tin.')
         data = (alt.data || []).filter(p => !p.deleted_at)
       }
-      setPosts(data || [])
+      const page = data || []
+      setHasMore(page.length === 20)
+      setPosts(current => {
+        const combined = append ? [...current, ...page.filter(p => !current.some(old => old.id === p.id))] : page
+        if (mode === 'popular') return [...combined].sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0))
+        return combined
+      })
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
       setPeople(peeps || [])
-    } catch (e) { setLoadError(e?.message || 'Không thể tải bảng tin. Vui lòng thử lại.') } finally { setLoading(false) }
+    } catch (e) {
+      setLoadError(e?.message || 'Không thể tải bảng tin. Vui lòng thử lại.')
+    } finally {
+      setLoading(false)
+      setPageLoading(false)
+    }
   }
 
-  useEffect(() => { load() }, [userId])
+  useEffect(() => { load({ mode: feedMode }) }, [userId, feedMode])
+
+  const changeMode = mode => {
+    if (mode === feedMode) return
+    setFeedMode(mode)
+    setPosts([])
+    setLoading(true)
+  }
 
   return (
     <div className="home-feed max-w-3xl mx-auto px-3 pb-24 pt-3">
@@ -399,20 +465,28 @@ function Feed({ userId }) {
           <h1 className="text-xl sm:text-2xl font-black mt-0.5">Bảng tin</h1>
           <p className="text-xs sm:text-sm opacity-80 mt-1">Cập nhật mới từ cộng đồng của bạn</p>
         </div>
-        
       </div>
       <StoryRail people={people} onCompose={() => setShowComposer(true)} />
-      {showComposer && <Composer userId={userId} onPublished={load} onClose={() => setShowComposer(false)} />}
+      {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
         <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
       )}
-      <div className="home-feed-heading"><div><h2>Bài viết mới</h2><p>Chia sẻ và kết nối mỗi ngày</p></div><button type="button" onClick={load} disabled={loading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
+      <section className="d-card p-2 mb-3" aria-label="Lọc bảng tin">
+        <div className="grid grid-cols-3 gap-2">
+          <button type="button" onClick={() => changeMode('latest')} aria-pressed={feedMode === 'latest'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'latest' ? 'd-btn-primary' : 'd-muted'}`}><Clock3 size={15} /> Mới nhất</button>
+          <button type="button" onClick={() => changeMode('following')} aria-pressed={feedMode === 'following'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'following' ? 'd-btn-primary' : 'd-muted'}`}><UsersRound size={15} /> Đang theo dõi</button>
+          <button type="button" onClick={() => changeMode('popular')} aria-pressed={feedMode === 'popular'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'popular' ? 'd-btn-primary' : 'd-muted'}`}><TrendingUp size={15} /> Nổi bật</button>
+        </div>
+      </section>
+      <div className="home-feed-heading"><div><h2>{feedMode === 'latest' ? 'Bài viết mới' : feedMode === 'following' ? 'Từ người đang theo dõi' : 'Bài viết nổi bật'}</h2><p>{feedMode === 'latest' ? 'Chia sẻ và kết nối mỗi ngày' : feedMode === 'following' ? 'Cập nhật từ những tài khoản anh theo dõi' : 'Xếp theo lượt thích trong các bài đã tải'}</p></div><button type="button" onClick={() => load({ mode: feedMode })} disabled={loading || pageLoading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
       {loading && <div className="home-feed-loading"><span className="home-loading-dot" /> Đang tải bài viết...</div>}
-      {!loading && loadError && <div className="d-card p-6 text-center"><p className="text-sm mb-3" style={{color: 'var(--d-danger)'}}>{loadError}</p><button type="button" className="d-btn-primary text-sm" onClick={load}>Thử tải lại</button></div>}
-      {!loading && !loadError && posts.length === 0 && <div className="home-empty d-card p-8 text-center"><div className="home-empty-icon"><MessageSquare size={25}/></div><h3>Chưa có bài viết mới</h3><p>Hãy chia sẻ điều đầu tiên để bắt đầu cuộc trò chuyện cùng cộng đồng.</p><button type="button" className="d-btn-primary text-sm mt-4" onClick={() => setShowComposer(true)}><Plus size={16}/> Tạo bài viết</button></div>}
+      {!loading && loadError && <div className="d-card p-6 text-center"><p className="text-sm mb-3" style={{color: 'var(--d-danger)'}}>{loadError}</p><button type="button" className="d-btn-primary text-sm" onClick={() => load({ mode: feedMode })}>Thử tải lại</button></div>}
+      {!loading && !loadError && posts.length === 0 && <div className="home-empty d-card p-8 text-center"><div className="home-empty-icon"><MessageSquare size={25}/></div><h3>{feedMode === 'following' ? 'Chưa có bài viết từ người anh theo dõi' : 'Chưa có bài viết mới'}</h3><p>{feedMode === 'following' ? 'Theo dõi hoặc kết bạn với mọi người để xem bài viết của họ tại đây.' : 'Hãy chia sẻ điều đầu tiên để bắt đầu cuộc trò chuyện cùng cộng đồng.'}</p><button type="button" className="d-btn-primary text-sm mt-4" onClick={() => setShowComposer(true)}><Plus size={16}/> Tạo bài viết</button></div>}
       {posts.map(p => (
         <PostCard key={p.id} post={p} userId={userId} onRemoved={(id) => setPosts(x => x.filter(y => y.id !== id))} />
       ))}
+      {!loading && !loadError && posts.length > 0 && hasMore && <div className="text-center py-3"><button type="button" className="d-btn-primary text-sm px-5 py-3 min-h-11" disabled={pageLoading} onClick={() => load({ append: true, mode: feedMode })}>{pageLoading ? 'Đang tải thêm...' : 'Xem thêm bài viết'}</button></div>}
+      {!loading && !loadError && posts.length > 0 && !hasMore && <p className="text-center text-xs d-muted py-4">Anh đã xem hết bài viết hiện có.</p>}
     </div>
   )
 }
