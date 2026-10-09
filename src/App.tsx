@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -80,8 +80,16 @@ function InstallBanner() {
   )
 }
 
-function StoryRail({ people, stories = [], onCompose, onAddStory, onViewStory }) {
+function StoryRail({ people, stories = [], onAddStory, onViewStory }) {
   const storyOwners = new Set(stories.map(s => s.user_id))
+  const storyProfiles = stories.map(s => {
+    const profile = Array.isArray(s.profiles) ? s.profiles[0] : s.profiles
+    return profile ? { ...profile, id: s.user_id } : null
+  }).filter(Boolean)
+  const byId = new Map()
+  storyProfiles.forEach(p => { if (!byId.has(p.id)) byId.set(p.id, p) })
+  people.forEach(p => { if (!byId.has(p.id)) byId.set(p.id, p) })
+  const visiblePeople = [...byId.values()].slice(0, 24)
   return (
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-2 px-1">
@@ -92,7 +100,7 @@ function StoryRail({ people, stories = [], onCompose, onAddStory, onViewStory })
         <button type="button" onClick={onAddStory} className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl px-3 py-2" style={{ color: 'var(--d-primary)', background: 'var(--d-primary-soft)' }}><CirclePlus size={16}/> Đăng tin</button>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
-        {people.slice(0, 12).map(p => {
+        {visiblePeople.map(p => {
           const story = stories.find(s => s.user_id === p.id)
           return <button type="button" key={p.id} onClick={() => story && onViewStory(story)} className="flex flex-col items-center gap-1.5 shrink-0 w-16" aria-label={story ? 'Xem tin của ' + (p.full_name || p.username) : (p.full_name || p.username || 'Thành viên')}>
             <Avatar src={p.avatar_url} name={p.full_name || p.username} size={52} ring={storyOwners.has(p.id)} />
@@ -240,17 +248,19 @@ function StoryComposer({ userId, onClose, onPublished }) {
   </div>
 }
 
-function StoryViewer({ story, onClose }) {
+function StoryViewer({ story, onClose, onPrev, onNext, hasPrev, hasNext, position, total }) {
   const profile = Array.isArray(story.profiles) ? story.profiles[0] : story.profiles
   const name = profile?.full_name || profile?.username || 'Thành viên D'
   const remaining = Math.max(0, Math.ceil((new Date(story.expires_at).getTime() - Date.now()) / 60000))
   return <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-3" role="dialog" aria-modal="true" aria-label="Xem tin" onClick={onClose}>
     <div className="relative flex flex-col items-center justify-center w-full max-w-md h-[min(84vh,760px)]" onClick={e => e.stopPropagation()}>
       <div className="absolute top-0 left-0 right-0 z-10 flex items-center gap-3 p-3 text-white bg-gradient-to-b from-black/65 to-transparent rounded-t-2xl">
-        <Avatar src={profile?.avatar_url} name={name} size={36}/><div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{name}</div><div className="text-xs text-white/80">Còn khoảng {remaining} phút</div></div>
+        <Avatar src={profile?.avatar_url} name={name} size={36}/><div className="flex-1 min-w-0"><div className="font-bold text-sm truncate">{name}</div><div className="text-xs text-white/80">Còn khoảng {remaining} phút · Tin {position + 1}/{total}</div></div>
         <button type="button" onClick={onClose} className="p-2" aria-label="Đóng tin"><X size={22}/></button>
       </div>
-      {story.media_type === 'video' ? <video src={story.media_url} controls autoPlay playsInline className="w-full h-full object-contain rounded-2xl bg-black"/> : <img src={story.media_url} alt={story.caption || 'Tin 24 giờ'} className="w-full h-full object-contain rounded-2xl bg-black"/>}
+      {story.media_type === 'video' ? <video key={story.id} src={story.media_url} controls autoPlay playsInline className="w-full h-full object-contain rounded-2xl bg-black"/> : <img key={story.id} src={story.media_url} alt={story.caption || 'Tin 24 giờ'} className="w-full h-full object-contain rounded-2xl bg-black"/>}
+      {hasPrev && <button type="button" onClick={onPrev} aria-label="Tin trước" className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full p-2 text-white bg-black/45"><ChevronLeft size={26}/></button>}
+      {hasNext && <button type="button" onClick={onNext} aria-label="Tin tiếp theo" className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-2 text-white bg-black/45"><ChevronRight size={26}/></button>}
       {story.caption && <div className="absolute bottom-0 left-0 right-0 p-4 text-white text-sm whitespace-pre-wrap bg-gradient-to-t from-black/75 to-transparent rounded-b-2xl">{story.caption}</div>}
     </div>
   </div>
@@ -543,9 +553,9 @@ function Feed({ userId }) {
           <p className="text-xs sm:text-sm opacity-80 mt-1">Cập nhật mới từ cộng đồng của bạn</p>
         </div>
       </div>
-      <StoryRail people={people} stories={stories} onCompose={() => setShowComposer(true)} onAddStory={() => setShowStoryComposer(true)} onViewStory={setViewingStory} />
+      <StoryRail people={people} stories={stories} onAddStory={() => setShowStoryComposer(true)} onViewStory={setViewingStory} />
       {showStoryComposer && <StoryComposer userId={userId} onClose={() => setShowStoryComposer(false)} onPublished={() => load({ mode: feedMode })} />}
-      {viewingStory && <StoryViewer story={viewingStory} onClose={() => setViewingStory(null)} />}
+      {viewingStory && <StoryViewer story={viewingStory} position={stories.findIndex(s => s.id === viewingStory.id)} total={stories.length} hasPrev={stories.findIndex(s => s.id === viewingStory.id) > 0} hasNext={stories.findIndex(s => s.id === viewingStory.id) < stories.length - 1} onPrev={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i > 0) setViewingStory(stories[i - 1]) }} onNext={() => { const i = stories.findIndex(s => s.id === viewingStory.id); if (i >= 0 && i < stories.length - 1) setViewingStory(stories[i + 1]) }} onClose={() => setViewingStory(null)} />}
       {showComposer && <Composer userId={userId} onPublished={() => load({ mode: feedMode })} onClose={() => setShowComposer(false)} />}
       {!showComposer && (
         <section className="home-compose-teaser d-card mb-3"><button type="button" className="home-compose-open" onClick={() => setShowComposer(true)}><span className="home-compose-avatar">D</span><span className="flex-1 text-left">Bạn đang nghĩ gì?</span><Plus size={18} /></button><div className="home-compose-actions"><button type="button" onClick={() => setShowComposer(true)}><ImageIcon size={17} /> Ảnh / Video</button><button type="button" onClick={() => setShowComposer(true)}><MessageCircle size={17} /> Chia sẻ cảm xúc</button></div></section>
