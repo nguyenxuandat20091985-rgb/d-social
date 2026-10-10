@@ -13,7 +13,7 @@ The detector is a candidate generator, not a guarantee. A mask is bounded to avo
 
 - `AI_WORKER_TOKEN` — required bearer token for the internal endpoint.
 - `FLORENCE_MODEL_ID` — defaults to `microsoft/Florence-2-base-ft`.
-- `FLORENCE_MODEL_REVISION` — model revision to pin for production; defaults to `main` for initial evaluation.
+- `FLORENCE_MODEL_REVISION` — defaults to the verified commit `22b7c4db486ae0a2dde5c7dfb1f87ae116c28969`; change only after validating the replacement model revision.
 - `MAX_UPLOAD_BYTES` — defaults to 16 MiB.
 - `MAX_IMAGE_PIXELS` — defaults to 12 MP.
 - `MAX_BOX_AREA_RATIO` — defaults to 0.15.
