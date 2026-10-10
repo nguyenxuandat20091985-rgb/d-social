@@ -24,7 +24,8 @@ BRANDS=("tiktok","tik tok","instagram","facebook","youtube","you tube","capcut",
 def ready():
     ff=shutil.which("ffmpeg") is not None
     tess=shutil.which("tesseract") is not None
-    return {"status":"ready" if ff and tess else "degraded","service":"D-Social Media Processing Service","ffmpeg_available":ff,"ocr_available":tess,"configured":bool(SUPABASE_URL and SUPABASE_ANON_KEY)}
+    configured=bool(SUPABASE_URL and SUPABASE_ANON_KEY)
+    return {"status":"ready" if ff and tess and configured else "degraded","service":"D-Social Media Processing Service","ffmpeg_available":ff,"ocr_available":tess,"configured":configured}
 
 def auth(token: Optional[str]):
     if not token or not SUPABASE_URL or not SUPABASE_ANON_KEY:
