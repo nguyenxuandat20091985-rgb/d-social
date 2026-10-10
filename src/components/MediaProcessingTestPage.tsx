@@ -22,7 +22,7 @@ export function MediaProcessingTestPage() {
     : /xuất|kiểm tra ảnh|đã xử lý|hoàn tất/.test(stageText) ? 4 : 0
   const pipelineSteps = [
     'Đọc và kiểm tra tệp ảnh',
-    'Phát hiện chữ/logo bằng OCR (hiện tại: Tesseract)',
+    'Phát hiện chữ/logo bằng PaddleOCR PP-OCRv5 (Tesseract dự phòng)',
     'Tạo mask từ vùng phát hiện hoặc tô tay',
     'LaMa Inpainting (chạy khi chọn xóa bằng AI)',
     'Xuất tệp và người dùng kiểm tra kết quả',
@@ -119,7 +119,7 @@ export function MediaProcessingTestPage() {
           {result.inspection.width && <div><dt className="inline text-slate-500">Kích thước: </dt><dd className="inline">{result.inspection.width} × {result.inspection.height} px</dd></div>}
           <div><dt className="inline text-slate-500">SHA-256: </dt><dd className="inline font-mono text-xs">{result.inspection.sha256}</dd></div>
         </dl>
-        {result.cleanup && <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">OCR tìm thấy {result.cleanup.candidates.length} vùng chữ và đã thử làm mờ. Đây không phải bảo đảm xóa mọi logo; hãy kiểm tra ảnh đầu ra.</div>}
+        {result.cleanup && <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">Đã phát hiện {result.cleanup.candidates.length} vùng nghi vấn bằng {result.cleanup.engine}. Pipeline đã thử LaMa Inpainting; đây không phải bảo đảm xóa mọi logo. Anh cần phóng to kiểm tra ảnh đầu ra.</div>}
         {result.error && <div role="alert" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">{result.error}</div>}
       </section>}
       {selectedFile && selectedFile.type.startsWith('image/') && <ManualMediaEditor file={selectedFile} onProcessed={blob => acceptOutput(blob)} onStatus={message => setStage(message)}/>}
