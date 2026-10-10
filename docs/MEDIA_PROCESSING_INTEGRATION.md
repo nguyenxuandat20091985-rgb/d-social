@@ -5,7 +5,8 @@ This integration is deliberately disabled by default. The current upload path re
 ## Runtime behavior
 
 - Uploads continue to the existing `social-media` bucket first.
-- For **feed posts only**, if the feature flag is enabled and the uploader explicitly confirms rights to modify the selected media, the app calls the `process-media` Supabase Edge Function. Stories and other upload flows are intentionally out of scope.
+- For **feed posts only**, when the feature flag is enabled, the app first runs `inspectMediaOnDevice()` to validate supported MIME type, file size, decoded image dimensions and calculate a SHA-256 fingerprint before upload. This preflight does not remove logos or prove the media is clean.
+- After the uploader explicitly confirms rights to modify the selected media, the app calls the `process-media` Supabase Edge Function. The server processor remains mandatory and stories/other upload flows are intentionally out of scope.
 - The Edge Function authenticates the Supabase user, restricts the source path to that user's storage folder, calls the private media service from server-side code, verifies output size and SHA-256, writes a content-addressed object, reads it back, and verifies it again.
 - The app derives the public URL from the validated `processed_path`; it does not trust an arbitrary returned URL.
 - When processing is enabled, any processing/configuration/storage/timeout error blocks publication; the original object is retained for retry but is never presented as a successfully cleaned result.
