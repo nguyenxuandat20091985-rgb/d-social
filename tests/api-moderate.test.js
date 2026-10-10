@@ -39,10 +39,11 @@ test('moderation requires non-empty text', async () => {
   assert.equal(res.body.error, 'text required')
 })
 
-test('moderation returns a deterministic decision for blocked terms', async () => {
+test('moderation deterministically hides blocked content with a spam pattern', async () => {
   const res = response()
-  await handler(request('POST', { text: 'fuck' }), res)
+  await handler(request('POST', { text: 'fuck aaaaaaaaa' }), res)
   assert.equal(res.statusCode, 200)
   assert.equal(res.body.action, 'hide')
   assert.ok(res.body.reasons.includes('blocked_term:fuck'))
+  assert.ok(res.body.reasons.includes('spam_pattern'))
 })
