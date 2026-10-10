@@ -115,7 +115,7 @@ def process_video(src:Path,dst:Path,work:Path):
     finally: cap.release(); writer.release()
     if not n: raise HTTPException(422,"Video contains no decodable frames")
     # Restore source audio and preserve source dimensions.
-    cmd=["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(tmp),"-i",str(src),"-map","0:v:0","-map","1:a?","-c:v","libx264","-preset","veryfast","-crf","18","-threads","2","-c:a","aac","-b:a","192k","-movflags","+faststart",str(dst)]
+    cmd=["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(tmp),"-i",str(src),"-map","0:v:0","-map","1:a?","-c:v","libx264","-preset","veryfast","-crf","22","-threads","2","-c:a","aac","-b:a","192k","-movflags","+faststart",str(dst)]
     p=subprocess.run(cmd,capture_output=True,timeout=90)
     if p.returncode: raise HTTPException(422,"Video encoding failed; original must not be published as cleaned")
     log.info("video frames=%s frames_with_detected_brand=%s",n,changed)
