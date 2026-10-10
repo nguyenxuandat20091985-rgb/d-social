@@ -35,7 +35,7 @@ The Supabase runtime must provide `SUPABASE_URL` and either the legacy `SUPABASE
 
 ## Important limits
 
-- The dedicated media service now uses OCR to detect readable brand wordmarks in corner regions (including TikTok, Instagram, Facebook, YouTube, CapCut and other listed brands) and inpaints those detected regions before adding the visible D-Social mark. This is best-effort: icon-only, animated, stylized, central, or OCR-unreadable logos may remain, and inpainting may leave artifacts. It does not implement a hidden/forensic D-Social watermark. Do not claim universal cleanup without reviewing the output.
+- The dedicated media service now uses OCR to detect readable brand wordmarks in corner regions (including TikTok, Instagram, Facebook, YouTube, CapCut and other listed brands) and inpaints those detected regions before adding the visible D-Social mark. This is best-effort: icon-only, animated, stylized, central, or OCR-unreadable logos may remain, and inpainting may leave artifacts. The service re-opens encoded image output and re-scans images and sampled video frames, rejecting output when a readable listed brand mark remains; this is not proof that all logos are absent. It does not implement a hidden/forensic D-Social watermark. Do not claim universal cleanup without reviewing the output.
 - The current media service does not include a durable Celery/Redis queue; do not treat this synchronous integration as validated for large-scale production traffic.
 - No service URL or Edge Function deployment is assumed by this code.
 - The app should not be considered production-integrated until the required staging checks pass.
