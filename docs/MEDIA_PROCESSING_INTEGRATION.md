@@ -12,9 +12,9 @@ This integration is deliberately disabled by default. The current upload path re
 - If the post/story insert fails, the uploader removes only the newly uploaded original. Processed objects are content-addressed and may be reused by other submissions, so the client never deletes them; a future retention job must check references before cleanup.
 - No database schema or non-media module is changed.
 
-## Required Edge Function secrets
+## Required Edge Function environment settings
 
-Set these in the target Supabase project's Edge Function secrets; never place them in `VITE_*` variables or commit them:
+Set these in the target Supabase project's Edge Function environment. Keep service credentials server-side; never place them in `VITE_*` variables or commit them:
 
 - `MEDIA_ALLOWED_ORIGINS`: comma-separated exact browser origins allowed to call this function (for example, the production or staging app origin; no trailing slash). An empty list denies browser origins.
 - `MEDIA_SERVICE_URL`: deployed HTTPS base URL of the dedicated media service.
