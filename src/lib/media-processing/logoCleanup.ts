@@ -140,17 +140,31 @@ async function inpaintCandidateBoxesWithLama(
       const y = Math.max(0, candidate.y - pad)
       const right = Math.min(canvas.width, candidate.x + candidate.width + pad)
       const bottom = Math.min(canvas.height, candidate.y + candidate.height + pad)
+      const outerPad = Math.max(48, Math.round(Math.max(right - x, bottom - y) * 0.85))
+      const outerX = Math.max(0, x - outerPad)
+      const outerY = Math.max(0, y - outerPad)
+      const outerRight = Math.min(canvas.width, right + outerPad)
+      const outerBottom = Math.min(canvas.height, bottom + outerPad)
+      const patchWidth = outerRight - outerX
+      const patchHeight = outerBottom - outerY
+      if (patchWidth * patchHeight > 8_000_000) throw new Error('Vùng logo quá lớn để xử lý an toàn trên điện thoại.')
+      const patchCanvas = document.createElement('canvas')
+      patchCanvas.width = patchWidth
+      patchCanvas.height = patchHeight
+      const patchContext = patchCanvas.getContext('2d', { willReadFrequently: true })
+      if (!patchContext) throw new Error('Không tạo được vùng ảnh cho LaMa.')
+      patchContext.drawImage(canvas, outerX, outerY, patchWidth, patchHeight, 0, 0, patchWidth, patchHeight)
       const maskCanvas = document.createElement('canvas')
-      maskCanvas.width = canvas.width
-      maskCanvas.height = canvas.height
+      maskCanvas.width = patchWidth
+      maskCanvas.height = patchHeight
       const maskContext = maskCanvas.getContext('2d')
       if (!maskContext) throw new Error('Không tạo được mask cho LaMa.')
       maskContext.fillStyle = '#fff'
-      maskContext.fillRect(x, y, right - x, bottom - y)
-      const maskPixels = maskContext.getImageData(0, 0, canvas.width, canvas.height)
-      const mask = new Uint8Array(canvas.width * canvas.height)
+      maskContext.fillRect(x - outerX, y - outerY, right - x, bottom - y)
+      const maskPixels = maskContext.getImageData(0, 0, patchWidth, patchHeight)
+      const mask = new Uint8Array(patchWidth * patchHeight)
       for (let i = 0, j = 0; i < maskPixels.data.length; i += 4, j++) if (maskPixels.data[i + 3] > 0) mask[j] = 1
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
+      const pixels = patchContext.getImageData(0, 0, patchWidth, patchHeight)
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
         const abortOne = () => reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError'))
@@ -173,10 +187,10 @@ async function inpaintCandidateBoxesWithLama(
           signal?.removeEventListener('abort', abortOne)
           reject(new Error('Web Worker LaMa gặp lỗi.'))
         }
-        worker.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
+        worker.postMessage({ id, width: patchWidth, height: patchHeight, pixels: pixels.data.buffer, mask: mask.buffer, patchMode: true }, [pixels.data.buffer, mask.buffer])
       })
       if (signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
-      context.putImageData(new ImageData(new Uint8ClampedArray(result), canvas.width, canvas.height), 0, 0)
+      context.putImageData(new ImageData(new Uint8ClampedArray(result), patchWidth, patchHeight), outerX, outerY)
     }
   } finally {
     signal?.removeEventListener('abort', abort)
