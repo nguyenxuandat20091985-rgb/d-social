@@ -295,7 +295,9 @@ export async function cleanupCornerTextFromImage(
     }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
 
-    hardware = await detectHardwareProfile()
+    hardware = options.fastOnly
+      ? { tier: 'medium', deviceMemoryGB: null, hardwareConcurrency: 1, webgpu: false, webgl: false, label: 'Chế độ nhanh', reason: 'Không tải mô hình AI hoặc khởi tạo bộ nhận diện nặng.' }
+      : await detectHardwareProfile()
     options.onProgress?.(7, hardware.label + ' — ' + hardware.reason)
     const canvas = document.createElement('canvas')
     canvas.width = bitmap.width
