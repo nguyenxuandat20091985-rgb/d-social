@@ -20,9 +20,9 @@ function normalizeSearchText(value) {
   return (value || '')
     .toLocaleLowerCase('vi')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd')
-    .replace(/[^\\p{L}\\p{N}]+/gu, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
 }
 function PostPreview({ post }) {
