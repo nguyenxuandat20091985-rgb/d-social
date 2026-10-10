@@ -53,7 +53,7 @@ def brand_boxes(frame):
         if scale>1: crop=cv2.resize(crop,None,fx=scale,fy=scale,interpolation=cv2.INTER_CUBIC)
         gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
         try: data=pytesseract.image_to_data(gray,config="--psm 11",output_type=Output.DICT,timeout=2)
-        except Exception: continue
+        except Exception as exc: raise HTTPException(503,"Brand detection unavailable; do not publish this result") from exc
         for i,raw in enumerate(data.get("text",[])):
             text=re.sub(r"[^@a-z0-9.抖音快手小红书]","",(raw or "").lower())
             try: conf=float(data["conf"][i])
