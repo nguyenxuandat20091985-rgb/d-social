@@ -345,17 +345,6 @@ function StoryComposer({ userId, onClose, onPublished }) {
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
       let media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-      if (MEDIA_PROCESSING_ENABLED && mediaRightsConfirmed) {
-        setStage(file.type.startsWith('video/') ? 'Đang xử lý video…' : 'Đang xử lý ảnh…')
-        const processed = await processUploadedMedia({
-          path,
-          mediaType: file.type.startsWith('video/') ? 'video' : 'image',
-          userId,
-          originalUrl: media_url,
-          rightsConfirmed: mediaRightsConfirmed,
-        })
-        media_url = processed.url
-      }
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
