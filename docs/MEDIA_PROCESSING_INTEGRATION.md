@@ -33,6 +33,10 @@ The Supabase runtime must provide `SUPABASE_URL` and either the legacy `SUPABASE
 5. Test image, video with audio, video without audio, oversized/invalid files, invalid sessions, timeout, service outage, storage outage, repeated requests, and failed feed-post inserts.
 6. Keep the flag false in production until staging and rollback checks pass. Production rollout is a separate, explicit step.
 
+## Server-side resource limits
+
+- The media service independently enforces a 32 MiB input limit, a 16-megapixel decoded image/video-frame limit, and a 180-second video-duration limit by default. These checks protect the server even if a caller bypasses browser preflight. Values are configurable through `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`, and `MAX_VIDEO_SECONDS` on the media service.
+
 ## Important limits
 
 - The dedicated media service now uses OCR to detect readable brand wordmarks in corner regions (including TikTok, Instagram, Facebook, YouTube, CapCut and other listed brands) and inpaints those detected regions before adding the visible D-Social mark. This is best-effort: icon-only, animated, stylized, central, or OCR-unreadable logos may remain, and inpainting may leave artifacts. The service re-opens encoded image output and re-scans images and sampled video frames, rejecting output when a readable listed brand mark remains; this is not proof that all logos are absent. It does not implement a hidden/forensic D-Social watermark. Do not claim universal cleanup without reviewing the output.
