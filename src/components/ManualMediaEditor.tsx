@@ -155,7 +155,21 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
       lamaWorkerRef.current = worker
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const cleanup = () => { worker.onmessage = null; worker.onerror = null }
+        let settled = false
+        const cleanup = () => { clearTimeout(watchdog); worker.onmessage = null; worker.onerror = null }
+        const finish = (error?: Error, pixels?: ArrayBuffer) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          if (error) reject(error)
+          else if (pixels) resolve(pixels)
+          else reject(new Error('LaMa không trả kết quả.'))
+        }
+        const watchdog = setTimeout(() => {
+          worker.terminate()
+          if (lamaWorkerRef.current === worker) lamaWorkerRef.current = null
+          finish(new Error('LaMa mất quá nhiều thời gian trên điện thoại. Hãy dùng nội suy nhanh hoặc tô vùng nhỏ hơn.'))
+        }, 30000)
         worker.onmessage = (event: MessageEvent<WorkerReply>) => {
           const message = event.data
           if (message?.id !== id) return
@@ -163,12 +177,12 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
             setLamaProgress(message.progress ?? 0); setLamaStage(message.stage ?? 'Đang xử lý…')
             onStatusRef.current?.(message.stage ?? 'LaMa đang xử lý ảnh…')
           } else if (message.type === 'complete' && message.pixels) {
-            cleanup(); resolve(message.pixels)
+            finish(undefined, message.pixels)
           } else if (message.type === 'error') {
-            cleanup(); reject(new Error(message.message || 'LaMa không xử lý được ảnh.'))
+            finish(new Error(message.message || 'LaMa không xử lý được ảnh.'))
           }
         }
-        worker.onerror = () => { cleanup(); reject(new Error('Web Worker LaMa gặp lỗi.')) }
+        worker.onerror = () => finish(new Error('Web Worker LaMa gặp lỗi.'))
         worker.postMessage({ id, width: pixels.width, height: pixels.height, pixels: pixels.data.buffer, mask: mask.buffer, patchMode: true }, [pixels.data.buffer, mask.buffer])
       })
       await saveOutput(result, pixels.width, pixels.height, 'LaMa AI', { x: originX, y: originY })
