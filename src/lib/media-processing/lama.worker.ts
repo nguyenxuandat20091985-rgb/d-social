@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-type Request = { id: string; width: number; height: number; pixels: ArrayBuffer; mask: ArrayBuffer }
+type Request = { id: string; width: number; height: number; pixels: ArrayBuffer; mask: ArrayBuffer; patchMode?: boolean }
 type Progress = { id: string; type: 'progress'; progress: number; stage: string }
 type Complete = { id: string; type: 'complete'; pixels: ArrayBuffer }
 type Failure = { id: string; type: 'error'; message: string }
@@ -8,7 +8,7 @@ type Reply = Progress | Complete | Failure
 const scope = self as DedicatedWorkerGlobalScope
 
 const MODEL_URL = 'https://huggingface.co/sapienkit/LaMa-ONNX/resolve/main/lama_fp32.onnx'
-const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.mjs'
+const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.mjs'
 const WASM_PATH = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/'
 
 function send(message: Reply) { scope.postMessage(message) }
@@ -44,7 +44,7 @@ async function run(request: Request) {
   const source = new Uint8ClampedArray(request.pixels)
   const mask = new Uint8Array(request.mask)
   const count = width * height
-  if (width < 1 || height < 1 || count > 16_000_000 || source.length !== count * 4 || mask.length !== count) throw new Error('Kích thước ảnh hoặc mask không hợp lệ.')
+  if (width < 1 || height < 1 || count > 8_000_000 || source.length !== count * 4 || mask.length !== count) throw new Error('Kích thước ảnh hoặc mask không hợp lệ.')
   let minX = width, minY = height, maxX = -1, maxY = -1, painted = 0
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     if (!mask[y * width + x]) continue
@@ -57,7 +57,7 @@ async function run(request: Request) {
   const left = clamp(minX - pad, 0, width - 1), top = clamp(minY - pad, 0, height - 1)
   const right = clamp(maxX + pad + 1, left + 1, width), bottom = clamp(maxY + pad + 1, top + 1, height)
   const cropW = right - left, cropH = bottom - top
-  if (cropW * cropH > count * 0.55) throw new Error('Vùng logo trải quá rộng. Hãy chia thành vùng nhỏ hơn.')
+  if (!request.patchMode && cropW * cropH > count * 0.55) throw new Error('Vùng logo trải quá rộng. Hãy chia thành vùng nhỏ hơn.')
   const side = 512
   send({ id, type: 'progress', progress: 3, stage: 'Đang khởi tạo ONNX Runtime Web trong Web Worker…' })
   const moduleUrl: string = ORT_URL
