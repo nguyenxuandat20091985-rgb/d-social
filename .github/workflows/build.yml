@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - uses: denoland/setup-deno@v2
+      - run: deno check supabase/functions/process-media/index.ts
       - run: npm install --no-package-lock
       - run: npm test
       - run: npm run build
