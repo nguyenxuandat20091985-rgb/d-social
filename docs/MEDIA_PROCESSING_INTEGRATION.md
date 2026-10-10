@@ -21,7 +21,7 @@ Set these in the target Supabase project's Edge Function secrets; never place th
 - `MEDIA_SERVICE_API_TOKEN`: same server-to-server token configured on the media service.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only storage access key used by the Edge Function.
 
-The Supabase runtime must provide `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or the project-compatible publishable/anon key expected by the deployed runtime). Do not add a service-role key to the browser bundle.
+The Supabase runtime must provide `SUPABASE_URL` and either the legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` values or the current `SUPABASE_PUBLISHABLE_KEYS` / `SUPABASE_SECRET_KEYS` maps. The function resolves the default key from either format. Do not add a service-role/secret key to the browser bundle.
 
 ## Staging sequence
 
