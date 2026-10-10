@@ -16,12 +16,13 @@ export function MediaProcessingTestPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
   const outputUrlRef = useRef<string | null>(null)
+  const previewUrlRef = useRef<string | null>(null)
 
   useEffect(() => () => {
     controllerRef.current?.abort()
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     if (outputUrlRef.current) URL.revokeObjectURL(outputUrlRef.current)
-  }, [previewUrl])
+  }, [])
 
   async function handleFile(file?: File) {
     if (!file) return
@@ -32,12 +33,13 @@ export function MediaProcessingTestPage() {
     setProgress(0)
     setResult(null)
     setStage('Đang khởi tạo bộ xử lý trên điện thoại…')
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
     if (outputUrlRef.current) {
       URL.revokeObjectURL(outputUrlRef.current)
       outputUrlRef.current = null
     }
     const localPreview = URL.createObjectURL(file)
+    previewUrlRef.current = localPreview
     setPreviewUrl(localPreview)
 
     try {
@@ -61,6 +63,7 @@ export function MediaProcessingTestPage() {
         if (controller.signal.aborted) return
         const outputUrl = URL.createObjectURL(cleanup.blob)
         outputUrlRef.current = outputUrl
+        previewUrlRef.current = outputUrl
         setResult({ inspection, cleanup })
         setPreviewUrl(outputUrl)
         setProgress(100)
