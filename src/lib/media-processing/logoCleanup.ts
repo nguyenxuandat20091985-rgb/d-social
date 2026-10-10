@@ -49,7 +49,7 @@ export async function cleanupCornerTextFromImage(
   try {
     options.onProgress?.(5, 'Đang đọc ảnh trên thiết bị…')
     bitmap = await createImageBitmap(file)
-    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 40_000_000) {
+    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 16_000_000) {
       throw new Error('Kích thước ảnh vượt giới hạn xử lý an toàn.')
     }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
@@ -73,7 +73,15 @@ export async function cleanupCornerTextFromImage(
     })
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
 
-    const result = await worker.recognize(canvas)
+    const terminateOnAbort = () => { void worker?.terminate() }
+    options.signal?.addEventListener('abort', terminateOnAbort, { once: true })
+    let result
+    try {
+      result = await worker.recognize(canvas)
+    } finally {
+      options.signal?.removeEventListener('abort', terminateOnAbort)
+    }
+    if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
     const minConfidence = options.minConfidence ?? 62
     const edgeX = Math.max(1, Math.round(canvas.width * 0.32))
     const edgeY = Math.max(1, Math.round(canvas.height * 0.24))
