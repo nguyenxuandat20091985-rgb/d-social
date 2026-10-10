@@ -23,8 +23,8 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     const image = new Image()
     image.onload = () => {
       if (!active) return
-      if (image.naturalWidth * image.naturalHeight > 16_000_000) {
-        onStatusRef.current?.('Ảnh vượt giới hạn 16 megapixel.')
+      if (image.naturalWidth * image.naturalHeight > 8_000_000) {
+        onStatusRef.current?.('Ảnh vượt giới hạn 8 megapixel để giảm nguy cơ tràn RAM trên điện thoại.')
         URL.revokeObjectURL(url)
         return
       }
