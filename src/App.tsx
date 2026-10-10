@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { MEDIA_PROCESSING_ENABLED, processUploadedMedia } from './lib/mediaProcessing'
+import { inspectMediaOnDevice } from './lib/mediaProcessingClient'
 import { moderateText } from './lib/moderation'
 import { postRateLimit, commentRateLimit } from './lib/ratelimit'
 import { AuthScreen } from './components/AuthScreen'
@@ -203,6 +204,16 @@ function Composer({ userId, onPublished, onClose }) {
       const image_urls = []
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+        if (MEDIA_PROCESSING_ENABLED) {
+          setStage(files.length > 1
+            ? `Đang kiểm tra media ${i + 1}/${files.length} trên thiết bị…`
+            : 'Đang kiểm tra định dạng và dung lượng media trên thiết bị…')
+          // Preflight is only input validation/fingerprinting, not logo-cleanup proof.
+          // The authenticated Supabase/Render processor remains mandatory below.
+          await inspectMediaOnDevice(file, {
+            onProgress: ({ stage }) => setStage(stage),
+          })
+        }
         setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
