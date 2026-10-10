@@ -59,8 +59,8 @@ scope.onmessage = event => {
         const isHandle = /@[\w.]{3,}/.test(text)
         if (!isBrand && !isHandle) continue
         if (!Array.isArray(item.poly) || item.poly.length < 4) continue
-        const xs = item.poly.map(point => Number(point[0])).filter(Number.isFinite)
-        const ys = item.poly.map(point => Number(point[1])).filter(Number.isFinite)
+        const xs = item.poly.map((point: number[]) => Number(point[0])).filter(Number.isFinite)
+        const ys = item.poly.map((point: number[]) => Number(point[1])).filter(Number.isFinite)
         if (xs.length < 4 || ys.length < 4) continue
         const x0 = Math.max(0, Math.floor(Math.min(...xs)))
         const y0 = Math.max(0, Math.floor(Math.min(...ys)))
