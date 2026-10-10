@@ -25,11 +25,11 @@ class BrandBoxesOcrResilienceTests(unittest.TestCase):
     def test_single_variant_failure_does_not_abort_detection(self, image_to_data):
         image_to_data.side_effect = [
             RuntimeError("Tesseract timed out"),
-            *([EMPTY_OCR] * 11),
+            *([EMPTY_OCR] * 7),
         ]
 
         self.assertEqual(main.brand_boxes(self.frame), [])
-        self.assertEqual(image_to_data.call_count, 12)
+        self.assertEqual(image_to_data.call_count, 8)
 
     @patch("main.pytesseract.image_to_data")
     def test_all_variants_failing_for_a_corner_fails_closed(self, image_to_data):
@@ -40,7 +40,7 @@ class BrandBoxesOcrResilienceTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 503)
         self.assertIn("top-left", raised.exception.detail)
-        self.assertEqual(image_to_data.call_count, 3)
+        self.assertEqual(image_to_data.call_count, 2)
 
 
 if __name__ == "__main__":
