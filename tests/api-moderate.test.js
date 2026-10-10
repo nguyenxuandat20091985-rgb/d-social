@@ -15,8 +15,8 @@ function response() {
   }
 }
 
-function request(method, body) {
-  return { method, body, headers: {}, socket: { remoteAddress: '127.0.0.1' } }
+function request(method, body, ip = '127.0.0.1') {
+  return { method, body, headers: { 'x-real-ip': ip }, socket: { remoteAddress: ip } }
 }
 
 test('moderation OPTIONS responds with 204', async () => {
@@ -39,6 +39,13 @@ test('moderation requires non-empty text', async () => {
   assert.equal(res.body.error, 'text required')
 })
 
+test('moderation rejects text over the input limit', async () => {
+  const res = response()
+  await handler(request('POST', { text: 'x'.repeat(4001) }, '198.51.100.101'), res)
+  assert.equal(res.statusCode, 413)
+  assert.equal(res.body.max_length, 4000)
+})
+
 test('moderation deterministically hides blocked content with a spam pattern', async () => {
   const res = response()
   await handler(request('POST', { text: 'fuck aaaaaaaaa' }), res)
@@ -46,4 +53,17 @@ test('moderation deterministically hides blocked content with a spam pattern', a
   assert.equal(res.body.action, 'hide')
   assert.ok(res.body.reasons.includes('blocked_term:fuck'))
   assert.ok(res.body.reasons.includes('spam_pattern'))
+})
+
+test('moderation endpoint rate-limits repeated requests from one client', async () => {
+  const ip = '198.51.100.202'
+  for (let i = 0; i < 20; i += 1) {
+    const res = response()
+    await handler(request('POST', { text: 'hello community' }, ip), res)
+    assert.equal(res.statusCode, 200)
+  }
+  const blocked = response()
+  await handler(request('POST', { text: 'hello community' }, ip), blocked)
+  assert.equal(blocked.statusCode, 429)
+  assert.equal(blocked.headers['Retry-After'], '60')
 })
