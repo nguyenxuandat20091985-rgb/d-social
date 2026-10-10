@@ -69,6 +69,9 @@ scope.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const bitmap = await createImageBitmap(new Blob([request.bytes], { type: request.mimeType }))
       try {
         if (!bitmap.width || !bitmap.height) throw new Error('Không đọc được kích thước ảnh.')
+        if (bitmap.width * bitmap.height > 16_000_000) {
+          throw new Error('Kích thước ảnh vượt giới hạn xử lý an toàn (16 megapixel).')
+        }
         result.width = bitmap.width
         result.height = bitmap.height
       } finally {
