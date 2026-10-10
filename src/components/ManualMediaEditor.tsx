@@ -124,10 +124,18 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     for (let i = 0, j = 0; i < patchMask.data.length; i += 4, j++) if (patchMask.data[i + 3]) mask[j] = 1
     return { canvas, originX, originY, mask, pixels: patchContext.getImageData(0, 0, patchWidth, patchHeight) }
   }
-\n  async function saveOutput(result: ArrayBuffer, width: number, height: number, method: 'LaMa AI' | 'nội suy nhanh', origin?: { x: number; y: number }) {
+
+  async function saveOutput(result: ArrayBuffer, width: number, height: number, method: 'LaMa AI' | 'nội suy nhanh', origin?: { x: number; y: number }) {
     const canvas = canvasRef.current
     if (!canvas) throw new Error('Canvas đã bị đóng.')
-    const context = canvas.getContext('2d')!\n    if (origin) {\n      context.clearRect(0, 0, canvas.width, canvas.height)\n      context.drawImage(imageRef.current!, 0, 0, canvas.width, canvas.height)\n      context.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), origin.x, origin.y)\n    } else {\n      context.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), 0, 0)\n    }
+    const context = canvas.getContext('2d')!
+    if (origin) {
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(imageRef.current!, 0, 0, canvas.width, canvas.height)
+      context.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), origin.x, origin.y)
+    } else {
+      context.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), 0, 0)
+    }
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Không xuất được ảnh đầu ra.')), 'image/png'))
     if (!blob.size) throw new Error('Ảnh đầu ra rỗng.')
     onProcessed(blob)
@@ -137,7 +145,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     if (working) return
     setWorking(true); setLamaProgress(1); setLamaStage('Đang chuẩn bị mask và ảnh nguồn…')
     try {
-      const { canvas, mask, pixels } = buildInput()
+      const { canvas, mask, pixels, originX, originY } = buildLamaInput()
       onStatusRef.current?.('Đang chạy LaMa Inpainting trên thiết bị. Lần đầu cần tải mô hình từ Internet.')
       const worker = lamaWorkerRef.current ?? new Worker(new URL('../lib/media-processing/lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-inpainting' })
       lamaWorkerRef.current = worker
