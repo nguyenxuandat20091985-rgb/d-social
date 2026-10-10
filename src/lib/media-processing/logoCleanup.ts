@@ -24,6 +24,7 @@ export type CleanupOptions = {
   signal?: AbortSignal
   onProgress?: (progress: number, stage: string) => void
   minConfidence?: number
+  fastOnly?: boolean
 }
 
 type CornerRegion = LogoCandidate['region']
@@ -233,16 +234,26 @@ async function inpaintCandidateBoxesFast(
     const id = crypto.randomUUID()
     try {
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const abort = () => { worker.terminate(); reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError')) }
+        let settled = false
+        const finish = (error?: Error, pixels?: ArrayBuffer) => {
+          if (settled) return
+          settled = true
+          clearTimeout(watchdog)
+          options.signal?.removeEventListener('abort', abort)
+          worker.terminate()
+          if (error) reject(error)
+          else if (pixels) resolve(pixels)
+          else reject(new Error('Nội suy ảnh không trả kết quả.'))
+        }
+        const abort = () => finish(new DOMException('Đã hủy xử lý ảnh.', 'AbortError'))
+        const watchdog = setTimeout(() => finish(new Error('Xử lý vùng ảnh quá lâu; hãy tô vùng nhỏ hơn hoặc thử ảnh nhẹ hơn.')), 5000)
         options.signal?.addEventListener('abort', abort, { once: true })
         worker.onmessage = (event: MessageEvent<{ id: string; pixels?: ArrayBuffer; error?: string }>) => {
           if (event.data?.id !== id) return
-          options.signal?.removeEventListener('abort', abort)
-          worker.terminate()
-          if (event.data.error || !event.data.pixels) reject(new Error(event.data.error || 'Nội suy nhanh thất bại.'))
-          else resolve(event.data.pixels)
+          if (event.data.error || !event.data.pixels) finish(new Error(event.data.error || 'Nội suy nhanh thất bại.'))
+          else finish(undefined, event.data.pixels)
         }
-        worker.onerror = () => { worker.terminate(); reject(new Error('Worker nội suy nhanh gặp lỗi.')) }
+        worker.onerror = () => finish(new Error('Worker nội suy nhanh gặp lỗi.'))
         worker.postMessage({ id, width, height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
       })
       if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
@@ -296,14 +307,18 @@ export async function cleanupCornerTextFromImage(
     bitmap = undefined
 
     let paddleCandidates: LogoCandidate[] = []
-    try {
-      paddleCandidates = await detectWithPaddleOCR(file, canvas.width, canvas.height, options)
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error
-      options.onProgress?.(18, 'PaddleOCR chưa khởi chạy được; chuyển sang Tesseract dự phòng…')
+    // One-touch mode deliberately avoids loading OCR/WASM models in the background.
+    // It runs only a bounded, cheap color heuristic; uncertain images go to manual mode.
+    if (!options.fastOnly) {
+      try {
+        paddleCandidates = await detectWithPaddleOCR(file, canvas.width, canvas.height, options)
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') throw error
+        options.onProgress?.(18, 'PaddleOCR chưa khởi chạy được; chuyển sang Tesseract dự phòng…')
+      }
     }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
-    if (!paddleCandidates.length) {
+    if (!options.fastOnly && !paddleCandidates.length) {
       options.onProgress?.(18, 'Đang khởi tạo Tesseract dự phòng…')
       worker = await createWorker('eng+vie', 1, {
         logger: event => {
