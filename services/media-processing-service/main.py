@@ -1,5 +1,5 @@
 from __future__ import annotations
-import hashlib, os, re, shutil, subprocess, tempfile, logging
+import hashlib, os, re, shutil, subprocess, tempfile, logging, json, urllib.request, urllib.error
 from pathlib import Path
 from typing import Optional
 import cv2
@@ -13,7 +13,8 @@ from fastapi.responses import Response
 logging.basicConfig(level=os.getenv("LOG_LEVEL","INFO"))
 log=logging.getLogger("dsocial-media")
 app=FastAPI(title="D-Social Media Processing Service", docs_url=None, redoc_url=None)
-TOKEN=os.getenv("MEDIA_SERVICE_API_TOKEN","")
+SUPABASE_URL=os.getenv("SUPABASE_URL","").rstrip("/")
+SUPABASE_ANON_KEY=os.getenv("SUPABASE_ANON_KEY","")
 MAX_BYTES=int(os.getenv("MAX_UPLOAD_BYTES","33554432"))
 BRANDS=("tiktok","tik tok","instagram","facebook","youtube","you tube","capcut","kwai","likee","snapchat","pinterest","douyin","weibo","threads","linkedin","vimeo","triller","twitch","telegram","whatsapp","twitter","x.com","lemon8","bilibili","kuaishou","抖音","快手","小红书")
 
@@ -21,11 +22,25 @@ BRANDS=("tiktok","tik tok","instagram","facebook","youtube","you tube","capcut",
 def ready():
     ff=shutil.which("ffmpeg") is not None
     tess=shutil.which("tesseract") is not None
-    return {"status":"ready" if ff and tess else "degraded","service":"D-Social Media Processing Service","ffmpeg_available":ff,"ocr_available":tess,"configured":bool(TOKEN)}
+    return {"status":"ready" if ff and tess else "degraded","service":"D-Social Media Processing Service","ffmpeg_available":ff,"ocr_available":tess,"configured":bool(SUPABASE_URL and SUPABASE_ANON_KEY)}
 
 def auth(token: Optional[str]):
-    if not TOKEN or not token or not __import__("hmac").compare_digest(token,TOKEN):
-        raise HTTPException(401,"Media service authentication failed")
+    if not token or not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(401,"Authenticated Supabase session required")
+    request=urllib.request.Request(
+        SUPABASE_URL + "/auth/v1/user",
+        headers={"apikey":SUPABASE_ANON_KEY,"Authorization":"Bearer "+token,"Accept":"application/json"},
+        method="GET"
+    )
+    try:
+        with urllib.request.urlopen(request,timeout=8) as response:
+            user=json.loads(response.read().decode("utf-8"))
+            if response.status != 200 or not user.get("id"):
+                raise HTTPException(401,"Invalid Supabase session")
+    except urllib.error.HTTPError as exc:
+        raise HTTPException(401,"Invalid Supabase session") from exc
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise HTTPException(503,"Supabase session validation unavailable") from exc
 
 def brand_boxes(frame):
     h,w=frame.shape[:2]
@@ -114,9 +129,11 @@ def process_image(src:Path,dst:Path):
 
 @app.post("/api/v1/media/process-binary")
 async def process_binary(file: UploadFile=File(...), rights_confirmed: bool=Form(False),
-                         x_media_service_token: Optional[str]=Header(None),
+                         authorization: Optional[str]=Header(None),
                          x_idempotency_key: Optional[str]=Header(None)):
-    auth(x_media_service_token)
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(401,"Authenticated Supabase session required")
+    auth(authorization.split(" ",1)[1].strip())
     if not rights_confirmed: raise HTTPException(400,"rights_confirmed=true is required")
     data=await file.read(MAX_BYTES+1)
     if not data or len(data)>MAX_BYTES: raise HTTPException(413,"File is empty or exceeds upload limit")
