@@ -42,13 +42,13 @@ export function Notifications({ userId }) {
       const ids = (myPosts || []).map(p => p.id)
       let notifs = []
       if (ids.length) {
-        const { data: comments } = await supabase.from('comments').select('id,content,created_at,author_id,post_id,profiles(full_name,username,avatar_url)').in('post_id', ids).neq('author_id', userId).order('created_at', { ascending: false }).limit(25)
+        const { data: comments } = await supabase.from('post_comments').select('id,content,created_at,user_id,post_id,profiles:user_id(full_name,username,avatar_url)').in('post_id', ids).neq('user_id', userId).order('created_at', { ascending: false }).limit(25)
         notifs = (comments || []).map(c => ({
           id: 'c-' + c.id, type: 'comment',
           text: `${c.profiles?.full_name || c.profiles?.username || 'Ai đó'} đã bình luận: ${c.content}`,
           at: c.created_at, avatar: c.profiles?.avatar_url, name: c.profiles?.full_name || c.profiles?.username,
         }))
-        const { data: likes } = await supabase.from('likes').select('post_id,user_id,created_at,profiles:user_id(full_name,username,avatar_url)').in('post_id', ids).neq('user_id', userId).order('created_at', { ascending: false }).limit(25)
+        const { data: likes } = await supabase.from('post_likes').select('post_id,user_id,created_at,profiles:user_id(full_name,username,avatar_url)').in('post_id', ids).neq('user_id', userId).order('created_at', { ascending: false }).limit(25)
         for (const l of likes || []) {
           notifs.push({
             id: 'l-' + l.post_id + '-' + l.user_id, type: 'like',
