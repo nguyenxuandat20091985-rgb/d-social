@@ -9,6 +9,8 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
   const [brush, setBrush] = useState(24)
   const [working, setWorking] = useState(false)
   const [ready, setReady] = useState(false)
+  const onStatusRef = useRef(onStatus)
+  onStatusRef.current = onStatus
 
   useEffect(() => {
     let active = true
@@ -17,15 +19,14 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     image.onload = () => {
       if (!active) return
       if (image.naturalWidth * image.naturalHeight > 16_000_000) {
-        onStatus?.('Ảnh vượt giới hạn 16 megapixel.')
+        onStatusRef.current?.('Ảnh vượt giới hạn 16 megapixel.')
         URL.revokeObjectURL(url)
         return
       }
       const canvas = canvasRef.current
       if (!canvas) return
-      const scale = Math.min(1, 1000 / image.naturalWidth, 1000 / image.naturalHeight)
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
+      canvas.width = image.naturalWidth
+      canvas.height = image.naturalHeight
       const ctx = canvas.getContext('2d')
       if (!ctx) return
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
@@ -35,10 +36,10 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
       imageRef.current = image
       setReady(true)
     }
-    image.onerror = () => onStatus?.('Không đọc được ảnh để chọn vùng logo.')
+    image.onerror = () => onStatusRef.current?.('Không đọc được ảnh để chọn vùng logo.')
     image.src = url
     return () => { active = false; URL.revokeObjectURL(url); imageRef.current = null; maskRef.current = null }
-  }, [file, onStatus])
+  }, [file])
 
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!
@@ -70,11 +71,14 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     const mask = new Uint8Array(maskCanvas.width * maskCanvas.height)
     let painted = 0
     for (let i=0,j=0;i<maskPixels.data.length;i+=4,j++) if (maskPixels.data[i+3] > 0) { mask[j]=1; painted++ }
-    if (!painted) { onStatus?.('Anh hãy tô đỏ vùng logo cần xóa trước.'); return }
-    setWorking(true); onStatus?.('Đang nội suy vùng đã chọn trên thiết bị…')
+    if (!painted) { onStatusRef.current?.('Anh hãy tô đỏ vùng logo cần xóa trước.'); return }
+    setWorking(true); onStatusRef.current?.('Đang nội suy vùng đã chọn trên thiết bị…')
     try {
+      const sourceCanvas = document.createElement('canvas')
+      sourceCanvas.width = canvas.width; sourceCanvas.height = canvas.height
+      sourceCanvas.getContext('2d')!.drawImage(imageRef.current!, 0, 0, canvas.width, canvas.height)
+      const pixels = sourceCanvas.getContext('2d')!.getImageData(0,0,canvas.width,canvas.height)
       const ctx = canvas.getContext('2d')!
-      const pixels = ctx.getImageData(0,0,canvas.width,canvas.height)
       const worker = new Worker(new URL('../lib/media-processing/inpaint.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-inpainting' })
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve,reject) => {
@@ -90,8 +94,8 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
       const output = new ImageData(new Uint8ClampedArray(result), canvas.width, canvas.height)
       ctx.putImageData(output,0,0)
       const blob = await new Promise<Blob>((resolve,reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Không xuất được ảnh.')), 'image/png'))
-      onProcessed(blob); onStatus?.('Đã nội suy vùng đã tô. Hãy phóng to kiểm tra và tô thêm nếu còn dấu vết.')
-    } catch (error) { onStatus?.(error instanceof Error ? error.message : 'Không xử lý được ảnh.') }
+      onProcessed(blob); onStatusRef.current?.('Đã nội suy vùng đã tô. Hãy phóng to kiểm tra và tô thêm nếu còn dấu vết.')
+    } catch (error) { onStatusRef.current?.(error instanceof Error ? error.message : 'Không xử lý được ảnh.') }
     finally { setWorking(false) }
   }
 
