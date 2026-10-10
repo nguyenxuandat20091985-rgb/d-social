@@ -199,7 +199,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
 
   return <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
     <h2 className="font-semibold">Chọn vùng logo thủ công</h2>
-    <p className="mt-1 text-sm leading-5 text-slate-600">Dùng ngón tay tô đỏ lên toàn bộ logo/chữ và chừa một ít nền xung quanh. Tọa độ mask được giữ theo pixel ảnh gốc. LaMa chạy cục bộ trong Web Worker; lần đầu tải mô hình có thể nặng và chậm, vì vậy chưa thể cam kết mọi điện thoại đều dưới 3–5 giây.</p>
+    <p className="mt-1 text-sm leading-5 text-slate-600">Dùng ngón tay tô đỏ lên toàn bộ logo/chữ và chừa một ít nền xung quanh. Tọa độ mask được giữ theo pixel ảnh gốc. LaMa chạy cục bộ trong Web Worker. Lưu ý: mô hình khoảng 208 MB, chỉ tải khi anh bấm “Xóa bằng LaMa AI”; nên dùng Wi‑Fi. Lần đầu chưa thể cam kết dưới 3–5 giây.</p>
     <canvas ref={canvasRef} className="mt-3 w-full rounded-xl border border-slate-200 touch-none" style={{ maxHeight: 520, objectFit: 'contain' }}
       onPointerDown={event => { drawingRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); paint(event) }}
       onPointerMove={paint} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} />
