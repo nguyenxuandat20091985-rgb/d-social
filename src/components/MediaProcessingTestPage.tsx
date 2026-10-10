@@ -70,6 +70,7 @@ export function MediaProcessingTestPage() {
     try {
       const cleanup = await cleanupCornerTextFromImage(selectedFile, {
         signal: controller.signal,
+        fastOnly: true,
         onProgress: () => undefined,
       })
       if (controller.signal.aborted) return
