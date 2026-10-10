@@ -16,13 +16,77 @@ export type ClientImageCleanupResult = {
   height: number
   candidates: LogoCandidate[]
   sha256: string
-  engine: 'tesseract-corner-text-v1'
+  engine: 'tesseract-corner-text-v1' | 'tesseract-plus-tiktok-color-v1'
 }
 
 export type CleanupOptions = {
   signal?: AbortSignal
   onProgress?: (progress: number, stage: string) => void
   minConfidence?: number
+}
+
+type CornerRegion = LogoCandidate['region']
+
+/**
+ * Lightweight TikTok-style watermark hint detector. It looks for compact cyan/red
+ * chroma clusters in the four outer corners; it is a heuristic, not a general logo model.
+ */
+function detectTikTokColorMarks(canvas: HTMLCanvasElement): LogoCandidate[] {
+  const regions: Array<{ region: CornerRegion; sx: number; sy: number }> = [
+    { region: 'top-left', sx: 0, sy: 0 },
+    { region: 'top-right', sx: 1, sy: 0 },
+    { region: 'bottom-left', sx: 0, sy: 1 },
+    { region: 'bottom-right', sx: 1, sy: 1 },
+  ]
+  const cornerWidth = Math.max(1, Math.round(canvas.width * 0.34))
+  const cornerHeight = Math.max(1, Math.round(canvas.height * 0.26))
+  const scale = Math.min(1, 480 / cornerWidth, 480 / cornerHeight)
+  const sample = document.createElement('canvas')
+  sample.width = Math.max(1, Math.round(cornerWidth * scale))
+  sample.height = Math.max(1, Math.round(cornerHeight * scale))
+  const ctx = sample.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return []
+  const output: LogoCandidate[] = []
+  for (const corner of regions) {
+    ctx.clearRect(0, 0, sample.width, sample.height)
+    const x = corner.sx ? canvas.width - cornerWidth : 0
+    const y = corner.sy ? canvas.height - cornerHeight : 0
+    ctx.drawImage(canvas, x, y, cornerWidth, cornerHeight, 0, 0, sample.width, sample.height)
+    const { data, width, height } = ctx.getImageData(0, 0, sample.width, sample.height)
+    const active = new Uint8Array(width * height)
+    let count = 0, minX = width, minY = height, maxX = -1, maxY = -1
+    for (let py = 0; py < height; py++) {
+      for (let px = 0; px < width; px++) {
+        const i = (py * width + px) * 4
+        const r = data[i], g = data[i + 1], b = data[i + 2]
+        const cyan = g > 105 && b > 115 && r < 135 && Math.max(g, b) - r > 45
+        const red = r > 145 && r > g * 1.35 && r > b * 1.2 && g < 135
+        if (!cyan && !red) continue
+        active[py * width + px] = 1
+        count++
+        minX = Math.min(minX, px); minY = Math.min(minY, py)
+        maxX = Math.max(maxX, px); maxY = Math.max(maxY, py)
+      }
+    }
+    if (count < 7 || maxX < minX || maxY < minY) continue
+    const bw = maxX - minX + 1, bh = maxY - minY + 1
+    const area = bw * bh
+    const density = count / area
+    // Reject broad colorful scenery; watermark accents should form a compact cluster.
+    if (bw > width * 0.30 || bh > height * 0.42 || area > width * height * 0.12 || density < 0.012) continue
+    const originalX = x + minX / scale
+    const originalY = y + minY / scale
+    output.push({
+      x: Math.max(0, Math.floor(originalX - 3 / scale)),
+      y: Math.max(0, Math.floor(originalY - 3 / scale)),
+      width: Math.min(canvas.width - Math.max(0, Math.floor(originalX - 3 / scale)), Math.ceil(bw / scale + 6 / scale)),
+      height: Math.min(canvas.height - Math.max(0, Math.floor(originalY - 3 / scale)), Math.ceil(bh / scale + 6 / scale)),
+      confidence: Math.min(72, 35 + Math.round(density * 100)),
+      text: 'TikTok-style color mark (heuristic)',
+      region: corner.region,
+    })
+  }
+  return output
 }
 
 /**
@@ -168,11 +232,19 @@ export async function cleanupCornerTextFromImage(
     }
 
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+    let usedColorHeuristic = false
     if (candidates.length === 0) {
-      throw new Error('Không xác định chắc chắn được logo dạng chữ ở góc ảnh. Ảnh chưa được xác nhận đã xử lý; hãy dùng bộ xử lý dự phòng.')
+      const colorCandidates = detectTikTokColorMarks(canvas)
+      if (colorCandidates.length) {
+        candidates.push(...colorCandidates)
+        usedColorHeuristic = true
+      }
+    }
+    if (candidates.length === 0) {
+      throw new Error('OCR và bộ dò màu TikTok ở 4 góc chưa tìm được vùng đủ tin cậy. Đây không phải kết luận ảnh sạch; hãy tô vùng logo thủ công.')
     }
 
-    options.onProgress?.(68, 'Đang che các vùng chữ nghi là logo…')
+    options.onProgress?.(68, usedColorHeuristic ? 'Đã tìm thấy cụm màu giống dấu TikTok; đang xử lý vùng nghi vấn…' : 'Đang che các vùng chữ nghi là logo…')
     for (const candidate of candidates) {
       const pad = Math.max(3, Math.round(Math.max(candidate.width, candidate.height) * 0.22))
       const x = Math.max(0, candidate.x - pad)
@@ -210,7 +282,7 @@ export async function cleanupCornerTextFromImage(
       height: canvas.height,
       candidates,
       sha256,
-      engine: 'tesseract-corner-text-v1',
+      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-v1' : 'tesseract-corner-text-v1',
     }
   } finally {
     bitmap?.close()
