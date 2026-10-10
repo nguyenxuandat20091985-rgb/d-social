@@ -18,6 +18,7 @@ SUPABASE_ANON_KEY=os.getenv("SUPABASE_ANON_KEY","")
 MAX_BYTES=int(os.getenv("MAX_UPLOAD_BYTES","33554432"))
 MAX_IMAGE_PIXELS=int(os.getenv("MAX_IMAGE_PIXELS","16000000"))
 MAX_VIDEO_SECONDS=int(os.getenv("MAX_VIDEO_SECONDS","180"))
+OCR_TIMEOUT_SECONDS=max(1,min(5,int(os.getenv("OCR_TIMEOUT_SECONDS","2"))))
 BRANDS=("tiktok","tik tok","instagram","facebook","youtube","you tube","capcut","kwai","likee","snapchat","pinterest","douyin","weibo","threads","linkedin","vimeo","triller","twitch","telegram","whatsapp","twitter","x.com","lemon8","bilibili","kuaishou","抖音","快手","小红书")
 
 @app.get("/ready")
@@ -71,15 +72,22 @@ def brand_boxes(frame):
             clahe, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY, 31, 7
         )
-        for variant in (gray, clahe, binary):
+        # A single slow/failed preprocessing variant must not abort all detection.
+        # Every corner must still complete at least one OCR pass; otherwise fail closed.
+        region_successes = 0
+        for variant_name, variant in (("gray", gray), ("clahe", clahe), ("binary", binary)):
             try:
                 data = pytesseract.image_to_data(
                     variant, config="--psm 11",
-                    output_type=Output.DICT, timeout=3
+                    output_type=Output.DICT, timeout=OCR_TIMEOUT_SECONDS
                 )
+                region_successes += 1
             except Exception as exc:
-                log.warning("Brand OCR failed (%s); refusing to publish unverified media", type(exc).__name__)
-                raise HTTPException(503, "Brand detection unavailable; do not publish this result") from exc
+                log.warning(
+                    "Brand OCR variant failed region=%s variant=%s error=%s",
+                    region, variant_name, type(exc).__name__
+                )
+                continue
             for i, raw in enumerate(data.get("text", [])):
                 text = re.sub(r"[^@a-z0-9.抖音快手小红书]", "", (raw or "").lower())
                 try:
@@ -100,6 +108,11 @@ def brand_boxes(frame):
                     max(x1, bx-px), max(y1, by-py),
                     min(x2, bx+bw+int(w*.13)), min(y2, by+bh+int(h*.08))
                 ))
+        if region_successes == 0:
+            raise HTTPException(
+                503,
+                f"Brand detection unavailable for {region}; do not publish this result"
+            )
     merged = []
     for box in found:
         x1, y1, x2, y2 = box
