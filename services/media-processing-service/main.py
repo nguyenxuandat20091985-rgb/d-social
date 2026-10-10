@@ -137,6 +137,20 @@ def verify_video_cleanup(path:Path):
     finally: cap.release()
     if idx==0: raise HTTPException(422,"Processed video has no decodable frames")
 
+def verify_image_cleanup(path:Path):
+    try:
+        with Image.open(path) as im:
+            im.load()
+            rgb=im.convert("RGB")
+            frame=cv2.cvtColor(np.array(rgb),cv2.COLOR_RGB2BGR)
+    except Exception as exc:
+        raise HTTPException(422,"Processed image could not be verified") from exc
+    remaining=brand_boxes(frame)
+    if remaining:
+        raise HTTPException(422,"A readable brand watermark remains; do not publish this result")
+    log.info("image cleanup verification=passed")
+
+
 def process_image(src:Path,dst:Path):
     try:
         with Image.open(src) as im:
@@ -144,7 +158,13 @@ def process_image(src:Path,dst:Path):
             frame,count=clean_frame(frame); frame=add_brand(frame)
             out=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB); Image.fromarray(out).save(dst,format="JPEG",quality=95,optimize=True)
             log.info("image detected brand boxes=%s",count)
-    except Exception as e: raise HTTPException(422,"Image processing failed") from e
+        # Re-open the encoded output and re-run the detector. A successful encode
+        # alone is not enough to certify that readable corner marks were removed.
+        verify_image_cleanup(dst)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(422,"Image processing failed") from e
 
 @app.post("/api/v1/media/process-binary")
 async def process_binary(file: UploadFile=File(...), rights_confirmed: bool=Form(False),
