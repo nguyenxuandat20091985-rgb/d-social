@@ -194,6 +194,7 @@ function Composer({ userId, onPublished, onClose }) {
     if (!postRateLimit(userId)) return setError('Anh đăng quá nhanh. Vui lòng chờ 60 giây rồi thử lại.')
 
     setBusy(true)
+    const uploadedPaths = []
     try {
       let media_url = null, media_type = null
       const image_urls = []
@@ -204,6 +205,7 @@ function Composer({ userId, onPublished, onClose }) {
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
         if (up.error) throw new Error(`Không tải được ${file.name}: ${up.error.message}`)
+        uploadedPaths.push(path)
         const url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
         if (file.type.startsWith('video/')) { media_url = url; media_type = 'video' }
         else { image_urls.push(url); if (!media_url) media_url = url; media_type = 'image' }
@@ -222,6 +224,14 @@ function Composer({ userId, onPublished, onClose }) {
       // Close immediately after saving; let the feed refresh without blocking the composer.
       Promise.resolve().then(() => onPublished?.()).catch(err => console.error('Không làm mới bảng tin:', err))
     } catch (e) {
+      if (uploadedPaths.length) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from('social-media').remove(uploadedPaths)
+          if (cleanupError) console.error('Không dọn được tệp tải lên dở dang:', cleanupError)
+        } catch (cleanupError) {
+          console.error('Không dọn được tệp tải lên dở dang:', cleanupError)
+        }
+      }
       setError(e?.message || 'Không thể đăng bài. Vui lòng thử lại.')
     } finally {
       setBusy(false)
@@ -312,11 +322,13 @@ function StoryComposer({ userId, onClose, onPublished }) {
     setBusy(true)
     setError('')
     setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
+    let uploadedPath = null
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
       const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
+      uploadedPath = path
       const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
@@ -329,6 +341,14 @@ function StoryComposer({ userId, onClose, onPublished }) {
       onClose?.()
       Promise.resolve().then(() => onPublished?.()).catch(err => console.error('Không làm mới Tin 24 giờ:', err))
     } catch (e) {
+      if (uploadedPath) {
+        try {
+          const { error: cleanupError } = await supabase.storage.from('social-media').remove([uploadedPath])
+          if (cleanupError) console.error('Không dọn được tệp tin tải lên dở dang:', cleanupError)
+        } catch (cleanupError) {
+          console.error('Không dọn được tệp tin tải lên dở dang:', cleanupError)
+        }
+      }
       setError(e?.message || 'Không đăng được tin. Vui lòng thử lại.')
     } finally {
       setBusy(false)
