@@ -222,8 +222,8 @@ export async function cleanupCornerTextFromImage(
   try {
     options.onProgress?.(5, 'Đang đọc ảnh trên thiết bị…')
     bitmap = await createImageBitmap(file)
-    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 16_000_000) {
-      throw new Error('Kích thước ảnh vượt giới hạn xử lý an toàn.')
+    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 8_000_000) {
+      throw new Error('Ảnh vượt giới hạn 8 megapixel để giảm nguy cơ tràn RAM trên điện thoại.')
     }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
 
