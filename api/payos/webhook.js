@@ -6,28 +6,37 @@ const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVIC
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  let verified
   try {
-    const verified = await payos.webhooks.verify(req.body)
-    const data = verified.data || verified
-    const orderCode = Number(data.orderCode)
-    if (!Number.isInteger(orderCode)) return res.status(400).json({ error: 'Invalid order code' })
-    const success = verified.code === '00' || verified.success === true || data.code === '00'
-    const { data: tx, error: findError } = await admin.from('wallet_transactions').select('id,user_id,amount,type,status').eq('order_code', orderCode).maybeSingle()
-    if (findError) throw findError
-    if (!tx) return res.status(404).json({ error: 'Order not found' })
-    if (tx.status === 'paid') return res.status(200).json({ received: true, duplicate: true })
-    const nextStatus = success ? 'paid' : 'failed'
-    const { data: updated, error: updateError } = await admin.from('wallet_transactions').update({ status: nextStatus, provider_reference: String(data.reference || data.transactionDateTime || orderCode), paid_at: success ? new Date().toISOString() : null }).eq('id', tx.id).eq('status', 'pending').select('id').maybeSingle()
-    if (updateError) throw updateError
-    if (!updated) return res.status(200).json({ received: true, duplicate: true })
-    if (success && tx.type === 'vip_purchase') {
-      const { data: profile, error: profileError } = await admin.from('profiles').select('vip_expires_at').eq('id', tx.user_id).single()
-      if (profileError) throw profileError
-      const base = profile?.vip_expires_at && new Date(profile.vip_expires_at) > new Date() ? new Date(profile.vip_expires_at) : new Date()
-      base.setUTCDate(base.getUTCDate() + 30)
-      const { error: vipError } = await admin.from('profiles').update({ is_vip: true, vip_expires_at: base.toISOString() }).eq('id', tx.user_id)
-      if (vipError) throw vipError
-    }
-    return res.status(200).json({ received: true })
-  } catch (error) { return res.status(400).json({ error: error?.message || 'Invalid webhook' }) }
+    verified = await payos.webhooks.verify(req.body)
+  } catch {
+    return res.status(400).json({ error: 'Invalid webhook signature or payload' })
+  }
+
+  const data = verified.data || verified
+  const orderCode = Number(data.orderCode)
+  if (!Number.isSafeInteger(orderCode) || orderCode <= 0) {
+    return res.status(400).json({ error: 'Invalid order code' })
+  }
+
+  const success = verified.code === '00' || verified.success === true || data.code === '00'
+  const providerReference = String(data.reference || data.transactionDateTime || orderCode)
+
+  try {
+    const { data: result, error } = await admin.rpc('process_payos_webhook', {
+      p_order_code: orderCode,
+      p_success: success,
+      p_provider_reference: providerReference,
+    })
+    if (error) throw error
+    if (result?.not_found) return res.status(404).json({ error: 'Order not found' })
+    return res.status(200).json({
+      received: result?.received === true,
+      ...(result?.duplicate ? { duplicate: true } : {}),
+    })
+  } catch (error) {
+    // Return a retryable status for transient database failures; the RPC is idempotent.
+    return res.status(500).json({ error: error?.message || 'Webhook processing failed' })
+  }
 }
