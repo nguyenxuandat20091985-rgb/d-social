@@ -169,7 +169,7 @@ Deno.serve(async (request) => {
       processed_path: processedPath,
       sha256: outputHash,
       size_bytes: declaredSize,
-    });
+    }, 200, request);
   } catch (error) {
     if (pendingProcessedPath) {
       try { await admin.storage.from(BUCKET).remove([pendingProcessedPath]); } catch { /* best-effort cleanup */ }
