@@ -201,24 +201,22 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     finally { setWorking(false) }
   }
 
-  return <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
-    <h2 className="font-semibold">Chọn vùng logo thủ công</h2>
-    <p className="mt-1 text-sm leading-5 text-slate-600">Dùng ngón tay tô đỏ lên toàn bộ logo/chữ và chừa một ít nền xung quanh. Tọa độ mask được giữ theo pixel ảnh gốc. Bộ xử lý tự phân tầng theo RAM ước tính, CPU và WebGL/WebGPU; máy trung bình/yếu không tải model LaMa 208 MB.</p>
-    {hardware && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"><strong>{hardware.label}</strong><p className="mt-1">{hardware.reason}</p><p className="mt-1 text-xs">RAM báo cáo: {hardware.deviceMemoryGB === null ? 'trình duyệt không cung cấp' : hardware.deviceMemoryGB + ' GB'} · CPU: {hardware.hardwareConcurrency} luồng · WebGPU: {hardware.webgpu ? 'có' : 'không'} · WebGL: {hardware.webgl ? 'có' : 'không'}</p></div>}
-    <canvas ref={canvasRef} className="mt-3 w-full rounded-xl border border-slate-200 touch-none" style={{ maxHeight: 520, objectFit: 'contain' }}
+  return <section className="ds-clean-manual">
+    <div className="ds-clean-manual-head">
+      <strong>Tô lên watermark</strong>
+      <button type="button" onClick={resetMask} disabled={!ready || working} aria-label="Xóa nét tô">Làm lại</button>
+    </div>
+    <p className="ds-clean-hint">Tô đỏ sát logo hoặc chữ cần xóa.</p>
+    <canvas ref={canvasRef} className="ds-clean-mask-canvas touch-none" style={{ maxHeight: '48svh', objectFit: 'contain' }}
       onPointerDown={event => { drawingRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); paint(event) }}
       onPointerMove={paint} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} />
-    <div className="mt-3 flex items-center gap-3 text-sm"><label htmlFor="mask-brush">Cỡ nét</label><input id="mask-brush" type="range" min="8" max="72" value={brush} onChange={event => setBrush(Number(event.currentTarget.value))}/><span>{brush}px</span></div>
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button type="button" disabled={!ready || working} onClick={resetMask} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold">Làm lại vùng chọn</button>
-      <button type="button" disabled={!ready || working || hardware?.tier !== 'strong'} onClick={() => void processLama()} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{working ? 'Đang xử lý…' : hardware?.tier === 'strong' ? 'Xóa bằng LaMa AI' : 'LaMa AI không phù hợp máy này'}</button>
-      <button type="button" disabled={!ready || working} onClick={() => void processFast()} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50">Nội suy nhanh</button>
+    <div className="ds-clean-brush">
+      <label htmlFor="mask-brush">Nét</label>
+      <input id="mask-brush" type="range" min="8" max="72" value={brush} onChange={event => setBrush(Number(event.currentTarget.value))} />
+      <span>{brush}</span>
     </div>
-    <div className="mt-4 rounded-xl bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600"><span>Tiến độ LaMa</span><span>{lamaProgress}%</span></div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: lamaProgress + '%' }}/></div>
-      <p className="mt-2 text-xs leading-5 text-slate-600" aria-live="polite">{lamaStage}</p>
-    </div>
-    <p className="mt-3 text-xs leading-5 text-amber-800">LaMa hiện dùng mô hình ONNX công khai qua Internet. Ảnh gốc và mask chỉ được gửi đến worker trên thiết bị; mô hình được tải từ kho công khai. Kết quả phải được xem trước, vì mô hình cố định 512×512 có thể làm mềm chi tiết hoặc để lại đường nối.</p>
+    <button type="button" className="ds-clean-primary" disabled={!ready || working} onClick={() => void (hardware?.tier === 'strong' ? processLama() : processFast())}>
+      {working ? <><span className="ds-clean-spinner" />Đang xóa…</> : 'Xóa vùng đã tô'}
+    </button>
   </section>
 }
