@@ -1,5 +1,5 @@
 FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HOME=/models/huggingface
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HOME=/models/huggingface TORCH_HOME=/models/torch
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
