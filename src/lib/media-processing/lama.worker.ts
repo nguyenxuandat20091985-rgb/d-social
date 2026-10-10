@@ -12,6 +12,9 @@ const ORT_URL = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.we
 const WASM_PATH = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/'
 
 function send(message: Reply) { scope.postMessage(message) }
+let runtimePromise: Promise<any> | undefined
+let sessionPromise: Promise<any> | undefined
+let modelBytesPromise: Promise<ArrayBuffer> | undefined
 function clamp(value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)) }
 
 async function readWithProgress(response: Response, id: string): Promise<ArrayBuffer> {
@@ -58,20 +61,25 @@ async function run(request: Request) {
   const side = 512
   send({ id, type: 'progress', progress: 3, stage: 'Đang khởi tạo ONNX Runtime Web trong Web Worker…' })
   const moduleUrl: string = ORT_URL
-  const ortModule = await import(/* @vite-ignore */ moduleUrl) as { default?: unknown; env: { wasm: { wasmPaths: string; numThreads: number }; logLevel: string }; InferenceSession: { create(model: ArrayBuffer, options: Record<string, unknown>): Promise<{ inputNames: string[]; outputNames: string[]; run(inputs: Record<string, unknown>): Promise<Record<string, { data: ArrayLike<number>; dims: number[] }>>; release(): Promise<void> }> }; Tensor: new (type: string, data: Float32Array, dims: number[]) => unknown }
-  ortModule.env.wasm.wasmPaths = WASM_PATH
-  ortModule.env.wasm.numThreads = Math.min(2, typeof navigator === 'undefined' ? 1 : Math.max(1, navigator.hardwareConcurrency || 1))
-  ortModule.env.logLevel = 'error'
-  send({ id, type: 'progress', progress: 5, stage: 'Đang tải mô hình LaMa; lần đầu có thể mất nhiều thời gian và dữ liệu mạng…' })
-  const modelResponse = await fetch(MODEL_URL, { mode: 'cors', credentials: 'omit' })
-  const modelBytes = await readWithProgress(modelResponse, id)
+  runtimePromise ??= import(/* @vite-ignore */ moduleUrl).then((loaded: any) => {
+    loaded.env.wasm.wasmPaths = WASM_PATH
+    loaded.env.wasm.numThreads = Math.min(2, typeof navigator === 'undefined' ? 1 : Math.max(1, navigator.hardwareConcurrency || 1))
+    loaded.env.logLevel = 'error'
+    return loaded
+  })
+  send({ id, type: 'progress', progress: 5, stage: 'Đang khởi tạo ONNX Runtime Web…' })
+  const ortModule = await runtimePromise
+  send({ id, type: 'progress', progress: 8, stage: 'Đang tải mô hình LaMa; lần đầu có thể mất nhiều thời gian và dữ liệu mạng…' })
+  modelBytesPromise ??= fetch(MODEL_URL, { mode: 'cors', credentials: 'omit' }).then(response => readWithProgress(response, id)).catch(error => { modelBytesPromise = undefined; throw error })
+  const modelBytes = await modelBytesPromise
   send({ id, type: 'progress', progress: 30, stage: 'Đã tải mô hình; đang khởi tạo phiên suy luận…' })
-  const session = await ortModule.InferenceSession.create(modelBytes, {
+  sessionPromise ??= ortModule.InferenceSession.create(modelBytes, {
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all',
     executionMode: 'sequential',
     intraOpNumThreads: 2,
-  })
+  }).catch((error: unknown) => { sessionPromise = undefined; throw error })
+  const session = await sessionPromise
   try {
     const imageTensor = new Float32Array(3 * side * side)
     const maskTensor = new Float32Array(side * side)
@@ -122,9 +130,8 @@ async function run(request: Request) {
     }
     send({ id, type: 'progress', progress: 95, stage: 'Đang kiểm tra dữ liệu ảnh đầu ra…' })
     send({ id, type: 'complete', pixels: result.buffer })
-    scope.postMessage // keep worker scope explicit for type checking
   } finally {
-    await session.release()
+    // Keep the initialized session in this worker for subsequent manual-mask runs.
   }
 }
 
