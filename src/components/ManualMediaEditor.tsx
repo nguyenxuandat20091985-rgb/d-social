@@ -183,7 +183,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     if (working) return
     setWorking(true); onStatusRef.current?.('Đang chạy nội suy nhanh trên Web Worker…')
     try {
-      const { canvas, mask, pixels } = buildInput()
+      const { canvas, mask, pixels, originX, originY } = buildLamaInput()
       const worker = new Worker(new URL('../lib/media-processing/inpaint.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-inpainting-fast' })
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
@@ -196,7 +196,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
         worker.onerror = () => { worker.terminate(); reject(new Error('Web Worker nội suy gặp lỗi.')) }
         worker.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
       })
-      await saveOutput(result, canvas.width, canvas.height, 'nội suy nhanh')
+      await saveOutput(result, pixels.width, pixels.height, 'nội suy nhanh', { x: originX, y: originY })
     } catch (error) { onStatusRef.current?.(error instanceof Error ? error.message : 'Không xử lý được ảnh.') }
     finally { setWorking(false) }
   }
