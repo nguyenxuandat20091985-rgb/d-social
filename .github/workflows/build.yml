@@ -1,9 +1,10 @@
 name: D Social build
 on:
   push:
-    branches: [main]
+    branches: [main, feat/client-first-media-processing]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 jobs:
   build:
     runs-on: ubuntu-latest
