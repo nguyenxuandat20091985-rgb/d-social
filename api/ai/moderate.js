@@ -58,7 +58,7 @@ async function groqOpinion(text) {
   }
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -69,12 +69,15 @@ module.exports = async function handler(req, res) {
   if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text required' })
 
   const base = ruleScore(text)
+  // Deterministic hard blocks need no external request and cannot be overridden by the LLM.
+  if (base.action === 'hide') return res.status(200).json(base)
+
   const llm = await groqOpinion(text)
   const result = llm
     ? {
         ...base,
         llm,
-        action: base.action === 'hide' || llm.action === 'hide' ? 'hide' : llm.action || base.action,
+        action: llm.action === 'hide' ? 'hide' : llm.action || base.action,
         engine: process.env.GROQ_API_KEY ? 'rules+groq' : base.engine,
       }
     : base
