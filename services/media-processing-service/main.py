@@ -46,39 +46,71 @@ def auth(token: Optional[str]):
         raise HTTPException(503,"Supabase session validation unavailable") from exc
 
 def brand_boxes(frame):
-    h,w=frame.shape[:2]
-    cw,ch=max(1,int(w*.45)),max(1,int(h*.32))
-    regions=[(0,0,cw,ch),(w-cw,0,w,ch),(0,h-ch,cw,h),(w-cw,h-ch,w,h)]
-    found=[]
-    for x1,y1,x2,y2 in regions:
-        crop=frame[y1:y2,x1:x2]
-        max_dim=max(crop.shape[:2])
-        # Keep OCR bounded on the free Render instance; never upscale frames.
-        scale=min(1.0,600/max_dim)
-        if scale<1.0: crop=cv2.resize(crop,None,fx=scale,fy=scale,interpolation=cv2.INTER_AREA)
-        gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
-        try: data=pytesseract.image_to_data(gray,config="--psm 11",output_type=Output.DICT,timeout=3)
-        except Exception as exc:
-            log.warning("Brand OCR failed (%s); refusing to publish unverified media",type(exc).__name__)
-            raise HTTPException(503,"Brand detection unavailable; do not publish this result") from exc
-        for i,raw in enumerate(data.get("text",[])):
-            text=re.sub(r"[^@a-z0-9.抖音快手小红书]","",(raw or "").lower())
-            try: conf=float(data["conf"][i])
-            except (ValueError,TypeError): conf=-1
-            is_brand=any(b.replace(" ","") in text for b in BRANDS)
-            is_handle=bool(re.search(r"@[_a-z0-9.]{3,}",text))
-            if conf<30 or not (is_brand or is_handle): continue
-            bx=int(data["left"][i]/scale)+x1; by=int(data["top"][i]/scale)+y1
-            bw=max(1,int(data["width"][i]/scale)); bh=max(1,int(data["height"][i]/scale))
-            px=max(8,int(w*.035)); py=max(6,int(h*.025))
-            found.append((max(x1,bx-px),max(y1,by-py),min(x2,bx+bw+int(w*.13)),min(y2,by+bh+int(h*.08))))
-    merged=[]
+    """Best-effort OCR detector with corner crops and contrast-enhanced variants."""
+    h, w = frame.shape[:2]
+    cw, ch = max(1, int(w * .45)), max(1, int(h * .32))
+    regions = [
+        ("top-left", 0, 0, cw, ch),
+        ("top-right", w-cw, 0, w, ch),
+        ("bottom-left", 0, h-ch, cw, h),
+        ("bottom-right", w-cw, h-ch, w, h),
+    ]
+    found = []
+    for region, x1, y1, x2, y2 in regions:
+        crop = frame[y1:y2, x1:x2]
+        max_dim = max(crop.shape[:2])
+        # Upscale small corner marks, but cap OCR work for free-tier CPU/RAM.
+        scale = min(2.5, 900 / max_dim) if max_dim < 900 else 900 / max_dim
+        if abs(scale - 1.0) > 0.05:
+            interp = cv2.INTER_CUBIC if scale > 1 else cv2.INTER_AREA
+            crop = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=interp)
+        gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8)).apply(gray)
+        # Adaptive threshold helps faint text whose foreground resembles the background.
+        binary = cv2.adaptiveThreshold(
+            clahe, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY, 31, 7
+        )
+        for variant in (gray, clahe, binary):
+            try:
+                data = pytesseract.image_to_data(
+                    variant, config="--psm 11",
+                    output_type=Output.DICT, timeout=3
+                )
+            except Exception as exc:
+                log.warning("Brand OCR failed (%s); refusing to publish unverified media", type(exc).__name__)
+                raise HTTPException(503, "Brand detection unavailable; do not publish this result") from exc
+            for i, raw in enumerate(data.get("text", [])):
+                text = re.sub(r"[^@a-z0-9.抖音快手小红书]", "", (raw or "").lower())
+                try:
+                    conf = float(data["conf"][i])
+                except (ValueError, TypeError):
+                    conf = -1
+                is_brand = any(b.replace(" ", "") in text for b in BRANDS)
+                is_handle = bool(re.search(r"@[_a-z0-9.]{3,}", text))
+                # Low-confidence OCR is accepted only when its text matches a known brand/handle.
+                if conf < 22 or not (is_brand or is_handle):
+                    continue
+                bx = int(data["left"][i] / scale) + x1
+                by = int(data["top"][i] / scale) + y1
+                bw = max(1, int(data["width"][i] / scale))
+                bh = max(1, int(data["height"][i] / scale))
+                px, py = max(8, int(w * .035)), max(6, int(h * .025))
+                found.append((
+                    max(x1, bx-px), max(y1, by-py),
+                    min(x2, bx+bw+int(w*.13)), min(y2, by+bh+int(h*.08))
+                ))
+    merged = []
     for box in found:
-        x1,y1,x2,y2=box
-        overlaps=[i for i,(a,b,c,d) in enumerate(merged) if not(x2<a or c<x1 or y2<b or d<y1)]
-        if not overlaps: merged.append(box)
+        x1, y1, x2, y2 = box
+        overlaps = [i for i, (a, b, c, d) in enumerate(merged)
+                    if not (x2 < a or c < x1 or y2 < b or d < y1)]
+        if not overlaps:
+            merged.append(box)
         else:
-            i=overlaps[0]; a,b,c,d=merged[i]; merged[i]=(min(a,x1),min(b,y1),max(c,x2),max(d,y2))
+            i = overlaps[0]
+            a, b, c, d = merged[i]
+            merged[i] = (min(a, x1), min(b, y1), max(c, x2), max(d, y2))
     return merged
 
 def clean_frame(frame):
@@ -128,12 +160,22 @@ def process_video(src:Path,dst:Path,work:Path):
             writer.write(add_brand(frame)); n+=1
     finally: cap.release(); writer.release()
     if not n: raise HTTPException(422,"Video contains no decodable frames")
-    # Restore source audio and preserve source dimensions.
-    cmd=["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(tmp),"-i",str(src),"-map","0:v:0","-map","1:a?","-c:v","libx264","-preset","veryfast","-crf","22","-threads","2","-c:a","aac","-b:a","192k","-movflags","+faststart",str(dst)]
-    p=subprocess.run(cmd,capture_output=True,timeout=90)
-    if p.returncode: raise HTTPException(422,"Video encoding failed; original must not be published as cleaned")
+    # Prefer stream-copying original audio; only transcode if the source codec/container is incompatible.
+    base_cmd=["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(tmp),"-i",str(src),
+              "-map","0:v:0","-map","1:a?","-c:v","libx264","-preset","veryfast",
+              "-crf","22","-threads","2","-movflags","+faststart"]
+    copy_cmd=base_cmd+["-c:a","copy",str(dst)]
+    p=subprocess.run(copy_cmd,capture_output=True,timeout=90)
+    audio_mode="stream-copy"
+    if p.returncode:
+        fallback_cmd=base_cmd+["-c:a","aac","-b:a","192k",str(dst)]
+        p=subprocess.run(fallback_cmd,capture_output=True,timeout=90)
+        audio_mode="transcoded-aac"
+    if p.returncode:
+        raise HTTPException(422,"Video encoding failed; original must not be published as cleaned")
     verify_video_cleanup(dst)
-    log.info("video frames=%s frames_with_detected_brand=%s cleanup_verification=passed",n,changed)
+    log.info("video frames=%s frames_with_detected_brand=%s audio_mode=%s cleanup_verification=passed",n,changed,audio_mode)
+    return audio_mode
 
 def verify_video_cleanup(path:Path):
     cap=cv2.VideoCapture(str(path))
@@ -201,12 +243,13 @@ async def process_binary(file: UploadFile=File(...), rights_confirmed: bool=Form
     with tempfile.TemporaryDirectory(prefix="dsocial-") as td:
         work=Path(td); src=work/("input"+ext); dst=work/("output.mp4" if is_video else "output.jpg")
         src.write_bytes(data)
-        if is_video: process_video(src,dst,work)
+        audio_mode="not-video"
+        if is_video: audio_mode=process_video(src,dst,work)
         else: process_image(src,dst)
         output=dst.read_bytes(); digest=hashlib.sha256(output).hexdigest()
         out_ext=".mp4" if is_video else ".jpg"
         return Response(output,media_type="video/mp4" if is_video else "image/jpeg",headers={
             "X-Output-Filename":digest[:24]+out_ext,"X-Output-SHA256":digest,
             "X-Output-Size-Bytes":str(len(output)),"X-Output-Media-Type":"video" if is_video else "image",
-            "X-Audio-Preserved":"na","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"
+            "X-Audio-Preserved":audio_mode,"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"
         })
