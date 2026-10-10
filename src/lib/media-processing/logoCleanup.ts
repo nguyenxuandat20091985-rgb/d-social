@@ -16,7 +16,7 @@ export type ClientImageCleanupResult = {
   height: number
   candidates: LogoCandidate[]
   sha256: string
-  engine: 'paddleocr-ppocrv5-v1' | 'tesseract-corner-text-v1' | 'tesseract-plus-tiktok-color-v1'
+  engine: 'paddleocr-ppocrv5-lama-v1' | 'tesseract-corner-text-lama-v1' | 'tesseract-plus-tiktok-color-lama-v1'
 }
 
 export type CleanupOptions = {
@@ -120,6 +120,71 @@ async function detectWithPaddleOCR(file: File, width: number, height: number, op
   })
 }
 
+
+async function inpaintCandidateBoxesWithLama(
+  canvas: HTMLCanvasElement,
+  context: CanvasRenderingContext2D,
+  candidates: LogoCandidate[],
+  options: CleanupOptions,
+): Promise<void> {
+  lamaWorker = new Worker(new URL('./lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-auto-inpaint' })
+  const signal = options.signal
+  const abort = () => lamaWorker?.terminate()
+  signal?.addEventListener('abort', abort, { once: true })
+  try {
+    for (let index = 0; index < candidates.length; index++) {
+      if (signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+      const candidate = candidates[index]
+      const pad = Math.max(6, Math.round(Math.max(candidate.width, candidate.height) * 0.24))
+      const x = Math.max(0, candidate.x - pad)
+      const y = Math.max(0, candidate.y - pad)
+      const right = Math.min(canvas.width, candidate.x + candidate.width + pad)
+      const bottom = Math.min(canvas.height, candidate.y + candidate.height + pad)
+      const maskCanvas = document.createElement('canvas')
+      maskCanvas.width = canvas.width
+      maskCanvas.height = canvas.height
+      const maskContext = maskCanvas.getContext('2d')
+      if (!maskContext) throw new Error('Không tạo được mask cho LaMa.')
+      maskContext.fillStyle = '#fff'
+      maskContext.fillRect(x, y, right - x, bottom - y)
+      const maskPixels = maskContext.getImageData(0, 0, canvas.width, canvas.height)
+      const mask = new Uint8Array(canvas.width * canvas.height)
+      for (let i = 0, j = 0; i < maskPixels.data.length; i += 4, j++) if (maskPixels.data[i + 3] > 0) mask[j] = 1
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
+      const id = crypto.randomUUID()
+      const result = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const abortOne = () => reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError'))
+        signal?.addEventListener('abort', abortOne, { once: true })
+        lamaWorker!.onmessage = (event: MessageEvent<{ id: string; type?: string; progress?: number; stage?: string; pixels?: ArrayBuffer; message?: string }>) => {
+          const message = event.data
+          if (message?.id !== id) return
+          if (message.type === 'progress') {
+            const overall = Math.round(((index + (message.progress ?? 0) / 100) / candidates.length) * 100)
+            options.onProgress?.(68 + Math.round(overall * 0.29), 'LaMa ' + (index + 1) + '/' + candidates.length + ': ' + (message.stage ?? 'đang tái tạo nền…'))
+          } else if (message.type === 'complete' && message.pixels) {
+            signal?.removeEventListener('abort', abortOne)
+            resolve(message.pixels)
+          } else if (message.type === 'error') {
+            signal?.removeEventListener('abort', abortOne)
+            reject(new Error(message.message || 'LaMa không xử lý được vùng phát hiện.'))
+          }
+        }
+        lamaWorker!.onerror = () => {
+          signal?.removeEventListener('abort', abortOne)
+          reject(new Error('Web Worker LaMa gặp lỗi.'))
+        }
+        lamaWorker!.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
+      })
+      if (signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+      context.putImageData(new ImageData(new Uint8ClampedArray(result), canvas.width, canvas.height), 0, 0)
+    }
+  } finally {
+    signal?.removeEventListener('abort', abort)
+    lamaWorker?.terminate()
+    lamaWorker = undefined
+  }
+}
+
 /**
  * Conservative client-side image cleanup for text-like marks in the four corners.
  *
@@ -140,6 +205,7 @@ export async function cleanupCornerTextFromImage(
   if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
 
   let worker: TesseractWorker | undefined
+  let lamaWorker: Worker | undefined
   let bitmap: ImageBitmap | undefined
   try {
     options.onProgress?.(5, 'Đang đọc ảnh trên thiết bị…')
@@ -284,26 +350,8 @@ export async function cleanupCornerTextFromImage(
       throw new Error('OCR và bộ dò màu TikTok ở 4 góc chưa tìm được vùng đủ tin cậy. Đây không phải kết luận ảnh sạch; hãy tô vùng logo thủ công.')
     }
 
-    options.onProgress?.(68, usedColorHeuristic ? 'Đã tìm thấy cụm màu giống dấu TikTok; đang xử lý vùng nghi vấn…' : 'Đang che các vùng chữ nghi là logo…')
-    for (const candidate of candidates) {
-      const pad = Math.max(3, Math.round(Math.max(candidate.width, candidate.height) * 0.22))
-      const x = Math.max(0, candidate.x - pad)
-      const y = Math.max(0, candidate.y - pad)
-      const width = Math.min(canvas.width - x, candidate.width + pad * 2)
-      const height = Math.min(canvas.height - y, candidate.height + pad * 2)
-      // Blur only the bounded OCR box; do not claim semantic inpainting.
-      const patch = document.createElement('canvas')
-      patch.width = Math.max(1, width)
-      patch.height = Math.max(1, height)
-      const patchContext = patch.getContext('2d')
-      if (!patchContext) throw new Error('Không tạo được vùng xử lý ảnh.')
-      patchContext.filter = 'blur(7px)'
-      patchContext.drawImage(canvas, x, y, width, height, 0, 0, width, height)
-      context.save()
-      context.filter = 'none'
-      context.drawImage(patch, x, y)
-      context.restore()
-    }
+    options.onProgress?.(68, 'Đã tạo mask cho các vùng phát hiện; đang chạy LaMa Inpainting…')
+    await inpaintCandidateBoxesWithLama(canvas, context, candidates, options)
 
     options.onProgress?.(88, 'Đang xuất và kiểm tra ảnh đã xử lý…')
     const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
@@ -322,7 +370,7 @@ export async function cleanupCornerTextFromImage(
       height: canvas.height,
       candidates,
       sha256,
-      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-v1' : 'tesseract-corner-text-v1',
+      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-lama-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-lama-v1' : 'tesseract-corner-text-lama-v1',
     }
   } finally {
     bitmap?.close()
