@@ -16,6 +16,7 @@ This integration is deliberately disabled by default. The current upload path re
 
 Set these in the target Supabase project's Edge Function secrets; never place them in `VITE_*` variables or commit them:
 
+- `MEDIA_ALLOWED_ORIGINS`: comma-separated exact browser origins allowed to call this function (for example, the production or staging app origin; no trailing slash). An empty list denies browser origins.
 - `MEDIA_SERVICE_URL`: deployed HTTPS base URL of the dedicated media service.
 - `MEDIA_SERVICE_API_TOKEN`: same server-to-server token configured on the media service.
 - `SUPABASE_SERVICE_ROLE_KEY`: server-only storage access key used by the Edge Function.
