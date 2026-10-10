@@ -210,8 +210,11 @@ function Composer({ userId, onPublished, onClose }) {
         if (up.error) throw new Error(`Không tải được ${file.name}: ${up.error.message}`)
         uploadedPaths.push(path)
         let url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-        if (MEDIA_PROCESSING_ENABLED && mediaRightsConfirmed) {
-          setStage(file.type.startsWith('video/') ? 'Đang xử lý video…' : 'Đang xử lý ảnh…')
+        if (MEDIA_PROCESSING_ENABLED) {
+          if (!mediaRightsConfirmed) {
+            throw new Error('Anh cần xác nhận quyền chỉnh sửa ảnh/video trước khi đăng.')
+          }
+          setStage(file.type.startsWith('video/') ? 'Đang làm sạch video trước khi đăng…' : 'Đang xử lý ảnh trước khi đăng…')
           const processed = await processUploadedMedia({
             path,
             mediaType: file.type.startsWith('video/') ? 'video' : 'image',
