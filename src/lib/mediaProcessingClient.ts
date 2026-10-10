@@ -46,7 +46,9 @@ export function inspectMediaOnDevice(
       new URL('./media-processing/media.worker.ts', import.meta.url),
       { type: 'module', name: 'dsocial-media-inspection' },
     )
-    const id = crypto.randomUUID()
+    const id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('')
     let settled = false
 
     const cleanup = () => {
