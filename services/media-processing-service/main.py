@@ -79,7 +79,7 @@ def brand_boxes(frame):
         # A single slow/failed preprocessing variant must not abort all detection.
         # Every corner must still complete at least one OCR pass; otherwise fail closed.
         region_successes = 0
-        for variant_name, variant in (("gray", gray), ("clahe", clahe), ("binary", binary)):
+        for variant_name, variant in (("clahe", clahe), ("binary", binary)):
             try:
                 data = pytesseract.image_to_data(
                     variant, config="--psm 11",
