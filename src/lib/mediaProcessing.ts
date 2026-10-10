@@ -28,7 +28,7 @@ export async function processUploadedMedia(input: {
     !path.startsWith(`${userId}/`) ||
     path.startsWith('/') ||
     path.includes('..') ||
-    path.includes('\\\\')
+    path.includes('\\')
   ) {
     throw new Error('Đường dẫn media không hợp lệ. Bài viết chưa được đăng.')
   }
@@ -53,7 +53,7 @@ export async function processUploadedMedia(input: {
     typeof processedPath !== 'string' ||
     !processedPath.startsWith(expectedPrefix) ||
     processedPath.includes('..') ||
-    processedPath.includes('\\\\') ||
+    processedPath.includes('\\') ||
     !/^[a-f0-9]{64}\\.(?:jpg|jpeg|png|webp|mp4|mov|m4v|webm)$/i.test(
       processedPath.slice(expectedPrefix.length),
     ) ||
