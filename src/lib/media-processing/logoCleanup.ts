@@ -87,7 +87,8 @@ export async function cleanupCornerTextFromImage(
     const edgeY = Math.max(1, Math.round(canvas.height * 0.24))
     const candidates: LogoCandidate[] = []
 
-    for (const word of result.data.words ?? []) {
+    const words = (result.data as unknown as { words?: Array<{ text?: string; confidence?: number; bbox: { x0: number; y0: number; x1: number; y1: number } }> }).words ?? []
+    for (const word of words) {
       const text = word.text?.trim()
       const confidence = Number(word.confidence)
       if (!text || confidence < minConfidence) continue
