@@ -19,7 +19,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger("dsocial-media-ai-worker")
 
 MODEL_ID = os.getenv("FLORENCE_MODEL_ID", "microsoft/Florence-2-base-ft")
-MODEL_REVISION = os.getenv("FLORENCE_MODEL_REVISION", "main")
+MODEL_REVISION = os.getenv("FLORENCE_MODEL_REVISION", "22b7c4db486ae0a2dde5c7dfb1f87ae116c28969")
 WORKER_TOKEN = os.getenv("AI_WORKER_TOKEN", "")
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(16 * 1024 * 1024)))
 MAX_IMAGE_PIXELS = int(os.getenv("MAX_IMAGE_PIXELS", "12000000"))
