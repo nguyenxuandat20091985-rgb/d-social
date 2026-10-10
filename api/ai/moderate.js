@@ -22,16 +22,20 @@ function requestIp(req) {
 function isRateLimited(ip) {
   const now = Date.now()
   requestsSinceSweep += 1
-  if (requestsSinceSweep >= 256 || buckets.size >= MAX_BUCKETS) {
+  if (requestsSinceSweep >= 256) {
     for (const [key, entry] of buckets) {
       if (now - entry.start >= RATE_WINDOW_MS) buckets.delete(key)
     }
     requestsSinceSweep = 0
   }
-  let entry = buckets.get(ip)
+
+  // Reserve one bucket for overflow so attacker-controlled IP variation cannot
+  // grow this map beyond MAX_BUCKETS. New IPs share the overflow bucket at cap.
+  const key = buckets.has(ip) || buckets.size < MAX_BUCKETS - 1 ? ip : '__overflow__'
+  let entry = buckets.get(key)
   if (!entry || now - entry.start >= RATE_WINDOW_MS) {
     entry = { start: now, count: 0 }
-    buckets.set(ip, entry)
+    buckets.set(key, entry)
   }
   entry.count += 1
   return entry.count > RATE_MAX
