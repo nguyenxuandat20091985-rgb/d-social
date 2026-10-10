@@ -54,7 +54,7 @@ export async function processUploadedMedia(input: {
     !processedPath.startsWith(expectedPrefix) ||
     processedPath.includes('..') ||
     processedPath.includes('\\') ||
-    !/^[a-f0-9]{64}\\.(?:jpg|jpeg|png|webp|mp4|mov|m4v|webm)$/i.test(
+    !/^[a-f0-9]{64}\.(?:jpg|jpeg|png|webp|mp4|mov|m4v|webm)$/i.test(
       processedPath.slice(expectedPrefix.length),
     ) ||
     typeof sha256 !== 'string' ||
