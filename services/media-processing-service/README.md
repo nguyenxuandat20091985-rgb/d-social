@@ -13,4 +13,6 @@ This is best-effort OCR detection, not a guarantee for icon-only, animated, styl
 ## Runtime
 - `GET /ready`
 - `POST /api/v1/media/process-binary` multipart fields `file`, `rights_confirmed=true`; headers `X-Media-Service-Token`, `X-Idempotency-Key`
-- Environment: `MEDIA_SERVICE_API_TOKEN` (secret), optional `MAX_UPLOAD_BYTES`, `DSOCIAL_WATERMARK_TEXT`
+- Authentication: `Authorization: Bearer <Supabase user access token>`; the service validates the token with Supabase Auth before processing.
+- Required environment: `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Do not expose secrets in browser bundles.
+- Optional limits/branding: `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`, `MAX_VIDEO_SECONDS`, `DSOCIAL_WATERMARK_TEXT`.
