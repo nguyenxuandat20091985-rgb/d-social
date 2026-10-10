@@ -220,7 +220,6 @@ function Composer({ userId, onPublished, onClose }) {
             rightsConfirmed: mediaRightsConfirmed,
           })
           url = processed.url
-          if (processed.processedPath) uploadedPaths.push(processed.processedPath)
         }
         if (file.type.startsWith('video/')) { media_url = url; media_type = 'video' }
         else { image_urls.push(url); if (!media_url) media_url = url; media_type = 'image' }
@@ -341,7 +340,6 @@ function StoryComposer({ userId, onClose, onPublished }) {
     setError('')
     setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
     let uploadedPath = null
-    let processedPath = null
     try {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
@@ -359,7 +357,6 @@ function StoryComposer({ userId, onClose, onPublished }) {
           rightsConfirmed: mediaRightsConfirmed,
         })
         media_url = processed.url
-        processedPath = processed.processedPath
       }
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
@@ -372,10 +369,9 @@ function StoryComposer({ userId, onClose, onPublished }) {
       onClose?.()
       Promise.resolve().then(() => onPublished?.()).catch(err => console.error('Không làm mới Tin 24 giờ:', err))
     } catch (e) {
-      const cleanupPaths = [uploadedPath, processedPath].filter(Boolean)
-      if (cleanupPaths.length) {
+      if (uploadedPath) {
         try {
-          const { error: cleanupError } = await supabase.storage.from('social-media').remove(cleanupPaths)
+          const { error: cleanupError } = await supabase.storage.from('social-media').remove([uploadedPath])
           if (cleanupError) console.error('Không dọn được tệp tin tải lên dở dang:', cleanupError)
         } catch (cleanupError) {
           console.error('Không dọn được tệp tin tải lên dở dang:', cleanupError)
