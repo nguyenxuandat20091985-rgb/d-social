@@ -33,13 +33,14 @@ def auth(token: Optional[str]):
         method="GET"
     )
     try:
-        with urllib.request.urlopen(request,timeout=8) as response:
+        with urllib.request.urlopen(request,timeout=20) as response:
             user=json.loads(response.read().decode("utf-8"))
             if response.status != 200 or not user.get("id"):
                 raise HTTPException(401,"Invalid Supabase session")
     except urllib.error.HTTPError as exc:
         raise HTTPException(401,"Invalid Supabase session") from exc
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        log.warning("Supabase auth validation network failure: %s", type(exc).__name__)
         raise HTTPException(503,"Supabase session validation unavailable") from exc
 
 def brand_boxes(frame):
