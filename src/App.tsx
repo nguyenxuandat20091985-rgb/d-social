@@ -6,6 +6,7 @@ import {
   Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus, ChevronLeft, ChevronRight, Volume2, VolumeX
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
+import { MEDIA_PROCESSING_ENABLED, processUploadedMedia } from './lib/mediaProcessing'
 import { moderateText } from './lib/moderation'
 import { postRateLimit, commentRateLimit } from './lib/ratelimit'
 import { AuthScreen } from './components/AuthScreen'
@@ -144,6 +145,7 @@ function Composer({ userId, onPublished, onClose }) {
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
+  const [mediaRightsConfirmed, setMediaRightsConfirmed] = useState(false)
 
   useEffect(() => {
     try {
@@ -180,6 +182,7 @@ function Composer({ userId, onPublished, onClose }) {
       return
     }
     setError('')
+    setMediaRightsConfirmed(false)
     setFiles(all)
   }
 
@@ -206,7 +209,21 @@ function Composer({ userId, onPublished, onClose }) {
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
         if (up.error) throw new Error(`Không tải được ${file.name}: ${up.error.message}`)
         uploadedPaths.push(path)
-        const url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+        let url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+        if (MEDIA_PROCESSING_ENABLED) {
+          if (!mediaRightsConfirmed) {
+            throw new Error('Anh cần xác nhận quyền chỉnh sửa ảnh/video trước khi đăng.')
+          }
+          setStage(file.type.startsWith('video/') ? 'Đang làm sạch video trước khi đăng…' : 'Đang xử lý ảnh trước khi đăng…')
+          const processed = await processUploadedMedia({
+            path,
+            mediaType: file.type.startsWith('video/') ? 'video' : 'image',
+            userId,
+            originalUrl: url,
+            rightsConfirmed: mediaRightsConfirmed,
+          })
+          url = processed.url
+        }
         if (file.type.startsWith('video/')) { media_url = url; media_type = 'video' }
         else { image_urls.push(url); if (!media_url) media_url = url; media_type = 'image' }
       }
@@ -266,6 +283,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
+        {MEDIA_PROCESSING_ENABLED && files.length > 0 && <label className="mt-3 flex items-start gap-2 text-xs d-muted cursor-pointer"><input type="checkbox" checked={mediaRightsConfirmed} onChange={e => setMediaRightsConfirmed(e.target.checked)} disabled={busy} className="mt-0.5"/><span>Tôi xác nhận có quyền cho phép xử lý và chỉnh sửa ảnh/video đã chọn.</span></label>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
@@ -329,7 +347,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
       const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
-      const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+      let media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
