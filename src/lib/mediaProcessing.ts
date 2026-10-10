@@ -4,17 +4,9 @@ export const MEDIA_PROCESSING_ENABLED =
   import.meta.env.VITE_MEDIA_PROCESSING_ENABLED === 'true'
 
 type MediaType = 'image' | 'video'
-type ProcessResult = {
-  url: string
-  processedPath: string | null
-  processed: boolean
-}
+type ProcessResult = { url: string }
 
-const originalResult = (url: string): ProcessResult => ({
-  url,
-  processedPath: null,
-  processed: false,
-})
+const originalResult = (url: string): ProcessResult => ({ url })
 
 /**
  * Optional server-side media processing.
@@ -83,11 +75,7 @@ export async function processUploadedMedia(input: {
       .getPublicUrl(processedPath)
     if (!publicData?.publicUrl) return originalResult(originalUrl)
 
-    return {
-      url: publicData.publicUrl,
-      processedPath,
-      processed: true,
-    }
+    return { url: publicData.publicUrl }
   } catch {
     // Never make media processing a prerequisite for posting.
     return originalResult(originalUrl)
