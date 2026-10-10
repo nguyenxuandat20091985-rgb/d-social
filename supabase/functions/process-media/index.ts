@@ -63,9 +63,8 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = defaultSupabaseKey("SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS");
-  const serviceRoleKey = defaultSupabaseKey("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
   const mediaServiceUrl = (Deno.env.get("MEDIA_SERVICE_URL") ?? "https://d-social-media-processing.onrender.com").replace(/\/+$/, "");
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaServiceUrl) {
+  if (!supabaseUrl || !anonKey || !mediaServiceUrl) {
     return json({ error: "Media processing is not configured; use the existing upload flow" }, 503, request);
   }
 
@@ -94,9 +93,9 @@ Deno.serve(async (request) => {
     return json({ error: "Storage path is not owned by the authenticated user" }, 403, request);
   }
 
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  // Use the authenticated user client for Storage. RLS policies restrict writes
+  // to the authenticated user folder, so this does not require a service-role secret.
+  const admin = userClient;
   const originalUrl = admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   const fallback = (reason: string) => json({
     status: "failed",
