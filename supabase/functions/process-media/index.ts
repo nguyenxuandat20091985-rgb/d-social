@@ -8,7 +8,7 @@ function corsHeaders(request: Request) {
     .filter(Boolean);
   return {
     ...(origin && allowedOrigins.includes(origin) ? { "Access-Control-Allow-Origin": origin } : {}),
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-retry-count, traceparent, tracestate, baggage",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
@@ -31,6 +31,19 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function defaultSupabaseKey(legacyEnvName: string, keyMapEnvName: string): string | undefined {
+  const legacyValue = Deno.env.get(legacyEnvName);
+  if (legacyValue) return legacyValue;
+  try {
+    const keyMap = JSON.parse(Deno.env.get(keyMapEnvName) ?? "{}");
+    const configuredName = keyMap.default;
+    if (typeof configuredName !== "string") return undefined;
+    return Deno.env.get(configuredName) ?? (configuredName.startsWith("sb_") ? configuredName : undefined);
+  } catch {
+    return undefined;
+  }
+}
+
 Deno.serve(async (request) => {
   const origin = request.headers.get("Origin");
   const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "")
@@ -45,10 +58,12 @@ Deno.serve(async (request) => {
 
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer ")) return json({ error: "Authentication required" }, 401, request);
+  const bearerToken = authorization.slice("Bearer ".length).trim();
+  if (!bearerToken) return json({ error: "Authentication required" }, 401, request);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const anonKey = defaultSupabaseKey("SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS");
+  const serviceRoleKey = defaultSupabaseKey("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
   const mediaServiceUrl = Deno.env.get("MEDIA_SERVICE_URL")?.replace(/\/+$/, "");
   const mediaServiceToken = Deno.env.get("MEDIA_SERVICE_API_TOKEN");
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaServiceUrl || !mediaServiceToken) {
@@ -59,7 +74,7 @@ Deno.serve(async (request) => {
     global: { headers: { Authorization: authorization } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data: userData, error: userError } = await userClient.auth.getUser();
+  const { data: userData, error: userError } = await userClient.auth.getUser(bearerToken);
   if (userError || !userData.user) return json({ error: "Invalid session" }, 401, request);
 
   let body: RequestBody;
