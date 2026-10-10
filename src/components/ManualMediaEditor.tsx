@@ -96,10 +96,38 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
     return { canvas, mask, pixels }
   }
-  async function saveOutput(result: ArrayBuffer, width: number, height: number, method: 'LaMa AI' | 'nội suy nhanh') {
+  function buildLamaInput() {
+    const canvas = canvasRef.current, maskCanvas = maskRef.current, image = imageRef.current
+    if (!canvas || !maskCanvas || !image) throw new Error('Ảnh chưa sẵn sàng.')
+    const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true })
+    if (!maskContext) throw new Error('Không đọc được mask.')
+    const maskPixels = maskContext.getImageData(0, 0, maskCanvas.width, maskCanvas.height)
+    let minX = maskCanvas.width, minY = maskCanvas.height, maxX = -1, maxY = -1, painted = 0
+    for (let y = 0; y < maskCanvas.height; y++) for (let x = 0; x < maskCanvas.width; x++) {
+      if (!maskPixels.data[(y * maskCanvas.width + x) * 4 + 3]) continue
+      painted++; minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y)
+    }
+    if (!painted) throw new Error('Anh hãy tô đỏ vùng logo cần xóa trước.')
+    if (painted > maskCanvas.width * maskCanvas.height * 0.15) throw new Error('Vùng tô vượt 15% ảnh. Hãy chỉ tô sát logo để tránh tốn RAM.')
+    const pad = Math.max(64, Math.round(Math.max(maxX - minX + 1, maxY - minY + 1) * 0.8))
+    const originX = Math.max(0, minX - pad), originY = Math.max(0, minY - pad)
+    const right = Math.min(canvas.width, maxX + pad + 1), bottom = Math.min(canvas.height, maxY + pad + 1)
+    const patchWidth = right - originX, patchHeight = bottom - originY
+    if (patchWidth * patchHeight > 8_000_000) throw new Error('Vùng logo quá lớn để xử lý an toàn trên điện thoại.')
+    const patchCanvas = document.createElement('canvas')
+    patchCanvas.width = patchWidth; patchCanvas.height = patchHeight
+    const patchContext = patchCanvas.getContext('2d', { willReadFrequently: true })
+    if (!patchContext) throw new Error('Không tạo được vùng ảnh cho LaMa.')
+    patchContext.drawImage(image, originX, originY, patchWidth, patchHeight, 0, 0, patchWidth, patchHeight)
+    const patchMask = maskContext.getImageData(originX, originY, patchWidth, patchHeight)
+    const mask = new Uint8Array(patchWidth * patchHeight)
+    for (let i = 0, j = 0; i < patchMask.data.length; i += 4, j++) if (patchMask.data[i + 3]) mask[j] = 1
+    return { canvas, originX, originY, mask, pixels: patchContext.getImageData(0, 0, patchWidth, patchHeight) }
+  }
+\n  async function saveOutput(result: ArrayBuffer, width: number, height: number, method: 'LaMa AI' | 'nội suy nhanh', origin?: { x: number; y: number }) {
     const canvas = canvasRef.current
     if (!canvas) throw new Error('Canvas đã bị đóng.')
-    canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), 0, 0)
+    const context = canvas.getContext('2d')!\n    if (origin) {\n      context.clearRect(0, 0, canvas.width, canvas.height)\n      context.drawImage(imageRef.current!, 0, 0, canvas.width, canvas.height)\n      context.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), origin.x, origin.y)\n    } else {\n      context.putImageData(new ImageData(new Uint8ClampedArray(result), width, height), 0, 0)\n    }
     const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Không xuất được ảnh đầu ra.')), 'image/png'))
     if (!blob.size) throw new Error('Ảnh đầu ra rỗng.')
     onProcessed(blob)
@@ -129,9 +157,9 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
           }
         }
         worker.onerror = () => { cleanup(); reject(new Error('Web Worker LaMa gặp lỗi.')) }
-        worker.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
+        worker.postMessage({ id, width: pixels.width, height: pixels.height, pixels: pixels.data.buffer, mask: mask.buffer, patchMode: true }, [pixels.data.buffer, mask.buffer])
       })
-      await saveOutput(result, canvas.width, canvas.height, 'LaMa AI')
+      await saveOutput(result, pixels.width, pixels.height, 'LaMa AI', { x: originX, y: originY })
       setLamaProgress(100); setLamaStage('LaMa hoàn tất — cần kiểm tra bằng mắt')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'LaMa không xử lý được ảnh.'
