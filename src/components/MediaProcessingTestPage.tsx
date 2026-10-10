@@ -114,7 +114,7 @@ export function MediaProcessingTestPage() {
     </header>
 
     <section className="ds-clean-workspace">
-      <div className="ds-clean-preview">
+      <div className={manualOpen ? "ds-clean-preview ds-clean-preview-hidden" : "ds-clean-preview"}>
         {previewUrl && isVideo && result?.inspection?.mediaType === 'video'
           ? <video src={previewUrl} controls playsInline className="ds-clean-media" />
           : previewUrl
@@ -135,7 +135,7 @@ export function MediaProcessingTestPage() {
         {downloadUrl && <a className="ds-clean-secondary" href={downloadUrl} download="dsocial-clean.png">Tải ảnh</a>}
       </div>}
 
-      {isImage && selectedFile && <button type="button" className="ds-clean-primary" disabled={busy} onClick={() => void runAutomatic()}>
+      {isImage && selectedFile && !manualOpen && <button type="button" className="ds-clean-primary" disabled={busy} onClick={() => void runAutomatic()}>
         {busy ? <><span className="ds-clean-spinner" />Đang xử lý…</> : '✦ Xóa watermark tự động'}
       </button>}
 
