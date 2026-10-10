@@ -21,6 +21,17 @@ export function MediaProcessingTestPage() {
   const selectedFileRef = useRef<File | null>(null)
   const [rightsConfirmed, setRightsConfirmed] = useState(false)
   const [fallbackBusy, setFallbackBusy] = useState(false)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authenticated, setAuthenticated] = useState(false)
+  const [authBusy, setAuthBusy] = useState(false)
+
+  useEffect(() => {
+    if (!supabase) return
+    void supabase.auth.getSession().then(({ data }) => setAuthenticated(Boolean(data.session?.user)))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setAuthenticated(Boolean(session?.user)))
+    return () => subscription.unsubscribe()
+  }, [])
 
   useEffect(() => () => {
     controllerRef.current?.abort()
@@ -92,6 +103,21 @@ export function MediaProcessingTestPage() {
     }
   }
 
+
+
+  async function signInForFallback() {
+    if (!supabase) return
+    setAuthBusy(true)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail.trim(), password: authPassword })
+      if (error) throw error
+      setStage('Đăng nhập thành công. Có thể thử lại fallback máy chủ.')
+    } catch (error) {
+      setResult(previous => ({ ...(previous ?? {}), error: error instanceof Error ? error.message : 'Đăng nhập thất bại.' }))
+    } finally {
+      setAuthBusy(false)
+    }
+  }
 
   async function runServerFallback() {
     const file = selectedFileRef.current
@@ -227,7 +253,14 @@ export function MediaProcessingTestPage() {
             <p className="mt-2">Không coi tệp này là đã làm sạch. Có thể chuyển tệp gốc sang bộ xử lý dự phòng trên máy chủ.</p>
             <label className="mt-3 flex items-start gap-2"><input type="checkbox" checked={rightsConfirmed} onChange={event => setRightsConfirmed(event.currentTarget.checked)} className="mt-1" /><span>Tôi xác nhận có quyền sử dụng và chỉnh sửa tệp này.</span></label>
             <button type="button" disabled={fallbackBusy || busy || !rightsConfirmed} onClick={() => void runServerFallback()} className="mt-3 rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#173fc7' }}>{fallbackBusy ? 'Đang xử lý trên máy chủ…' : 'Thử xử lý dự phòng trên máy chủ'}</button>
-            <p className="mt-2 text-xs">Fallback yêu cầu phiên đăng nhập hợp lệ trên trang test và cấu hình CORS cho tên miền test ở Supabase. Nếu máy chủ thất bại, tệp gốc không được coi là sạch.</p>
+            {!authenticated && <div className="mt-4 space-y-2 rounded-xl border border-slate-200 p-3">
+              <p className="text-sm font-semibold">Đăng nhập để dùng bộ xử lý dự phòng</p>
+              <input type="email" autoComplete="email" value={authEmail} onChange={event => setAuthEmail(event.currentTarget.value)} placeholder="Email tài khoản D-Social" className="w-full rounded-lg border border-slate-300 p-2 text-sm" />
+              <input type="password" autoComplete="current-password" value={authPassword} onChange={event => setAuthPassword(event.currentTarget.value)} placeholder="Mật khẩu" className="w-full rounded-lg border border-slate-300 p-2 text-sm" />
+              <button type="button" disabled={authBusy || !authEmail.trim() || !authPassword} onClick={() => void signInForFallback()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50">{authBusy ? 'Đang đăng nhập…' : 'Đăng nhập'}</button>
+            </div>}
+            {authenticated && <p className="mt-2 text-xs text-green-700">Đã có phiên đăng nhập trên trang test.</p>}
+            <p className="mt-2 text-xs">Nếu máy chủ thất bại, tệp gốc không được coi là sạch.</p>
           </section>
         )}
 
