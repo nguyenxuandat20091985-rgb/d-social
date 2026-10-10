@@ -127,9 +127,9 @@ async function inpaintCandidateBoxesWithLama(
   candidates: LogoCandidate[],
   options: CleanupOptions,
 ): Promise<void> {
-  lamaWorker = new Worker(new URL('./lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-auto-inpaint' })
+  const worker = new Worker(new URL('./lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-auto-inpaint' })
   const signal = options.signal
-  const abort = () => lamaWorker?.terminate()
+  const abort = () => worker.terminate()
   signal?.addEventListener('abort', abort, { once: true })
   try {
     for (let index = 0; index < candidates.length; index++) {
@@ -155,7 +155,7 @@ async function inpaintCandidateBoxesWithLama(
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
         const abortOne = () => reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError'))
         signal?.addEventListener('abort', abortOne, { once: true })
-        lamaWorker!.onmessage = (event: MessageEvent<{ id: string; type?: string; progress?: number; stage?: string; pixels?: ArrayBuffer; message?: string }>) => {
+        worker.onmessage = (event: MessageEvent<{ id: string; type?: string; progress?: number; stage?: string; pixels?: ArrayBuffer; message?: string }>) => {
           const message = event.data
           if (message?.id !== id) return
           if (message.type === 'progress') {
@@ -169,19 +169,18 @@ async function inpaintCandidateBoxesWithLama(
             reject(new Error(message.message || 'LaMa không xử lý được vùng phát hiện.'))
           }
         }
-        lamaWorker!.onerror = () => {
+        worker.onerror = () => {
           signal?.removeEventListener('abort', abortOne)
           reject(new Error('Web Worker LaMa gặp lỗi.'))
         }
-        lamaWorker!.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
+        worker.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
       })
       if (signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
       context.putImageData(new ImageData(new Uint8ClampedArray(result), canvas.width, canvas.height), 0, 0)
     }
   } finally {
     signal?.removeEventListener('abort', abort)
-    lamaWorker?.terminate()
-    lamaWorker = undefined
+    worker.terminate()
   }
 }
 
@@ -205,7 +204,6 @@ export async function cleanupCornerTextFromImage(
   if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
 
   let worker: TesseractWorker | undefined
-  let lamaWorker: Worker | undefined
   let bitmap: ImageBitmap | undefined
   try {
     options.onProgress?.(5, 'Đang đọc ảnh trên thiết bị…')
