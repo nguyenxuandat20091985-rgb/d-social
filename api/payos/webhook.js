@@ -21,6 +21,8 @@ export default async function handler(req, res) {
   }
 
   const success = verified.code === '00' || verified.success === true || data.code === '00'
+  const providerAmount = Number(data.amount)
+  const amount = Number.isSafeInteger(providerAmount) && providerAmount > 0 ? providerAmount : null
   const providerReference = String(data.reference || data.transactionDateTime || orderCode)
 
   try {
@@ -28,9 +30,13 @@ export default async function handler(req, res) {
       p_order_code: orderCode,
       p_success: success,
       p_provider_reference: providerReference,
+      p_amount: amount,
     })
     if (error) throw error
     if (result?.not_found) return res.status(404).json({ error: 'Order not found' })
+    if (result?.amount_mismatch || result?.invalid_vip_amount) {
+      return res.status(409).json({ error: 'Payment amount does not match the order; manual reconciliation required' })
+    }
     return res.status(200).json({
       received: result?.received === true,
       ...(result?.duplicate ? { duplicate: true } : {}),
