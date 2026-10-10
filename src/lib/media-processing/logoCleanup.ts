@@ -117,6 +117,14 @@ export async function cleanupCornerTextFromImage(
         0, 0, crop.width, crop.height,
       )
 
+      // Keep both the grayscale/contrast crop and a binary variant for OCR comparison.
+      const enhancedCrop = document.createElement('canvas')
+      enhancedCrop.width = crop.width
+      enhancedCrop.height = crop.height
+      const enhancedContext = enhancedCrop.getContext('2d')
+      if (!enhancedContext) throw new Error('Không tạo được ảnh tăng tương phản để OCR.')
+      enhancedContext.drawImage(crop, 0, 0)
+
       // Add a high-contrast binary variant for translucent text over busy backgrounds.
       const pixels = cropContext.getImageData(0, 0, crop.width, crop.height)
       for (let p = 0; p < pixels.data.length; p += 4) {
@@ -129,7 +137,11 @@ export async function cleanupCornerTextFromImage(
       cropContext.putImageData(pixels, 0, 0)
 
       options.onProgress?.(20 + Math.round((index / corners.length) * 45), 'Đang quét OCR và tăng tương phản 4 góc ảnh…')
-      const recognized = await worker.recognize(crop)
+      const recognizedPasses = await Promise.all([
+        worker.recognize(enhancedCrop),
+        worker.recognize(crop),
+      ])
+      for (const recognized of recognizedPasses) {
       for (const word of extractWords(recognized.data)) {
         const text = word.text?.trim()
         const confidence = Number(word.confidence)
@@ -151,6 +163,7 @@ export async function cleanupCornerTextFromImage(
           text,
           region: corner.region,
         })
+      }
       }
     }
 
