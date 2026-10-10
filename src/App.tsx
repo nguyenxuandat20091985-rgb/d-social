@@ -305,7 +305,6 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
-  const [mediaRightsConfirmed, setMediaRightsConfirmed] = useState(false)
 
   useEffect(() => {
     if (!file) { setPreviewUrl(''); return }
@@ -326,7 +325,6 @@ function StoryComposer({ userId, onClose, onPublished }) {
       setError('Ảnh tối đa 8MB, video tối đa 30MB.')
       return
     }
-    setMediaRightsConfirmed(false)
     setFile(next)
   }
 
@@ -402,7 +400,6 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
-      {MEDIA_PROCESSING_ENABLED && file && <label className="mt-3 flex items-start gap-2 text-xs d-muted cursor-pointer"><input type="checkbox" checked={mediaRightsConfirmed} onChange={e => setMediaRightsConfirmed(e.target.checked)} disabled={busy} className="mt-0.5"/><span>Tôi xác nhận có quyền cho phép xử lý và chỉnh sửa ảnh/video đã chọn.</span></label>}
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
