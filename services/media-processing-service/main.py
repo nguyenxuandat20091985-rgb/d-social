@@ -55,10 +55,12 @@ def brand_boxes(frame):
         try: data=pytesseract.image_to_data(gray,config="--psm 11",output_type=Output.DICT,timeout=2)
         except Exception: continue
         for i,raw in enumerate(data.get("text",[])):
-            text=re.sub(r"[^a-z0-9.抖音快手小红书]","",(raw or "").lower())
+            text=re.sub(r"[^@a-z0-9.抖音快手小红书]","",(raw or "").lower())
             try: conf=float(data["conf"][i])
             except (ValueError,TypeError): conf=-1
-            if conf<30 or not any(b.replace(" ","") in text for b in BRANDS): continue
+            is_brand=any(b.replace(" ","") in text for b in BRANDS)
+            is_handle=bool(re.search(r"@[_a-z0-9.]{3,}",text))
+            if conf<30 or not (is_brand or is_handle): continue
             bx=int(data["left"][i]/scale)+x1; by=int(data["top"][i]/scale)+y1
             bw=max(1,int(data["width"][i]/scale)); bh=max(1,int(data["height"][i]/scale))
             px=max(8,int(w*.035)); py=max(6,int(h*.025))
