@@ -19,6 +19,10 @@ MAX_BYTES=int(os.getenv("MAX_UPLOAD_BYTES","33554432"))
 MAX_IMAGE_PIXELS=int(os.getenv("MAX_IMAGE_PIXELS","16000000"))
 MAX_VIDEO_SECONDS=int(os.getenv("MAX_VIDEO_SECONDS","180"))
 OCR_TIMEOUT_SECONDS=max(1,min(5,int(os.getenv("OCR_TIMEOUT_SECONDS","2"))))
+AI_FALLBACK_URL=os.getenv("AI_FALLBACK_URL","").rstrip("/")
+AI_FALLBACK_TOKEN=os.getenv("AI_FALLBACK_TOKEN","")
+AI_FALLBACK_REQUIRED=os.getenv("AI_FALLBACK_REQUIRED","false").lower()=="true"
+AI_FALLBACK_TIMEOUT_SECONDS=max(5,min(120,int(os.getenv("AI_FALLBACK_TIMEOUT_SECONDS","60"))))
 BRANDS=("tiktok","tik tok","instagram","facebook","youtube","you tube","capcut","kwai","likee","snapchat","pinterest","douyin","weibo","threads","linkedin","vimeo","triller","twitch","telegram","whatsapp","twitter","x.com","lemon8","bilibili","kuaishou","抖音","快手","小红书")
 
 @app.get("/ready")
@@ -126,6 +130,62 @@ def brand_boxes(frame):
             merged[i] = (min(a, x1), min(b, y1), max(c, x2), max(d, y2))
     return merged
 
+def run_ai_fallback(frame):
+    """Call the isolated Florence-2/LaMa worker for a second visual pass on images."""
+    if not AI_FALLBACK_URL or not AI_FALLBACK_TOKEN:
+        if AI_FALLBACK_REQUIRED:
+            raise HTTPException(503, "AI image fallback is required but not configured")
+        return frame, "disabled"
+
+    ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    if not ok:
+        if AI_FALLBACK_REQUIRED:
+            raise HTTPException(503, "Could not encode image for AI fallback")
+        return frame, "unavailable"
+
+    boundary = "----DsocialAiWorkerBoundary"
+    multipart = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="file"; filename="frame.jpg"\r\n'
+        "Content-Type: image/jpeg\r\n\r\n"
+    ).encode("utf-8") + encoded.tobytes() + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    request = urllib.request.Request(
+        AI_FALLBACK_URL + "/v1/process-image",
+        data=multipart,
+        headers={
+            "Authorization": "Bearer " + AI_FALLBACK_TOKEN,
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Accept": "image/jpeg, image/png",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=AI_FALLBACK_TIMEOUT_SECONDS) as response:
+            worker_status = response.headers.get("X-AI-Worker-Status", "")
+            worker_validation = response.headers.get("X-AI-Worker-Validation", "")
+            content_type = response.headers.get("Content-Type", "")
+            output = response.read(MAX_BYTES + 1)
+            if len(output) > MAX_BYTES:
+                raise ValueError("AI worker output exceeds byte limit")
+            if worker_status == "no_candidate":
+                log.info("AI worker found no watermark candidate")
+                return frame, "no_candidate"
+            if response.status != 200 or worker_status != "processed":
+                raise ValueError("AI worker did not return a processed result")
+            if worker_validation != "detector-recheck-passed" or not content_type.startswith("image/"):
+                raise ValueError("AI worker validation headers are missing")
+            restored = cv2.imdecode(np.frombuffer(output, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if restored is None or restored.shape[:2] != frame.shape[:2]:
+                raise ValueError("AI worker returned invalid image dimensions")
+            log.info("AI worker image restoration accepted")
+            return restored, "processed"
+    except Exception as exc:
+        log.warning("AI fallback unavailable error=%s", type(exc).__name__)
+        if AI_FALLBACK_REQUIRED:
+            raise HTTPException(503, "AI fallback failed; do not publish unverified media") from exc
+        return frame, "unavailable"
+
+
 def clean_frame(frame):
     boxes=brand_boxes(frame)
     if boxes:
@@ -206,7 +266,7 @@ def verify_video_cleanup(path:Path):
     finally: cap.release()
     if idx==0: raise HTTPException(422,"Processed video has no decodable frames")
 
-def verify_image_cleanup(path:Path):
+def verify_image_cleanup(path:Path, ai_verified: bool = False):
     try:
         with Image.open(path) as im:
             im.load()
@@ -214,7 +274,13 @@ def verify_image_cleanup(path:Path):
             frame=cv2.cvtColor(np.array(rgb),cv2.COLOR_RGB2BGR)
     except Exception as exc:
         raise HTTPException(422,"Processed image could not be verified") from exc
-    remaining=brand_boxes(frame)
+    try:
+        remaining=brand_boxes(frame)
+    except HTTPException as exc:
+        if ai_verified and exc.status_code == 503:
+            log.warning("OCR verification unavailable; relying on AI worker detector re-check")
+            return
+        raise
     if remaining:
         raise HTTPException(422,"A readable brand watermark remains; do not publish this result")
     log.info("image cleanup verification=passed")
@@ -227,12 +293,21 @@ def process_image(src:Path,dst:Path):
             if width<=0 or height<=0 or width*height>MAX_IMAGE_PIXELS:
                 raise HTTPException(413,"Image dimensions exceed processing limit")
             im.load(); rgb=im.convert("RGB"); frame=cv2.cvtColor(np.array(rgb),cv2.COLOR_RGB2BGR)
-            frame,count=clean_frame(frame); frame=add_brand(frame)
+            try:
+                frame,count=clean_frame(frame)
+            except HTTPException as exc:
+                # If OCR itself is unavailable, a configured AI worker may still process the image.
+                if exc.status_code != 503 or not AI_FALLBACK_URL or not AI_FALLBACK_TOKEN:
+                    raise
+                log.warning("OCR detector unavailable; trying AI worker fallback")
+                count=0
+            frame,ai_status=run_ai_fallback(frame)
+            frame=add_brand(frame)
             out=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB); Image.fromarray(out).save(dst,format="JPEG",quality=95,optimize=True)
-            log.info("image detected brand boxes=%s",count)
+            log.info("image detected brand boxes=%s ai_fallback=%s",count,ai_status)
         # Re-open the encoded output and re-run the detector. A successful encode
         # alone is not enough to certify that readable corner marks were removed.
-        verify_image_cleanup(dst)
+        verify_image_cleanup(dst, ai_verified=(ai_status=="processed"))
     except HTTPException:
         raise
     except Exception as e:
