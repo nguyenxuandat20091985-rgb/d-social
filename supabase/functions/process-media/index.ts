@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.112.3";
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get("Origin");
-  const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "")
+  const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "https://d-social.vercel.app")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -46,7 +46,7 @@ function defaultSupabaseKey(legacyEnvName: string, keyMapEnvName: string): strin
 
 Deno.serve(async (request) => {
   const origin = request.headers.get("Origin");
-  const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "")
+  const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "https://d-social.vercel.app")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
@@ -64,9 +64,8 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = defaultSupabaseKey("SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS");
   const serviceRoleKey = defaultSupabaseKey("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
-  const mediaServiceUrl = Deno.env.get("MEDIA_SERVICE_URL")?.replace(/\/+$/, "");
-  const mediaServiceToken = Deno.env.get("MEDIA_SERVICE_API_TOKEN");
-  if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaServiceUrl || !mediaServiceToken) {
+  const mediaServiceUrl = (Deno.env.get("MEDIA_SERVICE_URL") ?? "https://d-social-media-processing.onrender.com").replace(/\/+$/, "");
+  if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaServiceUrl) {
     return json({ error: "Media processing is not configured; use the existing upload flow" }, 503, request);
   }
 
@@ -100,11 +99,10 @@ Deno.serve(async (request) => {
   });
   const originalUrl = admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
   const fallback = (reason: string) => json({
-    status: "fallback",
-    media_url: originalUrl,
-    original_path: path,
+    status: "failed",
+    error: "Media processing failed; the original will not be published as cleaned media",
     reason,
-  }, 200, request);
+  }, 503, request);
   let pendingProcessedPath: string | null = null;
 
   try {
@@ -122,7 +120,7 @@ Deno.serve(async (request) => {
     const processResponse = await fetch(`${mediaServiceUrl}/api/v1/media/process-binary`, {
       method: "POST",
       headers: {
-        "X-Media-Service-Token": mediaServiceToken,
+        "Authorization": authorization,
         "X-Idempotency-Key": `${userData.user.id}:${path}`,
       },
       body: input,
