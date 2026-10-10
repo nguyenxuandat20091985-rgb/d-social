@@ -578,7 +578,7 @@ function PostCard({ post, userId, onRemoved }) {
   }
 
   const reportPost = async () => {
-    const reason = prompt('Lý do báo cáo (spam, lừa đảo, nội dung xấu...)')
+    const reason = prompt('Lý do báo cáo (spam, lừa đảo, nội dung xấu, vi phạm bản quyền ảnh/video/nhạc...)')
     if (!reason?.trim() || !supabase) return
     const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.trim().slice(0, 500) })
     alert(error ? error.message : 'Đã gửi báo cáo. Cảm ơn bạn.')
