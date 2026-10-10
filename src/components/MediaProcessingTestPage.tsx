@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { inspectMediaOnDevice, type MediaInspection } from '../lib/mediaProcessingClient'
 import { cleanupCornerTextFromImage, type ClientImageCleanupResult } from '../lib/media-processing/logoCleanup'
+import { supabase } from '../lib/supabase'
 
 type ResultState = {
   inspection?: MediaInspection
@@ -17,6 +18,9 @@ export function MediaProcessingTestPage() {
   const controllerRef = useRef<AbortController | null>(null)
   const outputUrlRef = useRef<string | null>(null)
   const previewUrlRef = useRef<string | null>(null)
+  const selectedFileRef = useRef<File | null>(null)
+  const [rightsConfirmed, setRightsConfirmed] = useState(false)
+  const [fallbackBusy, setFallbackBusy] = useState(false)
 
   useEffect(() => () => {
     controllerRef.current?.abort()
@@ -27,6 +31,8 @@ export function MediaProcessingTestPage() {
   async function handleFile(file?: File) {
     if (!file) return
     controllerRef.current?.abort()
+    selectedFileRef.current = file
+    setRightsConfirmed(false)
     const controller = new AbortController()
     controllerRef.current = controller
     setBusy(true)
@@ -51,6 +57,7 @@ export function MediaProcessingTestPage() {
         },
       })
       if (controller.signal.aborted) return
+      setResult({ inspection })
       if (inspection.mediaType === 'image') {
         setStage('Đã kiểm tra tệp. Đang thử phát hiện và che chữ/logo ở góc ảnh…')
         const cleanup = await cleanupCornerTextFromImage(file, {
@@ -77,11 +84,67 @@ export function MediaProcessingTestPage() {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setStage('Đã hủy xử lý.')
       } else {
-        setResult({ error: error instanceof Error ? error.message : 'Xử lý thất bại.' })
+        setResult(previous => ({ ...(previous ?? {}), error: error instanceof Error ? error.message : 'Xử lý thất bại.' }))
         setStage('Không thể xác nhận media đã được xử lý sạch.')
       }
     } finally {
       setBusy(false)
+    }
+  }
+
+
+  async function runServerFallback() {
+    const file = selectedFileRef.current
+    if (!file) return
+    if (!rightsConfirmed) {
+      setResult(previous => ({ ...(previous ?? {}), error: 'Anh cần xác nhận mình có quyền chỉnh sửa tệp này trước khi gửi sang máy chủ.' }))
+      return
+    }
+    if (!supabase) {
+      setResult(previous => ({ ...(previous ?? {}), error: 'Supabase chưa được cấu hình trên trang test.' }))
+      return
+    }
+    setFallbackBusy(true)
+    setStage('Đang gửi tệp gốc lên dịch vụ dự phòng trên máy chủ…')
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      const user = userData?.user
+      if (userError || !user) {
+        throw new Error('Cần đăng nhập D-Social trên chính trang test này trước khi dùng fallback. Phiên đăng nhập của d-social.vercel.app không tự chia sẻ sang tên miền test.')
+      }
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'upload.bin'
+      const path = `${user.id}/client-fallback/${crypto.randomUUID()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('social-media').upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      })
+      if (uploadError) throw new Error('Không tải được tệp gốc lên kho tạm: ' + uploadError.message)
+      try {
+        const { data, error } = await supabase.functions.invoke('process-media', {
+          body: { path, media_type: file.type.startsWith('image/') ? 'image' : 'video', rights_confirmed: true },
+        })
+        if (error) throw new Error('Không gọi được Edge Function fallback. Kiểm tra CORS và cấu hình dịch vụ: ' + error.message)
+        if (!data || data.status !== 'processed' || typeof data.processed_path !== 'string') {
+          throw new Error(data?.error || 'Máy chủ chưa xác nhận xử lý thành công. Không sử dụng tệp gốc làm kết quả sạch.')
+        }
+        const { data: publicData } = supabase.storage.from('social-media').getPublicUrl(data.processed_path)
+        if (!publicData?.publicUrl) throw new Error('Không lấy được URL của tệp đã xử lý trên máy chủ.')
+        if (outputUrlRef.current) URL.revokeObjectURL(outputUrlRef.current)
+        outputUrlRef.current = publicData.publicUrl
+        previewUrlRef.current = publicData.publicUrl
+        setPreviewUrl(publicData.publicUrl)
+        setResult(previous => ({ ...(previous ?? {}), error: undefined }))
+        setProgress(100)
+        setStage('Máy chủ đã trả về tệp được xử lý. Hãy kiểm tra kỹ đầu ra trước khi sử dụng.')
+      } finally {
+        // This is a temporary test upload; the server's processed object is separate.
+        await supabase.storage.from('social-media').remove([path]).catch(() => undefined)
+      }
+    } catch (error) {
+      setResult(previous => ({ ...(previous ?? {}), error: error instanceof Error ? error.message : 'Fallback máy chủ thất bại.' }))
+      setStage('Fallback chưa thành công; không coi tệp là đã làm sạch.')
+    } finally {
+      setFallbackBusy(false)
     }
   }
 
@@ -161,7 +224,10 @@ export function MediaProcessingTestPage() {
         {result?.error && (
           <section role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800">
             <strong>Chưa xử lý thành công.</strong><p className="mt-1">{result.error}</p>
-            <p className="mt-2">Không coi tệp này là đã làm sạch. Hãy thử một ảnh khác hoặc quay lại sau.</p>
+            <p className="mt-2">Không coi tệp này là đã làm sạch. Có thể chuyển tệp gốc sang bộ xử lý dự phòng trên máy chủ.</p>
+            <label className="mt-3 flex items-start gap-2"><input type="checkbox" checked={rightsConfirmed} onChange={event => setRightsConfirmed(event.currentTarget.checked)} className="mt-1" /><span>Tôi xác nhận có quyền sử dụng và chỉnh sửa tệp này.</span></label>
+            <button type="button" disabled={fallbackBusy || busy || !rightsConfirmed} onClick={() => void runServerFallback()} className="mt-3 rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#173fc7' }}>{fallbackBusy ? 'Đang xử lý trên máy chủ…' : 'Thử xử lý dự phòng trên máy chủ'}</button>
+            <p className="mt-2 text-xs">Fallback yêu cầu phiên đăng nhập hợp lệ trên trang test và cấu hình CORS cho tên miền test ở Supabase. Nếu máy chủ thất bại, tệp gốc không được coi là sạch.</p>
           </section>
         )}
 
