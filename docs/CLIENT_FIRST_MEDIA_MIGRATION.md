@@ -15,7 +15,8 @@ cleaned after a processing failure.
 ## Current architecture (verified from source)
 
 - Frontend: React 18 + TypeScript + Vite, deployed as a web app/PWA.
-- Feed uploads call `processUploadedMedia()` when `VITE_MEDIA_PROCESSING_ENABLED=true`.
+- Feed uploads run `inspectMediaOnDevice()` first when `VITE_MEDIA_PROCESSING_ENABLED=true`, validating the accepted MIME type, size, decoded image dimensions and SHA-256 before upload. This is preflight only, not logo-cleanup proof.
+- Feed uploads then call `processUploadedMedia()` when `VITE_MEDIA_PROCESSING_ENABLED=true`; the server processor remains mandatory.
 - Story uploads currently use a separate direct Storage upload path and do not call
   `processUploadedMedia()`.
 - Supabase Edge Function `process-media` authenticates the user, invokes the private
@@ -60,6 +61,8 @@ cleaned after a processing failure.
 
 ## Status
 
-Phase 1 foundation is present. Phase 2 has an initial isolated OCR-based image
-cleanup implementation, but full visual logo detection, video-frame processing,
-upload integration, real-device acceptance and rollout are not complete.
+Phase 1 foundation is present and its validation preflight is connected to the
+feed composer behind the existing disabled-by-default feature flag. Phase 2 has an
+initial isolated OCR-based image cleanup implementation, but that cleanup function
+is not connected to publishing. Full visual logo detection, client video-frame
+processing, real-device acceptance and rollout are not complete.
