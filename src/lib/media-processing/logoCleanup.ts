@@ -16,7 +16,7 @@ export type ClientImageCleanupResult = {
   height: number
   candidates: LogoCandidate[]
   sha256: string
-  engine: 'tesseract-corner-text-v1' | 'tesseract-plus-tiktok-color-v1'
+  engine: 'paddleocr-ppocrv5-v1' | 'tesseract-corner-text-v1' | 'tesseract-plus-tiktok-color-v1'
 }
 
 export type CleanupOptions = {
@@ -89,6 +89,37 @@ function detectTikTokColorMarks(canvas: HTMLCanvasElement): LogoCandidate[] {
   return output
 }
 
+
+async function detectWithPaddleOCR(file: File, width: number, height: number, options: CleanupOptions): Promise<LogoCandidate[]> {
+  if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+  options.onProgress?.(14, 'Đang khởi tạo PaddleOCR PP-OCRv5 trên Web Worker…')
+  const worker = new Worker(new URL('./paddleocr.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-paddleocr' })
+  const id = crypto.randomUUID()
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      worker.terminate()
+      options.signal?.removeEventListener('abort', abort)
+    }
+    const abort = () => { cleanup(); reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError')) }
+    options.signal?.addEventListener('abort', abort, { once: true })
+    worker.onerror = () => { cleanup(); reject(new Error('PaddleOCR Web Worker gặp lỗi.')) }
+    worker.onmessage = (event: MessageEvent<{ id: string; type: string; progress?: number; stage?: string; candidates?: LogoCandidate[]; message?: string }>) => {
+      const message = event.data
+      if (!message || message.id !== id) return
+      if (message.type === 'progress') {
+        options.onProgress?.(Math.min(62, 14 + Math.round((message.progress ?? 0) * 0.48)), message.stage ?? 'PaddleOCR đang xử lý…')
+      } else if (message.type === 'complete') {
+        cleanup()
+        resolve(message.candidates ?? [])
+      } else if (message.type === 'error') {
+        cleanup()
+        reject(new Error(message.message || 'PaddleOCR không khởi chạy được.'))
+      }
+    }
+    worker.postMessage({ id, file, width, height })
+  })
+}
+
 /**
  * Conservative client-side image cleanup for text-like marks in the four corners.
  *
@@ -127,15 +158,24 @@ export async function cleanupCornerTextFromImage(
     bitmap.close()
     bitmap = undefined
 
-    options.onProgress?.(15, 'Đang khởi tạo bộ đọc chữ…')
-    worker = await createWorker('eng+vie', 1, {
-      logger: event => {
-        if (event.status === 'recognizing text' && typeof event.progress === 'number') {
-          options.onProgress?.(15 + Math.round(event.progress * 45), 'Đang tìm chữ/logo ở mép ảnh…')
-        }
-      },
-    })
+    let paddleCandidates: LogoCandidate[] = []
+    try {
+      paddleCandidates = await detectWithPaddleOCR(file, canvas.width, canvas.height, options)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
+      options.onProgress?.(18, 'PaddleOCR chưa khởi chạy được; chuyển sang Tesseract dự phòng…')
+    }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+    if (!paddleCandidates.length) {
+      options.onProgress?.(18, 'Đang khởi tạo Tesseract dự phòng…')
+      worker = await createWorker('eng+vie', 1, {
+        logger: event => {
+          if (event.status === 'recognizing text' && typeof event.progress === 'number') {
+            options.onProgress?.(18 + Math.round(event.progress * 40), 'Đang tìm chữ/logo ở mép ảnh…')
+          }
+        },
+      })
+    }
 
     const terminateOnAbort = () => { void worker?.terminate() }
     options.signal?.addEventListener('abort', terminateOnAbort, { once: true })
@@ -163,10 +203,10 @@ export async function cleanupCornerTextFromImage(
       { region: 'bottom-left', x: 0, y: canvas.height - cornerHeight },
       { region: 'bottom-right', x: canvas.width - cornerWidth, y: canvas.height - cornerHeight },
     ]
-    const candidates: LogoCandidate[] = []
+    const candidates: LogoCandidate[] = [...paddleCandidates]
     const minConfidence = options.minConfidence ?? 28
 
-    for (let index = 0; index < corners.length; index++) {
+    for (let index = 0; index < corners.length && candidates.length === 0; index++) {
       if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
       const corner = corners[index]
       const crop = document.createElement('canvas')
@@ -202,8 +242,8 @@ export async function cleanupCornerTextFromImage(
 
       options.onProgress?.(20 + Math.round((index / corners.length) * 45), 'Đang quét OCR và tăng tương phản 4 góc ảnh…')
       const recognizedPasses = await Promise.all([
-        worker.recognize(enhancedCrop),
-        worker.recognize(crop),
+        worker!.recognize(enhancedCrop),
+        worker!.recognize(crop),
       ])
       for (const recognized of recognizedPasses) {
       for (const word of extractWords(recognized.data)) {
@@ -282,7 +322,7 @@ export async function cleanupCornerTextFromImage(
       height: canvas.height,
       candidates,
       sha256,
-      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-v1' : 'tesseract-corner-text-v1',
+      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-v1' : 'tesseract-corner-text-v1',
     }
   } finally {
     bitmap?.close()
