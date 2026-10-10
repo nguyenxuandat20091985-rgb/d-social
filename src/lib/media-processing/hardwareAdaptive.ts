@@ -10,6 +10,7 @@ export type HardwareProfile = {
 }
 
 function hasWebGL(): boolean {
+  if (typeof document === 'undefined') return false
   try {
     const canvas = document.createElement('canvas')
     const gl = canvas.getContext('webgl2') || canvas.getContext('webgl')
@@ -23,6 +24,7 @@ function hasWebGL(): boolean {
 }
 
 async function hasWebGPU(): Promise<boolean> {
+  if (typeof navigator === 'undefined') return false
   try {
     const gpu = (navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu
     if (!gpu?.requestAdapter) return false
@@ -34,6 +36,9 @@ async function hasWebGPU(): Promise<boolean> {
 
 /** Conservative client-side capability probe; never uploads user media. */
 export async function detectHardwareProfile(): Promise<HardwareProfile> {
+  if (typeof navigator === 'undefined') {
+    return { tier: 'medium', deviceMemoryGB: null, hardwareConcurrency: 1, webgpu: false, webgl: false, label: 'Môi trường hạn chế · xử lý nhẹ', reason: 'Không có Navigator; không tải mô hình AI lớn.' }
+  }
   const nav = navigator as Navigator & { deviceMemory?: number; gpu?: unknown }
   const memory = typeof nav.deviceMemory === 'number' && Number.isFinite(nav.deviceMemory)
     ? nav.deviceMemory
