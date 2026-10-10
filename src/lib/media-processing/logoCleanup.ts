@@ -75,45 +75,6 @@ export async function cleanupCornerTextFromImage(
 
     const terminateOnAbort = () => { void worker?.terminate() }
     options.signal?.addEventListener('abort', terminateOnAbort, { once: true })
-    let result
-    let bottomRightResult
-    try {
-      // First pass: improve local contrast without changing the output image.
-      const enhanced = document.createElement('canvas')
-      enhanced.width = canvas.width
-      enhanced.height = canvas.height
-      const enhancedContext = enhanced.getContext('2d')
-      if (!enhancedContext) throw new Error('Không tạo được ảnh tăng tương phản để OCR.')
-      enhancedContext.filter = 'grayscale(1) contrast(1.8) brightness(1.08)'
-      enhancedContext.drawImage(canvas, 0, 0)
-      result = await worker.recognize(enhanced)
-
-      // Second pass: enlarge only the bottom-right corner where small TikTok marks commonly sit.
-      const cornerWidth = Math.max(1, Math.round(canvas.width * 0.32))
-      const cornerHeight = Math.max(1, Math.round(canvas.height * 0.24))
-      const scale = 2
-      const corner = document.createElement('canvas')
-      corner.width = cornerWidth * scale
-      corner.height = cornerHeight * scale
-      const cornerContext = corner.getContext('2d')
-      if (!cornerContext) throw new Error('Không tạo được vùng góc ảnh để OCR.')
-      cornerContext.filter = 'grayscale(1) contrast(2) brightness(1.12)'
-      cornerContext.drawImage(
-        canvas,
-        canvas.width - cornerWidth, canvas.height - cornerHeight, cornerWidth, cornerHeight,
-        0, 0, corner.width, corner.height,
-      )
-      bottomRightResult = await worker.recognize(corner)
-      ;(bottomRightResult as { __cornerScale?: number; __cornerWidth?: number; __cornerHeight?: number }).__cornerScale = scale
-    } finally {
-      options.signal?.removeEventListener('abort', terminateOnAbort)
-    }
-    if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
-    const minConfidence = options.minConfidence ?? 40
-    const edgeX = Math.max(1, Math.round(canvas.width * 0.32))
-    const edgeY = Math.max(1, Math.round(canvas.height * 0.24))
-    const candidates: LogoCandidate[] = []
-
     type OcrWord = { text?: string; confidence?: number; bbox: { x0: number; y0: number; x1: number; y1: number } }
     type OcrPageShape = {
       words?: OcrWord[]
@@ -127,53 +88,69 @@ export async function cleanupCornerTextFromImage(
         ) ?? [],
       ) ?? []
     }
-    const words = extractWords(result.data)
-    const scale = 2
-    const cornerWidth = Math.max(1, Math.round(canvas.width * 0.32))
-    const cornerHeight = Math.max(1, Math.round(canvas.height * 0.24))
-    for (const word of words) {
-      const text = word.text?.trim()
-      const confidence = Number(word.confidence)
-      if (!text || confidence < minConfidence) continue
-      const { x0, y0, x1, y1 } = word.bbox
-      const width = x1 - x0
-      const height = y1 - y0
-      if (width < 2 || height < 2) continue
 
-      let region: LogoCandidate['region'] | undefined
-      if (x0 <= edgeX && y0 <= edgeY) region = 'top-left'
-      else if (x1 >= canvas.width - edgeX && y0 <= edgeY) region = 'top-right'
-      else if (x0 <= edgeX && y1 >= canvas.height - edgeY) region = 'bottom-left'
-      else if (x1 >= canvas.width - edgeX && y1 >= canvas.height - edgeY) region = 'bottom-right'
-      if (!region) continue
+    // Crop and magnify all four corners: TikTok marks can be faint and blend into the background.
+    const cornerWidth = Math.max(1, Math.round(canvas.width * 0.34))
+    const cornerHeight = Math.max(1, Math.round(canvas.height * 0.26))
+    const scale = 2.5
+    const corners: Array<{ region: LogoCandidate['region']; x: number; y: number }> = [
+      { region: 'top-left', x: 0, y: 0 },
+      { region: 'top-right', x: canvas.width - cornerWidth, y: 0 },
+      { region: 'bottom-left', x: 0, y: canvas.height - cornerHeight },
+      { region: 'bottom-right', x: canvas.width - cornerWidth, y: canvas.height - cornerHeight },
+    ]
+    const candidates: LogoCandidate[] = []
+    const minConfidence = options.minConfidence ?? 28
 
-      // Ignore long blocks: broad text is more likely a caption than a corner mark.
-      if (width > canvas.width * 0.30 || height > canvas.height * 0.10) continue
-      candidates.push({
-        x: Math.max(0, x0),
-        y: Math.max(0, y0),
-        width: Math.min(canvas.width - x0, width),
-        height: Math.min(canvas.height - y0, height),
-        confidence,
-        text,
-        region,
-      })
-    }
+    for (let index = 0; index < corners.length; index++) {
+      if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+      const corner = corners[index]
+      const crop = document.createElement('canvas')
+      crop.width = Math.max(1, Math.round(cornerWidth * scale))
+      crop.height = Math.max(1, Math.round(cornerHeight * scale))
+      const cropContext = crop.getContext('2d', { willReadFrequently: true })
+      if (!cropContext) throw new Error('Không tạo được vùng góc ảnh để OCR.')
+      cropContext.filter = 'grayscale(1) contrast(2.2) brightness(1.12)'
+      cropContext.drawImage(
+        canvas,
+        corner.x, corner.y, cornerWidth, cornerHeight,
+        0, 0, crop.width, crop.height,
+      )
 
-    // Map the enlarged bottom-right OCR boxes back to the original image coordinates.
-    for (const word of extractWords(bottomRightResult?.data)) {
-      const text = word.text?.trim()
-      const confidence = Number(word.confidence)
-      if (!text || confidence < minConfidence) continue
-      const x0 = canvas.width - cornerWidth + word.bbox.x0 / scale
-      const y0 = canvas.height - cornerHeight + word.bbox.y0 / scale
-      const x1 = canvas.width - cornerWidth + word.bbox.x1 / scale
-      const y1 = canvas.height - cornerHeight + word.bbox.y1 / scale
-      const width = x1 - x0
-      const height = y1 - y0
-      if (width < 2 || height < 2 || width > canvas.width * 0.30 || height > canvas.height * 0.10) continue
-      if (!candidates.some(candidate => candidate.region === 'bottom-right' && candidate.text.toLowerCase() === text.toLowerCase() && Math.abs(candidate.x - x0) < 8 && Math.abs(candidate.y - y0) < 8)) {
-        candidates.push({ x: Math.max(0, x0), y: Math.max(0, y0), width, height, confidence, text, region: 'bottom-right' })
+      // Add a high-contrast binary variant for translucent text over busy backgrounds.
+      const pixels = cropContext.getImageData(0, 0, crop.width, crop.height)
+      for (let p = 0; p < pixels.data.length; p += 4) {
+        const luminance = pixels.data[p] * 0.299 + pixels.data[p + 1] * 0.587 + pixels.data[p + 2] * 0.114
+        const value = luminance > 158 ? 255 : 0
+        pixels.data[p] = value
+        pixels.data[p + 1] = value
+        pixels.data[p + 2] = value
+      }
+      cropContext.putImageData(pixels, 0, 0)
+
+      options.onProgress?.(20 + Math.round((index / corners.length) * 45), 'Đang quét OCR và tăng tương phản 4 góc ảnh…')
+      const recognized = await worker.recognize(crop)
+      for (const word of extractWords(recognized.data)) {
+        const text = word.text?.trim()
+        const confidence = Number(word.confidence)
+        if (!text || !Number.isFinite(confidence) || confidence < minConfidence) continue
+        const x0 = corner.x + word.bbox.x0 / scale
+        const y0 = corner.y + word.bbox.y0 / scale
+        const x1 = corner.x + word.bbox.x1 / scale
+        const y1 = corner.y + word.bbox.y1 / scale
+        const width = x1 - x0
+        const height = y1 - y0
+        if (width < 2 || height < 2 || width > canvas.width * 0.30 || height > canvas.height * 0.10) continue
+        if (candidates.some(candidate => candidate.region === corner.region && candidate.text.toLowerCase() === text.toLowerCase() && Math.abs(candidate.x - x0) < 8 && Math.abs(candidate.y - y0) < 8)) continue
+        candidates.push({
+          x: Math.max(0, Math.round(x0)),
+          y: Math.max(0, Math.round(y0)),
+          width: Math.min(canvas.width - Math.max(0, Math.round(x0)), Math.max(1, Math.round(width))),
+          height: Math.min(canvas.height - Math.max(0, Math.round(y0)), Math.max(1, Math.round(height))),
+          confidence,
+          text,
+          region: corner.region,
+        })
       }
     }
 
