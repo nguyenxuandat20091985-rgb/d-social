@@ -50,11 +50,18 @@ def brand_boxes(frame):
     found=[]
     for x1,y1,x2,y2 in regions:
         crop=frame[y1:y2,x1:x2]
-        scale=2 if max(crop.shape[:2])<900 else 1
-        if scale>1: crop=cv2.resize(crop,None,fx=scale,fy=scale,interpolation=cv2.INTER_CUBIC)
+        max_dim=max(crop.shape[:2])
+        # Keep OCR crops within a predictable size: upscaling large crops made Tesseract
+        # time out on phone videos, causing the whole upload to fail closed with HTTP 503.
+        scale=min(1.5,450/max_dim) if max_dim<450 else (900/max_dim if max_dim>900 else 1.0)
+        if scale != 1.0:
+            interpolation=cv2.INTER_CUBIC if scale>1 else cv2.INTER_AREA
+            crop=cv2.resize(crop,None,fx=scale,fy=scale,interpolation=interpolation)
         gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
         try: data=pytesseract.image_to_data(gray,config="--psm 11",output_type=Output.DICT,timeout=2)
-        except Exception as exc: raise HTTPException(503,"Brand detection unavailable; do not publish this result") from exc
+        except Exception as exc:
+            log.warning("Brand OCR failed (%s); refusing to publish unverified media", type(exc).__name__)
+            raise HTTPException(503,"Brand detection unavailable; do not publish this result") from exc
         for i,raw in enumerate(data.get("text",[])):
             text=re.sub(r"[^@a-z0-9.抖音快手小红书]","",(raw or "").lower())
             try: conf=float(data["conf"][i])
