@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import cv2
 import numpy as np
 from fastapi import HTTPException
 from PIL import Image
@@ -58,7 +57,12 @@ class MediaProcessingSafetyTests(unittest.TestCase):
             "width": [60],
             "height": [20],
         }
-        with patch.object(media_service.pytesseract, "image_to_data", return_value=fake_ocr):
+        empty_ocr = {"text": [], "conf": [], "left": [], "top": [], "width": [], "height": []}
+        with patch.object(
+            media_service.pytesseract,
+            "image_to_data",
+            side_effect=[fake_ocr, empty_ocr, empty_ocr, empty_ocr],
+        ):
             boxes = media_service.brand_boxes(frame)
         self.assertEqual(len(boxes), 1)
         x1, y1, x2, y2 = boxes[0]
@@ -101,7 +105,6 @@ class MediaProcessingSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             src = Path(td) / "oversized.png"
             dst = Path(td) / "cleaned.jpg"
-            # A sparse PNG is sufficient to test dimensions without allocating a huge pixel buffer.
             Image.new("RGB", (20, 20), (0, 0, 0)).save(src)
             with patch.object(media_service, "MAX_IMAGE_PIXELS", 100):
                 with self.assertRaises(HTTPException) as caught:
