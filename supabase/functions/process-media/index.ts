@@ -1,20 +1,28 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("Origin");
+  const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return {
+    ...(origin && allowedOrigins.includes(origin) ? { "Access-Control-Allow-Origin": origin } : {}),
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Vary": "Origin",
+  };
+}
 const BUCKET = "social-media";
 const MAX_ORIGINAL_BYTES = 32 * 1024 * 1024;
 const MAX_PROCESSED_BYTES = 32 * 1024 * 1024;
 
 type RequestBody = { path?: string; media_type?: "image" | "video"; rights_confirmed?: boolean };
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, request?: Request) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+    headers: { ...(request ? corsHeaders(request) : {}), "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
 
@@ -24,11 +32,19 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
 }
 
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const origin = request.headers.get("Origin");
+  const allowedOrigins = (Deno.env.get("MEDIA_ALLOWED_ORIGINS") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (origin && !allowedOrigins.includes(origin)) {
+    return new Response("Origin not allowed", { status: 403, headers: { "Vary": "Origin" } });
+  }
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(request) });
+  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405, request);
 
   const authorization = request.headers.get("Authorization");
-  if (!authorization?.startsWith("Bearer ")) return json({ error: "Authentication required" }, 401);
+  if (!authorization?.startsWith("Bearer ")) return json({ error: "Authentication required" }, 401, request);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -36,7 +52,7 @@ Deno.serve(async (request) => {
   const mediaServiceUrl = Deno.env.get("MEDIA_SERVICE_URL")?.replace(/\/+$/, "");
   const mediaServiceToken = Deno.env.get("MEDIA_SERVICE_API_TOKEN");
   if (!supabaseUrl || !anonKey || !serviceRoleKey || !mediaServiceUrl || !mediaServiceToken) {
-    return json({ error: "Media processing is not configured; use the existing upload flow" }, 503);
+    return json({ error: "Media processing is not configured; use the existing upload flow" }, 503, request);
   }
 
   const userClient = createClient(supabaseUrl, anonKey, {
@@ -44,24 +60,24 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: userData, error: userError } = await userClient.auth.getUser();
-  if (userError || !userData.user) return json({ error: "Invalid session" }, 401);
+  if (userError || !userData.user) return json({ error: "Invalid session" }, 401, request);
 
   let body: RequestBody;
   try {
     body = await request.json();
   } catch {
-    return json({ error: "Expected JSON request body" }, 400);
+    return json({ error: "Expected JSON request body" }, 400, request);
   }
-  if (!body || typeof body !== "object") return json({ error: "Invalid request body" }, 400);
+  if (!body || typeof body !== "object") return json({ error: "Invalid request body" }, 400, request);
   const path = body.path ?? "";
   const mediaType = body.media_type;
-  if (typeof path !== "string") return json({ error: "Storage path must be a string" }, 400);
+  if (typeof path !== "string") return json({ error: "Storage path must be a string" }, 400, request);
   if (!body.rights_confirmed || (mediaType !== "image" && mediaType !== "video")) {
-    return json({ error: "A valid media_type and rights_confirmed=true are required" }, 400);
+    return json({ error: "A valid media_type and rights_confirmed=true are required" }, 400, request);
   }
   // Only process files under the authenticated user's first-level folder.
   if (!path.startsWith(`${userData.user.id}/`) || path.includes("..") || path.startsWith("/") || path.includes("\\")) {
-    return json({ error: "Storage path is not owned by the authenticated user" }, 403);
+    return json({ error: "Storage path is not owned by the authenticated user" }, 403, request);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -73,12 +89,12 @@ Deno.serve(async (request) => {
     media_url: originalUrl,
     original_path: path,
     reason,
-  });
+  }, 200, request);
   let pendingProcessedPath: string | null = null;
 
   try {
     const { data: original, error: downloadError } = await admin.storage.from(BUCKET).download(path);
-    if (downloadError || !original) return json({ error: "Original media could not be retrieved" }, 404);
+    if (downloadError || !original) return json({ error: "Original media could not be retrieved" }, 404, request);
     if (original.size <= 0 || original.size > MAX_ORIGINAL_BYTES) return fallback("original_size_out_of_range");
     const contentType = original.type || (mediaType === "image" ? "image/jpeg" : "video/mp4");
     if (!contentType.startsWith(`${mediaType}/`)) return fallback("media_type_mismatch");
