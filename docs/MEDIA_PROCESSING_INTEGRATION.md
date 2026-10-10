@@ -9,7 +9,7 @@ This integration is deliberately disabled by default. The current upload path re
 - The Edge Function authenticates the Supabase user, restricts the source path to that user's storage folder, calls the private media service from server-side code, verifies output size and SHA-256, writes a content-addressed object, reads it back, and verifies it again.
 - The app derives the public URL from the validated `processed_path`; it does not trust an arbitrary returned URL.
 - Any processing/configuration/storage/timeout error returns to the original media URL (Fallback A). The original object is not deleted.
-- If the post/story insert fails, the uploader attempts to remove both the newly uploaded original and any processed object created for that same submission.
+- If the post/story insert fails, the uploader removes only the newly uploaded original. Processed objects are content-addressed and may be reused by other submissions, so the client never deletes them; a future retention job must check references before cleanup.
 - No database schema or non-media module is changed.
 
 ## Required Edge Function secrets
