@@ -118,7 +118,24 @@ def process_video(src:Path,dst:Path,work:Path):
     cmd=["ffmpeg","-hide_banner","-loglevel","error","-y","-i",str(tmp),"-i",str(src),"-map","0:v:0","-map","1:a?","-c:v","libx264","-preset","veryfast","-crf","22","-threads","2","-c:a","aac","-b:a","192k","-movflags","+faststart",str(dst)]
     p=subprocess.run(cmd,capture_output=True,timeout=90)
     if p.returncode: raise HTTPException(422,"Video encoding failed; original must not be published as cleaned")
-    log.info("video frames=%s frames_with_detected_brand=%s",n,changed)
+    verify_video_cleanup(dst)
+    log.info("video frames=%s frames_with_detected_brand=%s cleanup_verification=passed",n,changed)
+
+def verify_video_cleanup(path:Path):
+    cap=cv2.VideoCapture(str(path))
+    if not cap.isOpened(): raise HTTPException(422,"Processed video could not be verified")
+    fps=cap.get(cv2.CAP_PROP_FPS) or 0
+    if fps<=0: cap.release(); raise HTTPException(422,"Processed video metadata could not be verified")
+    every=max(1,round(fps/2)); idx=0
+    try:
+        while True:
+            ok,frame=cap.read()
+            if not ok: break
+            if idx%every==0 and brand_boxes(frame):
+                raise HTTPException(422,"A readable brand watermark remains; do not publish this result")
+            idx+=1
+    finally: cap.release()
+    if idx==0: raise HTTPException(422,"Processed video has no decodable frames")
 
 def process_image(src:Path,dst:Path):
     try:
