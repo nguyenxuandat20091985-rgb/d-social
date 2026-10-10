@@ -365,7 +365,7 @@ export async function cleanupCornerTextFromImage(
     options.onProgress?.(68, 'Đã tạo mask cho các vùng phát hiện; đang chạy LaMa Inpainting…')
     await inpaintCandidateBoxesWithLama(canvas, context, candidates, options)
 
-    options.onProgress?.(88, 'Đang xuất và kiểm tra ảnh đã xử lý…')
+    options.onProgress?.(98, 'Đang xuất và kiểm tra ảnh đã xử lý…')
     const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(value => value ? resolve(value) : reject(new Error('Không xuất được ảnh đã xử lý.')), outputType, 0.94)
