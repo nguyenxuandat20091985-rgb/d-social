@@ -319,6 +319,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
+  const [mediaRightsConfirmed, setMediaRightsConfirmed] = useState(false)
 
   useEffect(() => {
     if (!file) { setPreviewUrl(''); return }
@@ -339,6 +340,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
       setError('Ảnh tối đa 8MB, video tối đa 30MB.')
       return
     }
+    setMediaRightsConfirmed(false)
     setFile(next)
   }
 
@@ -346,19 +348,34 @@ function StoryComposer({ userId, onClose, onPublished }) {
     if (busy) return
     if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
     if (!file) return setError('Chọn một ảnh hoặc video để đăng tin.')
+    if (MEDIA_PROCESSING_ENABLED && !mediaRightsConfirmed) return setError('Anh cần xác nhận quyền xử lý và chỉnh sửa ảnh/video trước khi đăng tin.')
     const mod = moderateText(caption)
     if (!mod.allowed) return setError(mod.reason)
     setBusy(true)
     setError('')
-    setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
+    setStage(MEDIA_PROCESSING_ENABLED ? 'Đang kiểm tra media trên thiết bị…' : (file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…'))
     let uploadedPath = null
     try {
+      if (MEDIA_PROCESSING_ENABLED) {
+        await inspectMediaOnDevice(file, { onProgress: ({ stage }) => setStage(stage) })
+      }
       const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
       const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
       let media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+      if (MEDIA_PROCESSING_ENABLED) {
+        setStage(file.type.startsWith('video/') ? 'Đang làm sạch video trước khi đăng tin…' : 'Đang xử lý ảnh trước khi đăng tin…')
+        const processed = await processUploadedMedia({
+          path,
+          mediaType: file.type.startsWith('video/') ? 'video' : 'image',
+          userId,
+          originalUrl: media_url,
+          rightsConfirmed: mediaRightsConfirmed,
+        })
+        media_url = processed.url
+      }
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -403,6 +420,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
+      {MEDIA_PROCESSING_ENABLED && file && <label className="mt-3 flex items-start gap-2 text-xs d-muted cursor-pointer"><input type="checkbox" checked={mediaRightsConfirmed} onChange={e => setMediaRightsConfirmed(e.target.checked)} disabled={busy} className="mt-0.5"/><span>Tôi xác nhận có quyền cho phép xử lý và chỉnh sửa ảnh/video đã chọn.</span></label>}
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
