@@ -87,7 +87,17 @@ export async function cleanupCornerTextFromImage(
     const edgeY = Math.max(1, Math.round(canvas.height * 0.24))
     const candidates: LogoCandidate[] = []
 
-    const words = (result.data as unknown as { words?: Array<{ text?: string; confidence?: number; bbox: { x0: number; y0: number; x1: number; y1: number } }> }).words ?? []
+    type OcrWord = { text?: string; confidence?: number; bbox: { x0: number; y0: number; x1: number; y1: number } }
+    type OcrPageShape = {
+      words?: OcrWord[]
+      blocks?: Array<{ paragraphs?: Array<{ lines?: Array<{ words?: OcrWord[] }> }> }>
+    }
+    const page = result.data as unknown as OcrPageShape
+    const words = page.words ?? page.blocks?.flatMap(block =>
+      block.paragraphs?.flatMap(paragraph =>
+        paragraph.lines?.flatMap(line => line.words ?? []) ?? [],
+      ) ?? [],
+    ) ?? []
     for (const word of words) {
       const text = word.text?.trim()
       const confidence = Number(word.confidence)
