@@ -38,7 +38,7 @@ export async function cropVideoCornersOnDevice(file: File, options: {
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     // Trim 2.5% from every edge, then scale back to the original frame size.
     // This is a conservative watermark-removal aid, not a detector or guarantee.
-    await ffmpeg.exec(['-i', inputName, '-vf', 'crop=trunc(iw*0.95/2)*2:trunc(ih*0.95/2)*2:trunc(iw*0.025/2)*2:trunc(ih*0.025/2)*2,scale=iw:ih', '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', outputName])
+    await ffmpeg.exec(['-i', inputName, '-vf', 'crop=trunc(iw*0.95/2)*2:trunc(ih*0.95/2)*2:trunc(iw*0.025/2)*2:trunc(ih*0.025/2)*2,scale=trunc(iw/0.95/2)*2:trunc(ih/0.95/2)*2', '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', outputName])
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     const output = await ffmpeg.readFile(outputName)
     if (!(output instanceof Uint8Array) || output.byteLength < 100) throw new Error('Không tạo được video đầu ra hợp lệ.')
