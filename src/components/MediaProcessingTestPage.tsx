@@ -146,9 +146,9 @@ export function MediaProcessingTestPage() {
       {manualOpen && selectedFile && isImage && <ManualMediaEditor file={selectedFile} onProcessed={acceptOutput} onStatus={setNotice} />}
 
       {(notice || result?.error) && <p className={result?.error ? 'ds-clean-notice ds-clean-error' : 'ds-clean-notice'} role={result?.error ? 'alert' : 'status'}>
-        {result?.error || notice}
+        {result?.error ? (manualOpen ? 'Tô đỏ vùng logo cần xóa, sau đó bấm Xóa vùng đã tô.' : result.error) : notice}
       </p>}
-      {result?.inspection && <p className="ds-clean-meta">{result.inspection.width && result.inspection.height ? `${result.inspection.width} × ${result.inspection.height} px · ` : ''}{(result.inspection.sizeBytes / 1024 / 1024).toFixed(1)} MB</p>}
+      {result?.inspection && !manualOpen && <p className="ds-clean-meta">{result.inspection.width && result.inspection.height ? `${result.inspection.width} × ${result.inspection.height} px · ` : ''}{(result.inspection.sizeBytes / 1024 / 1024).toFixed(1)} MB</p>}
       {busy && <button type="button" className="ds-clean-cancel" onClick={cancel}>Hủy</button>}
     </section>
     <footer className="ds-clean-footer">Ảnh được xử lý trên thiết bị của anh.</footer>
