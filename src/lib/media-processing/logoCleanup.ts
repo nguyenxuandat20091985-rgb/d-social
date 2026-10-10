@@ -16,7 +16,7 @@ export type ClientImageCleanupResult = {
   height: number
   candidates: LogoCandidate[]
   sha256: string
-  engine: 'tesseract-corner-text-v1' | 'tesseract-plus-tiktok-color-v1'
+  engine: 'paddleocr-ppocrv5-lama-v1' | 'tesseract-corner-text-lama-v1' | 'tesseract-plus-tiktok-color-lama-v1'
 }
 
 export type CleanupOptions = {
@@ -89,6 +89,115 @@ function detectTikTokColorMarks(canvas: HTMLCanvasElement): LogoCandidate[] {
   return output
 }
 
+
+async function detectWithPaddleOCR(file: File, width: number, height: number, options: CleanupOptions): Promise<LogoCandidate[]> {
+  if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+  options.onProgress?.(14, 'Đang khởi tạo PaddleOCR PP-OCRv5 trên Web Worker…')
+  const worker = new Worker(new URL('./paddleocr.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-paddleocr' })
+  const id = crypto.randomUUID()
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      worker.terminate()
+      options.signal?.removeEventListener('abort', abort)
+    }
+    const abort = () => { cleanup(); reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError')) }
+    options.signal?.addEventListener('abort', abort, { once: true })
+    worker.onerror = () => { cleanup(); reject(new Error('PaddleOCR Web Worker gặp lỗi.')) }
+    worker.onmessage = (event: MessageEvent<{ id: string; type: string; progress?: number; stage?: string; candidates?: LogoCandidate[]; message?: string }>) => {
+      const message = event.data
+      if (!message || message.id !== id) return
+      if (message.type === 'progress') {
+        options.onProgress?.(Math.min(62, 14 + Math.round((message.progress ?? 0) * 0.48)), message.stage ?? 'PaddleOCR đang xử lý…')
+      } else if (message.type === 'complete') {
+        cleanup()
+        resolve(message.candidates ?? [])
+      } else if (message.type === 'error') {
+        cleanup()
+        reject(new Error(message.message || 'PaddleOCR không khởi chạy được.'))
+      }
+    }
+    worker.postMessage({ id, file, width, height })
+  })
+}
+
+
+async function inpaintCandidateBoxesWithLama(
+  canvas: HTMLCanvasElement,
+  context: CanvasRenderingContext2D,
+  candidates: LogoCandidate[],
+  options: CleanupOptions,
+): Promise<void> {
+  const worker = new Worker(new URL('./lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-auto-inpaint' })
+  const signal = options.signal
+  const abort = () => worker.terminate()
+  signal?.addEventListener('abort', abort, { once: true })
+  try {
+    for (let index = 0; index < candidates.length; index++) {
+      if (signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+      const candidate = candidates[index]
+      const pad = Math.max(6, Math.round(Math.max(candidate.width, candidate.height) * 0.24))
+      const x = Math.max(0, candidate.x - pad)
+      const y = Math.max(0, candidate.y - pad)
+      const right = Math.min(canvas.width, candidate.x + candidate.width + pad)
+      const bottom = Math.min(canvas.height, candidate.y + candidate.height + pad)
+      const outerPad = Math.max(48, Math.round(Math.max(right - x, bottom - y) * 0.85))
+      const outerX = Math.max(0, x - outerPad)
+      const outerY = Math.max(0, y - outerPad)
+      const outerRight = Math.min(canvas.width, right + outerPad)
+      const outerBottom = Math.min(canvas.height, bottom + outerPad)
+      const patchWidth = outerRight - outerX
+      const patchHeight = outerBottom - outerY
+      if (patchWidth * patchHeight > 8_000_000) throw new Error('Vùng logo quá lớn để xử lý an toàn trên điện thoại.')
+      const patchCanvas = document.createElement('canvas')
+      patchCanvas.width = patchWidth
+      patchCanvas.height = patchHeight
+      const patchContext = patchCanvas.getContext('2d', { willReadFrequently: true })
+      if (!patchContext) throw new Error('Không tạo được vùng ảnh cho LaMa.')
+      patchContext.drawImage(canvas, outerX, outerY, patchWidth, patchHeight, 0, 0, patchWidth, patchHeight)
+      const maskCanvas = document.createElement('canvas')
+      maskCanvas.width = patchWidth
+      maskCanvas.height = patchHeight
+      const maskContext = maskCanvas.getContext('2d')
+      if (!maskContext) throw new Error('Không tạo được mask cho LaMa.')
+      maskContext.fillStyle = '#fff'
+      maskContext.fillRect(x - outerX, y - outerY, right - x, bottom - y)
+      const maskPixels = maskContext.getImageData(0, 0, patchWidth, patchHeight)
+      const mask = new Uint8Array(patchWidth * patchHeight)
+      for (let i = 0, j = 0; i < maskPixels.data.length; i += 4, j++) if (maskPixels.data[i + 3] > 0) mask[j] = 1
+      const pixels = patchContext.getImageData(0, 0, patchWidth, patchHeight)
+      const id = crypto.randomUUID()
+      const result = await new Promise<ArrayBuffer>((resolve, reject) => {
+        const abortOne = () => reject(new DOMException('Đã hủy xử lý ảnh.', 'AbortError'))
+        signal?.addEventListener('abort', abortOne, { once: true })
+        worker.onmessage = (event: MessageEvent<{ id: string; type?: string; progress?: number; stage?: string; pixels?: ArrayBuffer; message?: string }>) => {
+          const message = event.data
+          if (message?.id !== id) return
+          if (message.type === 'progress') {
+            const overall = Math.round(((index + (message.progress ?? 0) / 100) / candidates.length) * 100)
+            options.onProgress?.(68 + Math.round(overall * 0.29), 'LaMa ' + (index + 1) + '/' + candidates.length + ': ' + (message.stage ?? 'đang tái tạo nền…'))
+          } else if (message.type === 'complete' && message.pixels) {
+            signal?.removeEventListener('abort', abortOne)
+            resolve(message.pixels)
+          } else if (message.type === 'error') {
+            signal?.removeEventListener('abort', abortOne)
+            reject(new Error(message.message || 'LaMa không xử lý được vùng phát hiện.'))
+          }
+        }
+        worker.onerror = () => {
+          signal?.removeEventListener('abort', abortOne)
+          reject(new Error('Web Worker LaMa gặp lỗi.'))
+        }
+        worker.postMessage({ id, width: patchWidth, height: patchHeight, pixels: pixels.data.buffer, mask: mask.buffer, patchMode: true }, [pixels.data.buffer, mask.buffer])
+      })
+      if (signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+      context.putImageData(new ImageData(new Uint8ClampedArray(result), patchWidth, patchHeight), outerX, outerY)
+    }
+  } finally {
+    signal?.removeEventListener('abort', abort)
+    worker.terminate()
+  }
+}
+
 /**
  * Conservative client-side image cleanup for text-like marks in the four corners.
  *
@@ -113,8 +222,8 @@ export async function cleanupCornerTextFromImage(
   try {
     options.onProgress?.(5, 'Đang đọc ảnh trên thiết bị…')
     bitmap = await createImageBitmap(file)
-    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 16_000_000) {
-      throw new Error('Kích thước ảnh vượt giới hạn xử lý an toàn.')
+    if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width * bitmap.height > 8_000_000) {
+      throw new Error('Ảnh vượt giới hạn 8 megapixel để giảm nguy cơ tràn RAM trên điện thoại.')
     }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
 
@@ -127,15 +236,24 @@ export async function cleanupCornerTextFromImage(
     bitmap.close()
     bitmap = undefined
 
-    options.onProgress?.(15, 'Đang khởi tạo bộ đọc chữ…')
-    worker = await createWorker('eng+vie', 1, {
-      logger: event => {
-        if (event.status === 'recognizing text' && typeof event.progress === 'number') {
-          options.onProgress?.(15 + Math.round(event.progress * 45), 'Đang tìm chữ/logo ở mép ảnh…')
-        }
-      },
-    })
+    let paddleCandidates: LogoCandidate[] = []
+    try {
+      paddleCandidates = await detectWithPaddleOCR(file, canvas.width, canvas.height, options)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
+      options.onProgress?.(18, 'PaddleOCR chưa khởi chạy được; chuyển sang Tesseract dự phòng…')
+    }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
+    if (!paddleCandidates.length) {
+      options.onProgress?.(18, 'Đang khởi tạo Tesseract dự phòng…')
+      worker = await createWorker('eng+vie', 1, {
+        logger: event => {
+          if (event.status === 'recognizing text' && typeof event.progress === 'number') {
+            options.onProgress?.(18 + Math.round(event.progress * 40), 'Đang tìm chữ/logo ở mép ảnh…')
+          }
+        },
+      })
+    }
 
     const terminateOnAbort = () => { void worker?.terminate() }
     options.signal?.addEventListener('abort', terminateOnAbort, { once: true })
@@ -163,10 +281,10 @@ export async function cleanupCornerTextFromImage(
       { region: 'bottom-left', x: 0, y: canvas.height - cornerHeight },
       { region: 'bottom-right', x: canvas.width - cornerWidth, y: canvas.height - cornerHeight },
     ]
-    const candidates: LogoCandidate[] = []
+    const candidates: LogoCandidate[] = [...paddleCandidates]
     const minConfidence = options.minConfidence ?? 28
 
-    for (let index = 0; index < corners.length; index++) {
+    for (let index = 0; index < corners.length && candidates.length === 0; index++) {
       if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
       const corner = corners[index]
       const crop = document.createElement('canvas')
@@ -202,8 +320,8 @@ export async function cleanupCornerTextFromImage(
 
       options.onProgress?.(20 + Math.round((index / corners.length) * 45), 'Đang quét OCR và tăng tương phản 4 góc ảnh…')
       const recognizedPasses = await Promise.all([
-        worker.recognize(enhancedCrop),
-        worker.recognize(crop),
+        worker!.recognize(enhancedCrop),
+        worker!.recognize(crop),
       ])
       for (const recognized of recognizedPasses) {
       for (const word of extractWords(recognized.data)) {
@@ -244,28 +362,10 @@ export async function cleanupCornerTextFromImage(
       throw new Error('OCR và bộ dò màu TikTok ở 4 góc chưa tìm được vùng đủ tin cậy. Đây không phải kết luận ảnh sạch; hãy tô vùng logo thủ công.')
     }
 
-    options.onProgress?.(68, usedColorHeuristic ? 'Đã tìm thấy cụm màu giống dấu TikTok; đang xử lý vùng nghi vấn…' : 'Đang che các vùng chữ nghi là logo…')
-    for (const candidate of candidates) {
-      const pad = Math.max(3, Math.round(Math.max(candidate.width, candidate.height) * 0.22))
-      const x = Math.max(0, candidate.x - pad)
-      const y = Math.max(0, candidate.y - pad)
-      const width = Math.min(canvas.width - x, candidate.width + pad * 2)
-      const height = Math.min(canvas.height - y, candidate.height + pad * 2)
-      // Blur only the bounded OCR box; do not claim semantic inpainting.
-      const patch = document.createElement('canvas')
-      patch.width = Math.max(1, width)
-      patch.height = Math.max(1, height)
-      const patchContext = patch.getContext('2d')
-      if (!patchContext) throw new Error('Không tạo được vùng xử lý ảnh.')
-      patchContext.filter = 'blur(7px)'
-      patchContext.drawImage(canvas, x, y, width, height, 0, 0, width, height)
-      context.save()
-      context.filter = 'none'
-      context.drawImage(patch, x, y)
-      context.restore()
-    }
+    options.onProgress?.(68, 'Đã tạo mask cho các vùng phát hiện; đang chạy LaMa Inpainting…')
+    await inpaintCandidateBoxesWithLama(canvas, context, candidates, options)
 
-    options.onProgress?.(88, 'Đang xuất và kiểm tra ảnh đã xử lý…')
+    options.onProgress?.(98, 'Đang xuất và kiểm tra ảnh đã xử lý…')
     const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(value => value ? resolve(value) : reject(new Error('Không xuất được ảnh đã xử lý.')), outputType, 0.94)
@@ -282,7 +382,7 @@ export async function cleanupCornerTextFromImage(
       height: canvas.height,
       candidates,
       sha256,
-      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-v1' : 'tesseract-corner-text-v1',
+      engine: usedColorHeuristic ? 'tesseract-plus-tiktok-color-lama-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-lama-v1' : 'tesseract-corner-text-lama-v1',
     }
   } finally {
     bitmap?.close()

@@ -15,6 +15,18 @@ export function MediaProcessingTestPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
   const urlsRef = useRef<string[]>([])
+  const stageText = stage.toLowerCase()
+  const activePipelineStep = /lama|inpainting|tái tạo nền|ghép kết quả/.test(stageText) ? 3
+    : /mask|tô vùng|vùng chọn|vùng đã chọn/.test(stageText) ? 2
+    : /ocr|đọc chữ|quét chữ|phát hiện/.test(stageText) ? 1
+    : /xuất|kiểm tra ảnh|đã xử lý|hoàn tất/.test(stageText) ? 4 : 0
+  const pipelineSteps = [
+    'Đọc và kiểm tra tệp ảnh',
+    'Phát hiện chữ/logo bằng PaddleOCR PP-OCRv5 (Tesseract dự phòng)',
+    'Tạo mask từ vùng phát hiện hoặc tô tay',
+    'LaMa Inpainting (chạy khi chọn xóa bằng AI)',
+    'Xuất tệp và người dùng kiểm tra kết quả',
+  ]
   useEffect(() => () => { controllerRef.current?.abort(); urlsRef.current.forEach(url => URL.revokeObjectURL(url)) }, [])
   function keepUrl(url: string) { urlsRef.current.push(url); return url }
   function acceptOutput(blob: Blob) {
@@ -80,6 +92,17 @@ export function MediaProcessingTestPage() {
           <div className="mb-2 flex items-center justify-between text-sm"><span className="font-medium">Tiến độ</span><span className="font-bold tabular-nums">{progress}%</span></div>
           <div className="h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full transition-all duration-300" style={{ width: progress + '%', background: '#2454d7' }}/></div>
           <p className="mt-3 min-h-10 text-sm leading-5 text-slate-600" aria-live="polite">{stage}</p>
+          {selectedFile?.type.startsWith('image/') && <ol className="mt-4 space-y-2 border-t border-slate-100 pt-3">
+            {pipelineSteps.map((label, index) => {
+              const active = index === activePipelineStep
+              const complete = index < activePipelineStep || (index === 4 && progress >= 100)
+              return <li key={label} className="flex items-start gap-2 text-xs leading-5">
+                <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-bold ${complete ? 'bg-emerald-100 text-emerald-700' : active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>{complete ? '✓' : index + 1}</span>
+                <span className={complete || active ? 'font-medium text-slate-800' : 'text-slate-400'}>{label}</span>
+                {active && !complete && <span className="ml-auto text-blue-700">Đang làm</span>}
+              </li>
+            })}
+          </ol>}
         </div>
         {busy && <button type="button" onClick={cancel} className="mt-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold">Hủy xử lý</button>}
       </section>
@@ -96,7 +119,7 @@ export function MediaProcessingTestPage() {
           {result.inspection.width && <div><dt className="inline text-slate-500">Kích thước: </dt><dd className="inline">{result.inspection.width} × {result.inspection.height} px</dd></div>}
           <div><dt className="inline text-slate-500">SHA-256: </dt><dd className="inline font-mono text-xs">{result.inspection.sha256}</dd></div>
         </dl>
-        {result.cleanup && <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">OCR tìm thấy {result.cleanup.candidates.length} vùng chữ và đã thử làm mờ. Đây không phải bảo đảm xóa mọi logo; hãy kiểm tra ảnh đầu ra.</div>}
+        {result.cleanup && <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">Đã phát hiện {result.cleanup.candidates.length} vùng nghi vấn bằng {result.cleanup.engine}. Pipeline đã thử LaMa Inpainting; đây không phải bảo đảm xóa mọi logo. Anh cần phóng to kiểm tra ảnh đầu ra.</div>}
         {result.error && <div role="alert" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">{result.error}</div>}
       </section>}
       {selectedFile && selectedFile.type.startsWith('image/') && <ManualMediaEditor file={selectedFile} onProcessed={blob => acceptOutput(blob)} onStatus={message => setStage(message)}/>}

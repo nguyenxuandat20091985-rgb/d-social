@@ -1,9 +1,9 @@
 name: D Social build
 on:
   push:
-    branches: [main, feat/client-first-media-processing]
+    branches: [main, feat/client-first-media-processing, feat/media-processing-v2-hybrid-pipeline]
   pull_request:
-    branches: [main]
+    branches: [main, feat/client-first-media-processing]
   workflow_dispatch:
 jobs:
   build:
