@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { detectHardwareProfile, type HardwareProfile } from '../lib/media-processing/hardwareAdaptive'
 
 type Props = { file: File; onProcessed: (blob: Blob) => void; onStatus?: (message: string) => void }
 type WorkerReply = { id: string; type?: 'progress' | 'complete' | 'error'; progress?: number; stage?: string; pixels?: ArrayBuffer; message?: string }
@@ -11,6 +12,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
   const [brush, setBrush] = useState(28)
   const [working, setWorking] = useState(false)
   const [ready, setReady] = useState(false)
+  const [hardware, setHardware] = useState<HardwareProfile | null>(null)
   const [lamaProgress, setLamaProgress] = useState(0)
   const [lamaStage, setLamaStage] = useState('Chưa chạy LaMa')
   const onStatusRef = useRef(onStatus)
@@ -18,6 +20,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
 
   useEffect(() => {
     let active = true
+    void detectHardwareProfile().then(profile => { if (active) setHardware(profile) }).catch(() => { if (active) setHardware(null) })
     setReady(false)
     const url = URL.createObjectURL(file)
     const image = new Image()
@@ -146,6 +149,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     setWorking(true); setLamaProgress(1); setLamaStage('Đang chuẩn bị mask và ảnh nguồn…')
     try {
       const { canvas, mask, pixels, originX, originY } = buildLamaInput()
+      if (hardware?.tier !== 'strong') throw new Error('Thiết bị này đang ở chế độ nội suy nhanh để tránh tải model 208 MB. Hãy dùng nút Nội suy nhanh.')
       onStatusRef.current?.('Đang chạy LaMa Inpainting trên thiết bị. Lần đầu cần tải mô hình từ Internet.')
       const worker = lamaWorkerRef.current ?? new Worker(new URL('../lib/media-processing/lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-inpainting' })
       lamaWorkerRef.current = worker
@@ -199,14 +203,15 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
 
   return <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
     <h2 className="font-semibold">Chọn vùng logo thủ công</h2>
-    <p className="mt-1 text-sm leading-5 text-slate-600">Dùng ngón tay tô đỏ lên toàn bộ logo/chữ và chừa một ít nền xung quanh. Tọa độ mask được giữ theo pixel ảnh gốc. LaMa chạy cục bộ trong Web Worker. Lưu ý: mô hình khoảng 208 MB, chỉ tải khi anh bấm “Xóa bằng LaMa AI”; nên dùng Wi‑Fi. Lần đầu chưa thể cam kết dưới 3–5 giây.</p>
+    <p className="mt-1 text-sm leading-5 text-slate-600">Dùng ngón tay tô đỏ lên toàn bộ logo/chữ và chừa một ít nền xung quanh. Tọa độ mask được giữ theo pixel ảnh gốc. Bộ xử lý tự phân tầng theo RAM ước tính, CPU và WebGL/WebGPU; máy trung bình/yếu không tải model LaMa 208 MB.</p>
+    {hardware && <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900"><strong>{hardware.label}</strong><p className="mt-1">{hardware.reason}</p><p className="mt-1 text-xs">RAM báo cáo: {hardware.deviceMemoryGB === null ? 'trình duyệt không cung cấp' : hardware.deviceMemoryGB + ' GB'} · CPU: {hardware.hardwareConcurrency} luồng · WebGPU: {hardware.webgpu ? 'có' : 'không'} · WebGL: {hardware.webgl ? 'có' : 'không'}</p></div>}
     <canvas ref={canvasRef} className="mt-3 w-full rounded-xl border border-slate-200 touch-none" style={{ maxHeight: 520, objectFit: 'contain' }}
       onPointerDown={event => { drawingRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); paint(event) }}
       onPointerMove={paint} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} />
     <div className="mt-3 flex items-center gap-3 text-sm"><label htmlFor="mask-brush">Cỡ nét</label><input id="mask-brush" type="range" min="8" max="72" value={brush} onChange={event => setBrush(Number(event.currentTarget.value))}/><span>{brush}px</span></div>
     <div className="mt-3 flex flex-wrap gap-2">
       <button type="button" disabled={!ready || working} onClick={resetMask} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold">Làm lại vùng chọn</button>
-      <button type="button" disabled={!ready || working} onClick={() => void processLama()} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{working ? 'Đang xử lý…' : 'Xóa bằng LaMa AI'}</button>
+      <button type="button" disabled={!ready || working || hardware?.tier !== 'strong'} onClick={() => void processLama()} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{working ? 'Đang xử lý…' : hardware?.tier === 'strong' ? 'Xóa bằng LaMa AI' : 'LaMa AI không phù hợp máy này'}</button>
       <button type="button" disabled={!ready || working} onClick={() => void processFast()} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50">Nội suy nhanh</button>
     </div>
     <div className="mt-4 rounded-xl bg-slate-50 p-3">
