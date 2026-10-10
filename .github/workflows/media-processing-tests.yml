@@ -1,0 +1,42 @@
+name: media-processing-tests
+
+on:
+  pull_request:
+    branches:
+      - fix/dsocial-media-processing-service
+    paths:
+      - "services/media-processing-service/**"
+      - "services/media-ai-worker/**"
+      - ".github/workflows/media-processing-tests.yml"
+  push:
+    branches:
+      - fix/dsocial-media-processing-service
+    paths:
+      - "services/media-processing-service/**"
+      - "services/media-ai-worker/**"
+      - ".github/workflows/media-processing-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/media-processing-service/requirements.txt
+      - name: Install media API dependencies
+        run: python -m pip install -r services/media-processing-service/requirements.txt
+      - name: Compile Python sources
+        run: |
+          python -m py_compile services/media-processing-service/main.py
+          python -m py_compile services/media-processing-service/tests/test_ocr_resilience.py
+          python -m py_compile services/media-processing-service/tests/test_ai_fallback_adapter.py
+          python -m py_compile services/media-ai-worker/main.py
+      - name: Run media API regression tests
+        working-directory: services/media-processing-service
+        run: python -m unittest discover -s tests -v
