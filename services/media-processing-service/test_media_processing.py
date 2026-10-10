@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import io
 import sys
 import tempfile
 import unittest
@@ -39,6 +41,33 @@ class MediaProcessingSafetyTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as caught:
                 media_service.auth("")
         self.assertEqual(caught.exception.status_code, 401)
+
+    def test_endpoint_rejects_requests_without_bearer_auth(self):
+        upload = media_service.UploadFile(file=io.BytesIO(b"image"), filename="sample.jpg")
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(media_service.process_binary(file=upload, rights_confirmed=True, authorization=None))
+        self.assertEqual(caught.exception.status_code, 401)
+
+    def test_endpoint_requires_explicit_rights_confirmation(self):
+        upload = media_service.UploadFile(file=io.BytesIO(b"image"), filename="sample.jpg")
+        with patch.object(media_service, "auth", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(media_service.process_binary(file=upload, rights_confirmed=False, authorization="Bearer test-token"))
+        self.assertEqual(caught.exception.status_code, 400)
+
+    def test_endpoint_enforces_upload_byte_limit(self):
+        upload = media_service.UploadFile(file=io.BytesIO(b"123"), filename="sample.jpg")
+        with patch.object(media_service, "auth", return_value=None), patch.object(media_service, "MAX_BYTES", 2):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(media_service.process_binary(file=upload, rights_confirmed=True, authorization="Bearer test-token"))
+        self.assertEqual(caught.exception.status_code, 413)
+
+    def test_endpoint_rejects_unsupported_file_extensions(self):
+        upload = media_service.UploadFile(file=io.BytesIO(b"123"), filename="sample.exe")
+        with patch.object(media_service, "auth", return_value=None):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(media_service.process_binary(file=upload, rights_confirmed=True, authorization="Bearer test-token"))
+        self.assertEqual(caught.exception.status_code, 415)
 
     def test_ocr_failure_blocks_brand_detection_instead_of_skipping_it(self):
         frame = np.zeros((120, 160, 3), dtype=np.uint8)
