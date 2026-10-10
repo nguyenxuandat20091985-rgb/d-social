@@ -32,13 +32,10 @@ async function getOcr(id: string) {
 }
 
 function getRegion(x: number, y: number, width: number, height: number): Candidate['region'] | null {
-  const left = x + width / 2 < 0.5 * width
-  const top = y + height / 2 < 0.5 * height
   if (x < width * 0.38 && y < height * 0.34) return 'top-left'
   if (x + width > width * 0.62 && y < height * 0.34) return 'top-right'
   if (x < width * 0.38 && y + height > height * 0.66) return 'bottom-left'
   if (x + width > width * 0.62 && y + height > height * 0.66) return 'bottom-right'
-  void left; void top
   return null
 }
 
