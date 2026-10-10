@@ -8,15 +8,15 @@ scope.onmessage = (event: MessageEvent<Request>) => {
     const rgba = new Uint8ClampedArray(event.data.pixels)
     const mask = new Uint8Array(event.data.mask)
     const total = width * height
-    if (width < 1 || height < 1 || total > 16_000_000 || rgba.length !== total * 4 || mask.length !== total) {
+    if (width < 1 || height < 1 || total > 2_000_000 || rgba.length !== total * 4 || mask.length !== total) {
       throw new Error('Dữ liệu vùng xóa không hợp lệ.')
     }
     const targets: number[] = []
     for (let i=0;i<mask.length;i++) if (mask[i]) targets.push(i)
-    if (!targets.length || targets.length > total * 0.15) throw new Error('Vùng tô quá lớn. Hãy chỉ tô quanh logo/chữ cần xóa.')
+    if (!targets.length || targets.length > Math.min(total * 0.15, 200_000)) throw new Error('Vùng tô quá lớn. Hãy chỉ tô quanh logo/chữ cần xóa.')
     const known = new Uint8Array(total)
     for (let i = 0; i < total; i++) known[i] = mask[i] ? 0 : 1
-    const maxPasses = Math.min(36, Math.max(8, Math.ceil(Math.sqrt(targets.length) * 0.35)))
+    const maxPasses = Math.min(8, Math.max(3, Math.ceil(Math.sqrt(targets.length) * 0.04)))
     const offsets = [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]]
     for (let pass = 0; pass < maxPasses; pass++) {
       const updates: Array<[number, number, number, number]> = []
