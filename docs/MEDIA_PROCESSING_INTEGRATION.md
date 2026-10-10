@@ -5,11 +5,11 @@ This integration is deliberately disabled by default. The current upload path re
 ## Runtime behavior
 
 - Uploads continue to the existing `social-media` bucket first.
-- If the feature flag is enabled and the uploader explicitly confirms rights to modify the selected media, the app calls the `process-media` Supabase Edge Function.
+- For **feed posts only**, if the feature flag is enabled and the uploader explicitly confirms rights to modify the selected media, the app calls the `process-media` Supabase Edge Function. Stories and other upload flows are intentionally out of scope.
 - The Edge Function authenticates the Supabase user, restricts the source path to that user's storage folder, calls the private media service from server-side code, verifies output size and SHA-256, writes a content-addressed object, reads it back, and verifies it again.
 - The app derives the public URL from the validated `processed_path`; it does not trust an arbitrary returned URL.
 - Any processing/configuration/storage/timeout error returns to the original media URL (Fallback A). The original object is not deleted.
-- If the post/story insert fails, the uploader removes only the newly uploaded original. Processed objects are content-addressed and may be reused by other submissions, so the client never deletes them; a future retention job must check references before cleanup.
+- If the feed post insert fails, the uploader removes only the newly uploaded original. Processed objects are content-addressed and may be reused by other submissions, so the client never deletes them; a future retention job must check references before cleanup.
 - No database schema or non-media module is changed.
 
 ## Required Edge Function environment settings
@@ -29,11 +29,12 @@ The Supabase runtime must provide `SUPABASE_URL` and either the legacy `SUPABASE
 2. Set the Edge Function secrets above in a dedicated Supabase staging project.
 3. Deploy `supabase/functions/process-media` to staging and verify authenticated invocation, ownership rejection, hash/size checks, and fallback when the service is unavailable.
 4. Build the app with `VITE_MEDIA_PROCESSING_ENABLED=true` in staging only. The user must explicitly confirm media-processing rights before processing is attempted.
-5. Test image, video with audio, video without audio, oversized/invalid files, invalid sessions, timeout, service outage, storage outage, repeated requests, and failed post/story inserts.
+5. Test image, video with audio, video without audio, oversized/invalid files, invalid sessions, timeout, service outage, storage outage, repeated requests, and failed feed-post inserts.
 6. Keep the flag false in production until staging and rollback checks pass. Production rollout is a separate, explicit step.
 
 ## Important limits
 
+- **The current media service does not detect or remove existing third-party logos/watermarks.** It adds a visible `D-Social` text overlay. It also does not implement a hidden/forensic D-Social watermark. Therefore this service does not yet satisfy the requested logo-removal + hidden-watermark behavior, and enabling the flag will not make an existing logo disappear.
 - The current media service does not include a durable Celery/Redis queue; do not treat this synchronous integration as validated for large-scale production traffic.
 - No service URL or Edge Function deployment is assumed by this code.
 - The app should not be considered production-integrated until the required staging checks pass.
