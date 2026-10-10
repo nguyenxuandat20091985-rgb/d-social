@@ -106,8 +106,8 @@ async function run(request: Request) {
     send({ id, type: 'progress', progress: 42, stage: 'LaMa đang tái tạo nền vùng đã tô…' })
     const inputNames = session.inputNames
     const inputs: Record<string, unknown> = {}
-    const imageName = inputNames.find(name => /image|img|input/i.test(name)) || inputNames[0]
-    const maskName = inputNames.find(name => /mask/i.test(name)) || inputNames[1]
+    const imageName = inputNames.find((name: string) => /image|img|input/i.test(name)) || inputNames[0]
+    const maskName = inputNames.find((name: string) => /mask/i.test(name)) || inputNames[1]
     inputs[imageName] = new ortModule.Tensor('float32', imageTensor, [1, 3, side, side])
     inputs[maskName] = new ortModule.Tensor('float32', maskTensor, [1, 1, side, side])
     const outputs = await session.run(inputs)
