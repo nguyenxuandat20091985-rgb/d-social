@@ -125,7 +125,6 @@ export function MediaProcessingTestPage() {
                 <span>Chạm để tải ảnh từ điện thoại</span>
                 <input aria-label="Chọn ảnh" type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { void handleFile(event.currentTarget.files?.[0]); event.currentTarget.value = '' }} />
               </label>}
-        {busy && <div className="ds-clean-loading" aria-label="Đang xử lý" />}
       </div>
 
       {isImage && selectedFile && <div className="ds-clean-tools">
