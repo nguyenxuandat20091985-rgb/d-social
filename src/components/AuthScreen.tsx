@@ -145,6 +145,16 @@ export function AuthScreen({ onLegal }: Props) {
 
           <p className="mt-2.5 text-center text-xs d-muted">Gmail · Một chạm · Bảo mật bởi Google</p>
 
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => { setShowEmail(true); setMode('signup'); setError(''); setInfo('') }}
+            className="w-full mt-4 py-3 rounded-xl text-sm font-semibold border transition active:scale-[0.99] disabled:opacity-60"
+            style={{ background: 'var(--d-surface)', borderColor: 'var(--d-border)', color: 'var(--d-primary)' }}
+          >
+            Đăng ký bằng email
+          </button>
+
           <div className="flex items-center gap-3 my-5">
             <div className="h-px flex-1" style={{ background: 'var(--d-border)' }} />
             <button type="button" onClick={() => setShowEmail(v => !v)} className="text-xs font-medium px-2 d-muted">
