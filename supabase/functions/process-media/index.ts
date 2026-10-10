@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.112.3";
 
 function corsHeaders(request: Request) {
   const origin = request.headers.get("Origin");
