@@ -184,17 +184,28 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     setWorking(true); onStatusRef.current?.('Đang chạy nội suy nhanh trên Web Worker…')
     try {
       const { canvas, mask, pixels, originX, originY } = buildLamaInput()
+      if (pixels.width * pixels.height > 2_000_000) throw new Error('Vùng tô còn quá lớn cho xử lý nhanh. Hãy tô sát logo hơn.')
       const worker = new Worker(new URL('../lib/media-processing/inpaint.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-inpainting-fast' })
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
+        let settled = false
+        const finish = (error?: Error, output?: ArrayBuffer) => {
+          if (settled) return
+          settled = true
+          clearTimeout(watchdog)
+          worker.terminate()
+          if (error) reject(error)
+          else if (output) resolve(output)
+          else reject(new Error('Nội suy ảnh không trả kết quả.'))
+        }
+        const watchdog = setTimeout(() => finish(new Error('Xử lý quá lâu trên thiết bị. Hãy tô vùng nhỏ hơn hoặc thử ảnh nhẹ hơn.')), 5000)
         worker.onmessage = (event: MessageEvent<{ id: string; pixels?: ArrayBuffer; error?: string }>) => {
           if (event.data.id !== id) return
-          worker.terminate()
-          if (event.data.error || !event.data.pixels) reject(new Error(event.data.error || 'Nội suy ảnh thất bại.'))
-          else resolve(event.data.pixels)
+          if (event.data.error || !event.data.pixels) finish(new Error(event.data.error || 'Nội suy ảnh thất bại.'))
+          else finish(undefined, event.data.pixels)
         }
-        worker.onerror = () => { worker.terminate(); reject(new Error('Web Worker nội suy gặp lỗi.')) }
-        worker.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
+        worker.onerror = () => finish(new Error('Web Worker nội suy gặp lỗi.'))
+        worker.postMessage({ id, width: pixels.width, height: pixels.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
       })
       await saveOutput(result, pixels.width, pixels.height, 'nội suy nhanh', { x: originX, y: originY })
     } catch (error) { onStatusRef.current?.(error instanceof Error ? error.message : 'Không xử lý được ảnh.') }
