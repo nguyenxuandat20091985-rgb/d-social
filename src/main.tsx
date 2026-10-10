@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { supabase } from './lib/supabase'
 import { AdminPage } from './components/AdminPage'
 import App from './App'
+import { MediaProcessingTestPage } from './components/MediaProcessingTestPage'
 import './index.css'
 
 function MainRouter() {
@@ -26,6 +27,9 @@ function MainRouter() {
   }, [])
 
   const path = window.location.pathname
+  if (path === '/media-test' || new URLSearchParams(window.location.search).get('media-test') === '1') {
+    return <MediaProcessingTestPage />
+  }
 
   if (path.startsWith('/admin')) {
     if (loading) {

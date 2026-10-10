@@ -5,7 +5,8 @@ This integration is deliberately disabled by default. The current upload path re
 ## Runtime behavior
 
 - Uploads continue to the existing `social-media` bucket first.
-- For **feed posts only**, if the feature flag is enabled and the uploader explicitly confirms rights to modify the selected media, the app calls the `process-media` Supabase Edge Function. Stories and other upload flows are intentionally out of scope.
+- For **feed posts only**, when the feature flag is enabled, the app first runs `inspectMediaOnDevice()` to validate supported MIME type, file size, decoded image dimensions and calculate a SHA-256 fingerprint before upload. This preflight does not remove logos or prove the media is clean.
+- After the uploader explicitly confirms rights to modify the selected media, the app calls the `process-media` Supabase Edge Function. The server processor remains mandatory and stories/other upload flows are intentionally out of scope.
 - The Edge Function authenticates the Supabase user, restricts the source path to that user's storage folder, calls the private media service from server-side code, verifies output size and SHA-256, writes a content-addressed object, reads it back, and verifies it again.
 - The app derives the public URL from the validated `processed_path`; it does not trust an arbitrary returned URL.
 - When processing is enabled, any processing/configuration/storage/timeout error blocks publication; the original object is retained for retry but is never presented as a successfully cleaned result.
@@ -32,9 +33,13 @@ The Supabase runtime must provide `SUPABASE_URL` and either the legacy `SUPABASE
 5. Test image, video with audio, video without audio, oversized/invalid files, invalid sessions, timeout, service outage, storage outage, repeated requests, and failed feed-post inserts.
 6. Keep the flag false in production until staging and rollback checks pass. Production rollout is a separate, explicit step.
 
+## Server-side resource limits
+
+- The media service independently enforces a 32 MiB input limit, a 16-megapixel decoded image/video-frame limit, and a 180-second video-duration limit by default. These checks protect the server even if a caller bypasses browser preflight. Values are configurable through `MAX_UPLOAD_BYTES`, `MAX_IMAGE_PIXELS`, and `MAX_VIDEO_SECONDS` on the media service.
+
 ## Important limits
 
-- The dedicated media service now uses OCR to detect readable brand wordmarks in corner regions (including TikTok, Instagram, Facebook, YouTube, CapCut and other listed brands) and inpaints those detected regions before adding the visible D-Social mark. This is best-effort: icon-only, animated, stylized, central, or OCR-unreadable logos may remain, and inpainting may leave artifacts. It does not implement a hidden/forensic D-Social watermark. Do not claim universal cleanup without reviewing the output.
+- The dedicated media service now uses OCR to detect readable brand wordmarks in corner regions (including TikTok, Instagram, Facebook, YouTube, CapCut and other listed brands) and inpaints those detected regions before adding the visible D-Social mark. This is best-effort: icon-only, animated, stylized, central, or OCR-unreadable logos may remain, and inpainting may leave artifacts. The service re-opens encoded image output and re-scans images and sampled video frames, rejecting output when a readable listed brand mark remains; this is not proof that all logos are absent. It does not implement a hidden/forensic D-Social watermark. Do not claim universal cleanup without reviewing the output.
 - The current media service does not include a durable Celery/Redis queue; do not treat this synchronous integration as validated for large-scale production traffic.
 - No service URL or Edge Function deployment is assumed by this code.
 - The app should not be considered production-integrated until the required staging checks pass.

@@ -16,13 +16,16 @@ app=FastAPI(title="D-Social Media Processing Service", docs_url=None, redoc_url=
 SUPABASE_URL=os.getenv("SUPABASE_URL","").rstrip("/")
 SUPABASE_ANON_KEY=os.getenv("SUPABASE_ANON_KEY","")
 MAX_BYTES=int(os.getenv("MAX_UPLOAD_BYTES","33554432"))
+MAX_IMAGE_PIXELS=int(os.getenv("MAX_IMAGE_PIXELS","16000000"))
+MAX_VIDEO_SECONDS=int(os.getenv("MAX_VIDEO_SECONDS","180"))
 BRANDS=("tiktok","tik tok","instagram","facebook","youtube","you tube","capcut","kwai","likee","snapchat","pinterest","douyin","weibo","threads","linkedin","vimeo","triller","twitch","telegram","whatsapp","twitter","x.com","lemon8","bilibili","kuaishou","抖音","快手","小红书")
 
 @app.get("/ready")
 def ready():
     ff=shutil.which("ffmpeg") is not None
     tess=shutil.which("tesseract") is not None
-    return {"status":"ready" if ff and tess else "degraded","service":"D-Social Media Processing Service","ffmpeg_available":ff,"ocr_available":tess,"configured":bool(SUPABASE_URL and SUPABASE_ANON_KEY)}
+    configured=bool(SUPABASE_URL and SUPABASE_ANON_KEY)
+    return {"status":"ready" if ff and tess and configured else "degraded","service":"D-Social Media Processing Service","ffmpeg_available":ff,"ocr_available":tess,"configured":configured}
 
 def auth(token: Optional[str]):
     if not token or not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -96,7 +99,14 @@ def process_video(src:Path,dst:Path,work:Path):
     cap=cv2.VideoCapture(str(src))
     if not cap.isOpened(): raise HTTPException(422,"Video could not be opened")
     fps=cap.get(cv2.CAP_PROP_FPS) or 0; w=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0); h=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-    if fps<=0 or not w or not h: cap.release(); raise HTTPException(422,"Invalid video metadata")
+    frame_count=int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    duration=frame_count/fps if fps>0 and frame_count>0 else 0
+    if fps<=0 or not w or not h or not frame_count or duration<=0:
+        cap.release(); raise HTTPException(422,"Invalid video metadata")
+    if w*h>MAX_IMAGE_PIXELS:
+        cap.release(); raise HTTPException(413,"Video frame dimensions exceed processing limit")
+    if duration>MAX_VIDEO_SECONDS:
+        cap.release(); raise HTTPException(413,"Video duration exceeds processing limit")
     tmp=work/"cleaned.mp4"; writer=cv2.VideoWriter(str(tmp),cv2.VideoWriter_fourcc(*"mp4v"),fps,(w,h))
     if not writer.isOpened(): cap.release(); raise HTTPException(503,"Video encoder unavailable")
     n=0; changed=0; every=max(1,round(fps/2)); active=[]; last=-999
@@ -137,14 +147,37 @@ def verify_video_cleanup(path:Path):
     finally: cap.release()
     if idx==0: raise HTTPException(422,"Processed video has no decodable frames")
 
+def verify_image_cleanup(path:Path):
+    try:
+        with Image.open(path) as im:
+            im.load()
+            rgb=im.convert("RGB")
+            frame=cv2.cvtColor(np.array(rgb),cv2.COLOR_RGB2BGR)
+    except Exception as exc:
+        raise HTTPException(422,"Processed image could not be verified") from exc
+    remaining=brand_boxes(frame)
+    if remaining:
+        raise HTTPException(422,"A readable brand watermark remains; do not publish this result")
+    log.info("image cleanup verification=passed")
+
+
 def process_image(src:Path,dst:Path):
     try:
         with Image.open(src) as im:
+            width,height=im.size
+            if width<=0 or height<=0 or width*height>MAX_IMAGE_PIXELS:
+                raise HTTPException(413,"Image dimensions exceed processing limit")
             im.load(); rgb=im.convert("RGB"); frame=cv2.cvtColor(np.array(rgb),cv2.COLOR_RGB2BGR)
             frame,count=clean_frame(frame); frame=add_brand(frame)
             out=cv2.cvtColor(frame,cv2.COLOR_BGR2RGB); Image.fromarray(out).save(dst,format="JPEG",quality=95,optimize=True)
             log.info("image detected brand boxes=%s",count)
-    except Exception as e: raise HTTPException(422,"Image processing failed") from e
+        # Re-open the encoded output and re-run the detector. A successful encode
+        # alone is not enough to certify that readable corner marks were removed.
+        verify_image_cleanup(dst)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(422,"Image processing failed") from e
 
 @app.post("/api/v1/media/process-binary")
 async def process_binary(file: UploadFile=File(...), rights_confirmed: bool=Form(False),
