@@ -17,7 +17,7 @@ export function MediaProcessingTestPage() {
   const urlsRef = useRef<string[]>([])
   useEffect(() => () => { controllerRef.current?.abort(); urlsRef.current.forEach(url => URL.revokeObjectURL(url)) }, [])
   function keepUrl(url: string) { urlsRef.current.push(url); return url }
-  function acceptOutput(blob: Blob, name: string) {
+  function acceptOutput(blob: Blob) {
     const url = keepUrl(URL.createObjectURL(blob))
     setPreviewUrl(url); setDownloadUrl(url)
     setResult(previous => ({ ...(previous ?? {}), error: undefined }))
@@ -99,8 +99,8 @@ export function MediaProcessingTestPage() {
         {result.cleanup && <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">OCR tìm thấy {result.cleanup.candidates.length} vùng chữ và đã thử làm mờ. Đây không phải bảo đảm xóa mọi logo; hãy kiểm tra ảnh đầu ra.</div>}
         {result.error && <div role="alert" className="mt-4 rounded-xl bg-amber-50 p-3 text-sm leading-5 text-amber-900">{result.error}</div>}
       </section>}
-      {selectedFile && selectedFile.type.startsWith('image/') && <ManualMediaEditor file={selectedFile} onProcessed={blob => acceptOutput(blob, 'image')} onStatus={message => setStage(message)}/>}
-      {selectedFile && selectedFile.type.startsWith('video/') && <ClientVideoEditor file={selectedFile} onProcessed={blob => acceptOutput(blob, 'video')} onStatus={message => setStage(message)}/>}
+      {selectedFile && selectedFile.type.startsWith('image/') && <ManualMediaEditor file={selectedFile} onProcessed={blob => acceptOutput(blob)} onStatus={message => setStage(message)}/>}
+      {selectedFile && selectedFile.type.startsWith('video/') && <ClientVideoEditor file={selectedFile} onProcessed={blob => acceptOutput(blob)} onStatus={message => setStage(message)}/>}
       <footer className="text-center text-xs leading-5 text-slate-500">Trang test độc lập; không tự đăng bài và không thay đổi dữ liệu production.
         <div className="mt-2"><a href="/" className="font-semibold text-blue-700 underline">Quay lại D-Social</a></div>
       </footer>
