@@ -14,6 +14,7 @@ jobs:
           node-version: 20
       - uses: denoland/setup-deno@v2
       - run: deno check supabase/functions/process-media/index.ts
+      - run: python -m py_compile services/media-processing-service/main.py
       - run: npm install --no-package-lock
       - run: npm test
       - run: npm run build
