@@ -2,7 +2,7 @@
 
 ## Status and release policy
 
-Implementation status (2026-10-11): isolated preview deployment created at https://d-social-media-quality-preview.onrender.com/media-test. Automated tests are now part of the preview build via prebuild; their result must be checked on the latest deployment before claiming pass. Real-device visual acceptance remains pending. This preview is not production and must not be merged or enabled for production without explicit owner approval.
+Implementation status (2026-10-11): isolated preview deployment created at https://d-social-media-quality-preview.onrender.com. Automated tests are now part of the preview build via prebuild; their result must be checked on the latest deployment before claiming pass. Real-device visual acceptance remains pending. This preview is not production and must not be merged or enabled for production without explicit owner approval.
 
 - Work branch: `feat/media-processing-quality-redesign`.
 - This branch is isolated from the production branch. Do not merge it or change production deployment settings until the release gates in this document pass and the owner explicitly approves.
