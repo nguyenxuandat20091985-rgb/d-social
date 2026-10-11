@@ -270,7 +270,7 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
       </button>}
     </div>
     {previewUrl && analysisDone && <div className="ds-clean-video-review">
-      <p className="ds-clean-hint">Khung hình ${(duration / 2).toFixed(1)} giây · ${dimensions.width} × ${dimensions.height} px. Kéo trên ảnh để khoanh vùng logo (đỏ); các vùng OCR gợi ý hiện bằng nét vàng.</p>
+      <p className="ds-clean-hint">Khung hình {(duration / 2).toFixed(1)} giây · {dimensions.width} × {dimensions.height} px. Kéo trên ảnh để khoanh vùng logo (đỏ); các vùng OCR gợi ý hiện bằng nét vàng.</p>
       <canvas
         ref={canvasRef}
         width={dimensions.width}
@@ -308,7 +308,7 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
         onPointerCancel={() => { dragStartRef.current = null; setDraftRegion(null) }}
         aria-label="Khoanh vùng logo trên khung hình video"
       />
-      <p className="ds-clean-hint">Đã phát hiện ${candidates.length} vùng chữ nghi vấn từ 3 mốc. ${region ? `Vùng đang chọn: x=${Math.round(region.x)}, y=${Math.round(region.y)}, rộng ${Math.round(region.width)}, cao ${Math.round(region.height)} pixel.` : 'Chưa chọn vùng.'}</p>
+      <p className="ds-clean-hint">Đã phát hiện {candidates.length} vùng chữ nghi vấn từ 3 mốc. {region ? `Vùng đang chọn: x=${Math.round(region.x)}, y=${Math.round(region.y)}, rộng ${Math.round(region.width)}, cao ${Math.round(region.height)} pixel.` : 'Chưa chọn vùng.'}</p>
       {candidates.length > 0 && <ul className="ds-clean-candidate-list">
         {candidates.slice(0, 8).map((candidate, index) => <li key={index}>{candidate.text} · {candidate.region} · {Math.round(candidate.confidence)}% · mốc {candidate.sampleTime.toFixed(1)} giây</li>)}
       </ul>}
