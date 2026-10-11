@@ -1,0 +1,32 @@
+name: Media processing quality checks
+
+on:
+  push:
+    branches:
+      - feat/media-processing-quality-redesign
+  pull_request:
+    branches:
+      - main
+      - feat/media-processing-v2-hardware-adaptive
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run media safety regression tests
+        run: npm test
+      - name: Type-check and build
+        run: npm run build
