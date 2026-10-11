@@ -41,4 +41,7 @@ test('uploading an image does not automatically modify it and original/result co
   assert.match(mediaPage, /setOriginalUrl\(sourceUrl\)/)
   assert.match(mediaPage, /So sánh tệp gốc/)
   assert.match(mediaPage, /Tải kết quả/)
+  assert.match(mediaPage, /2\. Xác nhận vùng và xóa/)
+  assert.match(mediaPage, /detectOnly: true/)
+  assert.match(imageCleanup, /candidateRegions\?: LogoCandidate\[\]/)
 })
