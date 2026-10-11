@@ -142,8 +142,9 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
       video.playsInline = true
       video.preload = 'metadata'
       try {
+        const metadataReady = waitForEvent(video, 'loadedmetadata', 8000, 'Không đọc được thông số video trên trình duyệt này.')
         video.src = objectUrl
-        await waitForEvent(video, 'loadedmetadata', 8000, 'Không đọc được thông số video trên trình duyệt này.')
+        await metadataReady
         if (!video.videoWidth || !video.videoHeight || !Number.isFinite(video.duration)) {
           throw new Error('Video không có kích thước hoặc thời lượng hợp lệ.')
         }
@@ -179,6 +180,11 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
         if (controller.signal.aborted) throw new DOMException('Đã hủy phân tích video.', 'AbortError')
         if (!middleFrame) throw new Error('Không trích xuất được khung hình xem trước.')
         const url = URL.createObjectURL(middleFrame)
+        const previewImage = new Image()
+        const imageReady = waitForEvent(previewImage, 'load', 5000, 'Không tải được khung hình xem trước.')
+        previewImage.src = url
+        await imageReady
+        imageRef.current = previewImage
         previewUrlRef.current = url
         setPreviewUrl(url)
         const unique = mergeCandidates(found)
