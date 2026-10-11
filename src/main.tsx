@@ -29,7 +29,7 @@ function MainRouter() {
   const path = window.location.pathname
   // This Render service is an isolated test deployment; make its root open the test UI.
   // Production and the main test site keep the existing explicit route/query behavior.
-  const isAdaptiveTestHost = window.location.hostname === 'd-social-media-adaptive-test.onrender.com'
+  const isAdaptiveTestHost = window.location.hostname === 'd-social-media-adaptive-test.onrender.com' || window.location.hostname === 'd-social-media-quality-preview.onrender.com'
   if (isAdaptiveTestHost || path === '/media-test' || new URLSearchParams(window.location.search).get('media-test') === '1') {
     return <MediaProcessingTestPage />
   }
