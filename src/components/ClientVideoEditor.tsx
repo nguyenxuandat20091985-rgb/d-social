@@ -23,9 +23,12 @@ function waitForEvent(target: EventTarget, eventName: string, timeoutMs: number,
 }
 
 async function captureFrame(video: HTMLVideoElement, seconds: number): Promise<Blob> {
-  const seeked = waitForEvent(video, 'seeked', 7000, 'Không trích xuất được khung hình ở mốc này.')
-  video.currentTime = Math.max(0, Math.min(seconds, Math.max(0, video.duration - 0.05)))
-  await seeked
+  const targetTime = Math.max(0, Math.min(seconds, Math.max(0, video.duration - 0.05)))
+  if (Math.abs(video.currentTime - targetTime) > 0.001 || video.readyState < 2) {
+    const seeked = waitForEvent(video, 'seeked', 7000, 'Không trích xuất được khung hình ở mốc này.')
+    video.currentTime = targetTime
+    await seeked
+  }
   const canvas = document.createElement('canvas')
   canvas.width = video.videoWidth
   canvas.height = video.videoHeight
@@ -133,6 +136,8 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
     setRegion(null)
     setDraftRegion(null)
     setPreviewUrl(null)
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    previewUrlRef.current = null
     imageRef.current = null
     try {
       onStatus?.('Đang đọc thông số video…')
