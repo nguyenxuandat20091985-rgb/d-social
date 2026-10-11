@@ -27,6 +27,10 @@ export function MediaProcessingTestPage() {
   function keepUrl(url: string) { urlsRef.current.push(url); return url }
 
   function acceptOutput(blob: Blob) {
+    if (previewUrl && previewUrl !== originalUrl) {
+      URL.revokeObjectURL(previewUrl)
+      urlsRef.current = urlsRef.current.filter(value => value !== previewUrl)
+    }
     const url = keepUrl(URL.createObjectURL(blob))
     setPreviewUrl(url)
     setShowOriginal(false)
@@ -38,6 +42,10 @@ export function MediaProcessingTestPage() {
   async function handleFile(file?: File) {
     if (!file) return
     controllerRef.current?.abort()
+    urlsRef.current.forEach(url => URL.revokeObjectURL(url))
+    urlsRef.current = []
+    setOriginalUrl(null)
+    setPreviewUrl(null)
     const controller = new AbortController()
     controllerRef.current = controller
     setSelectedFile(file)
@@ -113,8 +121,7 @@ export function MediaProcessingTestPage() {
         onProgress: (_progress, stage) => setNotice(stage),
       })
       if (controller.signal.aborted) return
-      const url = keepUrl(URL.createObjectURL(cleanup.blob))
-      setPreviewUrl(url)
+      acceptOutput(cleanup.blob)
       setShowOriginal(false)
       setResult(previous => ({ ...(previous ?? {}), cleanup, error: undefined }))
       setPendingCandidates([])
