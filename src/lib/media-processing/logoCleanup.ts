@@ -17,7 +17,7 @@ export type ClientImageCleanupResult = {
   height: number
   candidates: LogoCandidate[]
   sha256: string
-  engine: 'paddleocr-ppocrv5-lama-v1' | 'tesseract-corner-text-lama-v1' | 'tesseract-plus-tiktok-color-lama-v1' | 'paddleocr-ppocrv5-fast-v1' | 'tesseract-corner-text-fast-v1' | 'weak-device-local-fallback-v1'
+  engine: 'paddleocr-ppocrv5-lama-v1' | 'tesseract-corner-text-lama-v1' | 'tesseract-plus-tiktok-color-lama-v1' | 'paddleocr-ppocrv5-fast-v1' | 'tesseract-corner-text-fast-v1' | 'weak-device-local-fallback-v1' | 'detection-only-v1'
 }
 
 export type CleanupOptions = {
@@ -25,6 +25,7 @@ export type CleanupOptions = {
   onProgress?: (progress: number, stage: string) => void
   minConfidence?: number
   fastOnly?: boolean
+  detectOnly?: boolean
 }
 
 type CornerRegion = LogoCandidate['region']
@@ -436,6 +437,20 @@ export async function cleanupCornerTextFromImage(
     }
     if (candidates.length === 0) {
       throw new Error('OCR và bộ dò màu TikTok ở 4 góc chưa tìm được vùng đủ tin cậy. Đây không phải kết luận ảnh sạch; hãy tô vùng logo thủ công.')
+    }
+
+    if (options.detectOnly) {
+      options.onProgress?.(96, 'Đã nhận diện vùng nghi logo; chưa sửa ảnh nguồn…')
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(value => value ? resolve(value) : reject(new Error('Không xuất được khung hình phân tích.')), file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.94)
+      })
+      const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer())
+      const sha256 = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('')
+      options.onProgress?.(100, 'Đã phân tích vùng nghi logo; chưa xóa gì')
+      return {
+        blob, width: canvas.width, height: canvas.height, candidates, sha256,
+        engine: 'detection-only-v1',
+      }
     }
 
     if (hardware?.tier === 'strong') {
