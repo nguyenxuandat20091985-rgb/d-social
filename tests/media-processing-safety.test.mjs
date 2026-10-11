@@ -18,6 +18,7 @@ test('video cleanup requires an explicit user action and region review', () => {
   assert.match(videoEditor, /2\. Xóa vùng đỏ đã xác nhận/)
   assert.match(videoEditor, /onPointerDown=/)
   assert.match(videoEditor, /file\.size > 12 \* 1024 \* 1024/)
+  assert.match(videoEditor, /loadeddata/)
 })
 
 test('video analysis samples multiple times and keeps OCR detection separate from restoration', () => {
