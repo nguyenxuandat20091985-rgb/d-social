@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "node --test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prebuild": "npm test"
   },
   "dependencies": {
     "@payos/node": "2.0.5",
