@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { detectHardwareProfile, type HardwareProfile } from '../lib/media-processing/hardwareAdaptive'
 
 type Props = { file: File; onProcessed: (blob: Blob) => void; onStatus?: (message: string) => void }
 type WorkerReply = { id: string; type?: 'progress' | 'complete' | 'error'; progress?: number; stage?: string; pixels?: ArrayBuffer; message?: string }
@@ -11,6 +12,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
   const [brush, setBrush] = useState(28)
   const [working, setWorking] = useState(false)
   const [ready, setReady] = useState(false)
+  const [hardware, setHardware] = useState<HardwareProfile | null>(null)
   const [lamaProgress, setLamaProgress] = useState(0)
   const [lamaStage, setLamaStage] = useState('Chưa chạy LaMa')
   const onStatusRef = useRef(onStatus)
@@ -18,6 +20,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
 
   useEffect(() => {
     let active = true
+    void detectHardwareProfile().then(profile => { if (active) setHardware(profile) }).catch(() => { if (active) setHardware(null) })
     setReady(false)
     const url = URL.createObjectURL(file)
     const image = new Image()
@@ -56,12 +59,16 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!
     const rect = canvas.getBoundingClientRect()
-    return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height }
+    // The canvas is displayed with its intrinsic aspect ratio. Map pointer coordinates
+    // through the rendered rectangle so the red overlay and the inpainting mask stay aligned.
+    const x = (event.clientX - rect.left) * canvas.width / Math.max(1, rect.width)
+    const y = (event.clientY - rect.top) * canvas.height / Math.max(1, rect.height)
+    return { x: Math.max(0, Math.min(canvas.width, x)), y: Math.max(0, Math.min(canvas.height, y)) }
   }
   function paint(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current || !canvasRef.current || !maskRef.current) return
     const { x, y } = point(event)
-    const radius = brush * canvasRef.current.width / canvasRef.current.clientWidth / 2
+    const radius = brush * canvasRef.current.width / Math.max(1, canvasRef.current.getBoundingClientRect().width) / 2
     const mask = maskRef.current.getContext('2d')!
     mask.fillStyle = '#fff'
     mask.beginPath(); mask.arc(x, y, radius, 0, Math.PI * 2); mask.fill()
@@ -146,12 +153,27 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     setWorking(true); setLamaProgress(1); setLamaStage('Đang chuẩn bị mask và ảnh nguồn…')
     try {
       const { canvas, mask, pixels, originX, originY } = buildLamaInput()
+      if (hardware?.tier !== 'strong') throw new Error('Thiết bị này đang ở chế độ nội suy nhanh để tránh tải model 208 MB. Hãy dùng nút Nội suy nhanh.')
       onStatusRef.current?.('Đang chạy LaMa Inpainting trên thiết bị. Lần đầu cần tải mô hình từ Internet.')
       const worker = lamaWorkerRef.current ?? new Worker(new URL('../lib/media-processing/lama.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-lama-inpainting' })
       lamaWorkerRef.current = worker
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
-        const cleanup = () => { worker.onmessage = null; worker.onerror = null }
+        let settled = false
+        const cleanup = () => { clearTimeout(watchdog); worker.onmessage = null; worker.onerror = null }
+        const finish = (error?: Error, pixels?: ArrayBuffer) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          if (error) reject(error)
+          else if (pixels) resolve(pixels)
+          else reject(new Error('LaMa không trả kết quả.'))
+        }
+        const watchdog = setTimeout(() => {
+          worker.terminate()
+          if (lamaWorkerRef.current === worker) lamaWorkerRef.current = null
+          finish(new Error('LaMa mất quá nhiều thời gian trên điện thoại. Hãy dùng nội suy nhanh hoặc tô vùng nhỏ hơn.'))
+        }, 30000)
         worker.onmessage = (event: MessageEvent<WorkerReply>) => {
           const message = event.data
           if (message?.id !== id) return
@@ -159,12 +181,12 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
             setLamaProgress(message.progress ?? 0); setLamaStage(message.stage ?? 'Đang xử lý…')
             onStatusRef.current?.(message.stage ?? 'LaMa đang xử lý ảnh…')
           } else if (message.type === 'complete' && message.pixels) {
-            cleanup(); resolve(message.pixels)
+            finish(undefined, message.pixels)
           } else if (message.type === 'error') {
-            cleanup(); reject(new Error(message.message || 'LaMa không xử lý được ảnh.'))
+            finish(new Error(message.message || 'LaMa không xử lý được ảnh.'))
           }
         }
-        worker.onerror = () => { cleanup(); reject(new Error('Web Worker LaMa gặp lỗi.')) }
+        worker.onerror = () => finish(new Error('Web Worker LaMa gặp lỗi.'))
         worker.postMessage({ id, width: pixels.width, height: pixels.height, pixels: pixels.data.buffer, mask: mask.buffer, patchMode: true }, [pixels.data.buffer, mask.buffer])
       })
       await saveOutput(result, pixels.width, pixels.height, 'LaMa AI', { x: originX, y: originY })
@@ -179,41 +201,51 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
     if (working) return
     setWorking(true); onStatusRef.current?.('Đang chạy nội suy nhanh trên Web Worker…')
     try {
-      const { canvas, mask, pixels } = buildInput()
+      const { canvas, mask, pixels, originX, originY } = buildLamaInput()
+      if (pixels.width * pixels.height > 2_000_000) throw new Error('Vùng tô còn quá lớn cho xử lý nhanh. Hãy tô sát logo hơn.')
       const worker = new Worker(new URL('../lib/media-processing/inpaint.worker.ts', import.meta.url), { type: 'module', name: 'dsocial-inpainting-fast' })
       const id = crypto.randomUUID()
       const result = await new Promise<ArrayBuffer>((resolve, reject) => {
+        let settled = false
+        const finish = (error?: Error, output?: ArrayBuffer) => {
+          if (settled) return
+          settled = true
+          clearTimeout(watchdog)
+          worker.terminate()
+          if (error) reject(error)
+          else if (output) resolve(output)
+          else reject(new Error('Nội suy ảnh không trả kết quả.'))
+        }
+        const watchdog = setTimeout(() => finish(new Error('Xử lý quá lâu trên thiết bị. Hãy tô vùng nhỏ hơn hoặc thử ảnh nhẹ hơn.')), 5000)
         worker.onmessage = (event: MessageEvent<{ id: string; pixels?: ArrayBuffer; error?: string }>) => {
           if (event.data.id !== id) return
-          worker.terminate()
-          if (event.data.error || !event.data.pixels) reject(new Error(event.data.error || 'Nội suy ảnh thất bại.'))
-          else resolve(event.data.pixels)
+          if (event.data.error || !event.data.pixels) finish(new Error(event.data.error || 'Nội suy ảnh thất bại.'))
+          else finish(undefined, event.data.pixels)
         }
-        worker.onerror = () => { worker.terminate(); reject(new Error('Web Worker nội suy gặp lỗi.')) }
-        worker.postMessage({ id, width: canvas.width, height: canvas.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
+        worker.onerror = () => finish(new Error('Web Worker nội suy gặp lỗi.'))
+        worker.postMessage({ id, width: pixels.width, height: pixels.height, pixels: pixels.data.buffer, mask: mask.buffer }, [pixels.data.buffer, mask.buffer])
       })
-      await saveOutput(result, canvas.width, canvas.height, 'nội suy nhanh')
+      await saveOutput(result, pixels.width, pixels.height, 'nội suy nhanh', { x: originX, y: originY })
     } catch (error) { onStatusRef.current?.(error instanceof Error ? error.message : 'Không xử lý được ảnh.') }
     finally { setWorking(false) }
   }
 
-  return <section className="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
-    <h2 className="font-semibold">Chọn vùng logo thủ công</h2>
-    <p className="mt-1 text-sm leading-5 text-slate-600">Dùng ngón tay tô đỏ lên toàn bộ logo/chữ và chừa một ít nền xung quanh. Tọa độ mask được giữ theo pixel ảnh gốc. LaMa chạy cục bộ trong Web Worker. Lưu ý: mô hình khoảng 208 MB, chỉ tải khi anh bấm “Xóa bằng LaMa AI”; nên dùng Wi‑Fi. Lần đầu chưa thể cam kết dưới 3–5 giây.</p>
-    <canvas ref={canvasRef} className="mt-3 w-full rounded-xl border border-slate-200 touch-none" style={{ maxHeight: 520, objectFit: 'contain' }}
+  return <section className="ds-clean-manual">
+    <div className="ds-clean-manual-head">
+      <strong>Tô lên watermark</strong>
+      <button type="button" onClick={resetMask} disabled={!ready || working} aria-label="Xóa nét tô">Làm lại</button>
+    </div>
+    <p className="ds-clean-hint">Tô đỏ sát logo hoặc chữ cần xóa.</p>
+    <canvas ref={canvasRef} className="ds-clean-mask-canvas touch-none"
       onPointerDown={event => { drawingRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); paint(event) }}
       onPointerMove={paint} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} />
-    <div className="mt-3 flex items-center gap-3 text-sm"><label htmlFor="mask-brush">Cỡ nét</label><input id="mask-brush" type="range" min="8" max="72" value={brush} onChange={event => setBrush(Number(event.currentTarget.value))}/><span>{brush}px</span></div>
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button type="button" disabled={!ready || working} onClick={resetMask} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold">Làm lại vùng chọn</button>
-      <button type="button" disabled={!ready || working} onClick={() => void processLama()} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{working ? 'Đang xử lý…' : 'Xóa bằng LaMa AI'}</button>
-      <button type="button" disabled={!ready || working} onClick={() => void processFast()} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold disabled:opacity-50">Nội suy nhanh</button>
+    <div className="ds-clean-brush">
+      <label htmlFor="mask-brush">Nét</label>
+      <input id="mask-brush" type="range" min="8" max="72" value={brush} onChange={event => setBrush(Number(event.currentTarget.value))} />
+      <span>{brush}</span>
     </div>
-    <div className="mt-4 rounded-xl bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-600"><span>Tiến độ LaMa</span><span>{lamaProgress}%</span></div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: lamaProgress + '%' }}/></div>
-      <p className="mt-2 text-xs leading-5 text-slate-600" aria-live="polite">{lamaStage}</p>
-    </div>
-    <p className="mt-3 text-xs leading-5 text-amber-800">LaMa hiện dùng mô hình ONNX công khai qua Internet. Ảnh gốc và mask chỉ được gửi đến worker trên thiết bị; mô hình được tải từ kho công khai. Kết quả phải được xem trước, vì mô hình cố định 512×512 có thể làm mềm chi tiết hoặc để lại đường nối.</p>
+    <button type="button" className="ds-clean-primary" disabled={!ready || working} onClick={() => void (hardware?.tier === 'strong' ? processLama() : processFast())}>
+      {working ? <><span className="ds-clean-spinner" />Đang xóa…</> : 'Xóa vùng đã tô'}
+    </button>
   </section>
 }
