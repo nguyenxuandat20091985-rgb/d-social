@@ -454,6 +454,10 @@ export async function cleanupCornerTextFromImage(
       }
     }
 
+    if (hardware?.tier !== 'strong') {
+      throw new Error('Để ưu tiên chất lượng, chế độ tự động không dùng nội suy nhanh trên thiết bị này. Hãy dùng tô vùng thủ công; thiết bị này chỉ có nội suy nhanh thử nghiệm, có thể để lại vết.')
+    }
+
     if (hardware?.tier === 'strong') {
       options.onProgress?.(68, 'Thiết bị mạnh: đang chạy LaMa AI cục bộ…')
       await inpaintCandidateBoxesWithLama(canvas, context, candidates, options)
