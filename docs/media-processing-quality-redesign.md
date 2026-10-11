@@ -2,6 +2,8 @@
 
 ## Status and release policy
 
+Implementation status (2026-10-11): isolated preview deployment created at https://d-social-media-quality-preview.onrender.com/media-test. Automated tests are now part of the preview build via prebuild; their result must be checked on the latest deployment before claiming pass. Real-device visual acceptance remains pending. This preview is not production and must not be merged or enabled for production without explicit owner approval.
+
 - Work branch: `feat/media-processing-quality-redesign`.
 - This branch is isolated from the production branch. Do not merge it or change production deployment settings until the release gates in this document pass and the owner explicitly approves.
 - The current adaptive preview service is not evidence that logo removal quality is acceptable. A successful build or HTTP 200 is not a visual-quality pass.
@@ -105,6 +107,8 @@
 
 ## Current known gaps to resolve
 
-- Current video implementation detects a candidate from a single sampled frame and uses FFmpeg `delogo` over a fixed rectangle. It is suitable only as a limited fallback, not the target quality-first solution.
-- Current image automatic flow couples OCR candidate detection and restoration; needs explicit candidate review and testable boundaries.
-- Current preview deployment being live means only that the branch was deployed, not that output quality has passed acceptance tests.
+- Video now samples three time points, displays OCR candidate boxes, and requires the user to review/drag a region before processing. Restoration still uses FFmpeg delogo with one static rectangle for the whole clip. It does not track a moving logo or guarantee temporal consistency; a higher-quality frame inpainting/tracking engine remains future work.
+- Image detection is separated from restoration and requires explicit confirmation. On devices that do not qualify for the LaMa route, automatic restoration refuses to silently select the low-quality interpolation fallback; manual mode labels the fallback as experimental.
+- Automatic image candidates are still OCR/corner heuristic results. They may include ordinary corner text and may miss icon-only, central, translucent, or stylized logos. Users must inspect the candidate list or use manual masks.
+- The preview build and automated tests must be checked on the latest commit. Real Android/iOS/desktop acceptance and visual scoring require actual sample media and devices; those results cannot be inferred from source code or deployment status.
+- The acceptance matrix and scoring form are in docs/media-processing-acceptance-checklist.md.
