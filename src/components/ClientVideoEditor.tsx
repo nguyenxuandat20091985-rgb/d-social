@@ -24,7 +24,9 @@ function waitForEvent(target: EventTarget, eventName: string, timeoutMs: number,
 
 async function captureFrame(video: HTMLVideoElement, seconds: number): Promise<Blob> {
   const targetTime = Math.max(0, Math.min(seconds, Math.max(0, video.duration - 0.05)))
-  if (Math.abs(video.currentTime - targetTime) > 0.001 || video.readyState < 2) {
+  if (Math.abs(video.currentTime - targetTime) <= 0.001) {
+    if (video.readyState < 2) await waitForEvent(video, 'loadeddata', 7000, 'Video chưa tải được khung hình đầu tiên.')
+  } else {
     const seeked = waitForEvent(video, 'seeked', 7000, 'Không trích xuất được khung hình ở mốc này.')
     video.currentTime = targetTime
     await seeked
