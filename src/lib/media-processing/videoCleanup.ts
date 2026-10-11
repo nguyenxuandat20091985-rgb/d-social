@@ -40,11 +40,16 @@ export async function cropVideoCornersOnDevice(file: File, options: {
   signal?: AbortSignal
   onProgress?: (progress: number, stage: string) => void
   logoRegion?: { x: number; y: number; width: number; height: number }
+  frameWidth?: number
+  frameHeight?: number
 } = {}): Promise<Blob> {
   if (!/^video\/(mp4|quicktime|webm|x-m4v)$/i.test(file.type)) throw new Error('Chỉ hỗ trợ video MP4, MOV hoặc WebM.')
   if (!file.size || file.size > 12 * 1024 * 1024) throw new Error('Để tránh treo điện thoại, video cần dưới 12 MB trong chế độ xử lý nhẹ.')
   if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
   const ffmpeg = await getFFmpeg(options.onProgress)
+  if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
+  const abortFFmpeg = () => resetFFmpeg(ffmpeg)
+  options.signal?.addEventListener('abort', abortFFmpeg, { once: true })
   const inputName = 'dsocial-input.' + (file.type.includes('webm') ? 'webm' : file.type.includes('quicktime') ? 'mov' : 'mp4')
   const outputName = 'dsocial-cleaned.mp4'
   try {
@@ -53,10 +58,14 @@ export async function cropVideoCornersOnDevice(file: File, options: {
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     const region = options.logoRegion
     if (!region || region.width < 1 || region.height < 1) throw new Error('Chưa có vùng logo được nhận diện. Video chưa được xuất.')
-    const x = Math.max(0, Math.floor(region.x / 2) * 2)
-    const y = Math.max(0, Math.floor(region.y / 2) * 2)
-    const width = Math.max(2, Math.floor(region.width / 2) * 2)
-    const height = Math.max(2, Math.floor(region.height / 2) * 2)
+    if (!options.frameWidth || !options.frameHeight || options.frameWidth < 2 || options.frameHeight < 2) {
+      throw new Error('Thiếu kích thước khung hình để kiểm tra vùng logo an toàn.')
+    }
+    const x = Math.max(0, Math.min(options.frameWidth - 2, Math.floor(region.x / 2) * 2))
+    const y = Math.max(0, Math.min(options.frameHeight - 2, Math.floor(region.y / 2) * 2))
+    const width = Math.floor(Math.min(region.width, options.frameWidth - x) / 2) * 2
+    const height = Math.floor(Math.min(region.height, options.frameHeight - y) / 2) * 2
+    if (width < 2 || height < 2) throw new Error('Vùng logo nằm ngoài khung hình hoặc quá nhỏ.')
     const filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}:show=0`
     await withTimeout(
       ffmpeg.exec(['-i', inputName, '-vf', filter, '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', outputName]),
@@ -64,11 +73,19 @@ export async function cropVideoCornersOnDevice(file: File, options: {
       'Xử lý video vượt quá 45 giây. Đã dừng để tránh treo ứng dụng; hãy chọn video ngắn hơn hoặc dung lượng nhỏ hơn.',
     ).catch(error => { resetFFmpeg(ffmpeg); throw error })
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
+    options.onProgress?.(94, 'Đang giải mã kiểm tra toàn bộ video đầu ra…')
+    await withTimeout(
+      ffmpeg.exec(['-v', 'error', '-i', outputName, '-f', 'null', '-']),
+      20000,
+      'Kiểm tra toàn bộ video đầu ra quá lâu. Không đánh dấu kết quả là hợp lệ.',
+    ).catch(error => { resetFFmpeg(ffmpeg); throw error })
+    if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     const output = await ffmpeg.readFile(outputName)
     if (!(output instanceof Uint8Array) || output.byteLength < 100) throw new Error('Không tạo được video đầu ra hợp lệ.')
     options.onProgress?.(100, 'Đã xử lý vùng logo được nhận diện. Hãy kiểm tra toàn bộ video và âm thanh.')
     return new Blob([output], { type: 'video/mp4' })
   } finally {
+    options.signal?.removeEventListener('abort', abortFFmpeg)
     await ffmpeg.deleteFile(inputName).catch(() => undefined)
     await ffmpeg.deleteFile(outputName).catch(() => undefined)
   }
