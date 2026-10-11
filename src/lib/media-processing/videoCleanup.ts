@@ -39,28 +39,34 @@ async function getFFmpeg(onProgress?: (progress: number, stage: string) => void)
 export async function cropVideoCornersOnDevice(file: File, options: {
   signal?: AbortSignal
   onProgress?: (progress: number, stage: string) => void
+  logoRegion?: { x: number; y: number; width: number; height: number }
 } = {}): Promise<Blob> {
   if (!/^video\/(mp4|quicktime|webm|x-m4v)$/i.test(file.type)) throw new Error('Chỉ hỗ trợ video MP4, MOV hoặc WebM.')
   if (!file.size || file.size > 12 * 1024 * 1024) throw new Error('Để tránh treo điện thoại, video cần dưới 12 MB trong chế độ xử lý nhẹ.')
   if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
   const ffmpeg = await getFFmpeg(options.onProgress)
   const inputName = 'dsocial-input.' + (file.type.includes('webm') ? 'webm' : file.type.includes('quicktime') ? 'mov' : 'mp4')
-  const outputName = 'dsocial-cropped.mp4'
+  const outputName = 'dsocial-cleaned.mp4'
   try {
     options.onProgress?.(2, 'Đang nạp video vào bộ xử lý cục bộ…')
     await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer()))
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
-    // Trim 2.5% from every edge, then scale back to the original frame size.
-    // This is a conservative watermark-removal aid, not a detector or guarantee.
+    const region = options.logoRegion
+    if (!region || region.width < 1 || region.height < 1) throw new Error('Chưa có vùng logo được nhận diện. Video chưa được xuất.')
+    const x = Math.max(0, Math.floor(region.x / 2) * 2)
+    const y = Math.max(0, Math.floor(region.y / 2) * 2)
+    const width = Math.max(2, Math.floor(region.width / 2) * 2)
+    const height = Math.max(2, Math.floor(region.height / 2) * 2)
+    const filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}:show=0`
     await withTimeout(
-      ffmpeg.exec(['-i', inputName, '-vf', 'crop=trunc(iw*0.95/2)*2:trunc(ih*0.95/2)*2:trunc(iw*0.025/2)*2:trunc(ih*0.025/2)*2,scale=trunc(iw/0.95/2)*2:trunc(ih/0.95/2)*2', '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', outputName]),
+      ffmpeg.exec(['-i', inputName, '-vf', filter, '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', outputName]),
       45000,
       'Xử lý video vượt quá 45 giây. Đã dừng để tránh treo ứng dụng; hãy chọn video ngắn hơn hoặc dung lượng nhỏ hơn.',
     ).catch(error => { resetFFmpeg(ffmpeg); throw error })
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     const output = await ffmpeg.readFile(outputName)
     if (!(output instanceof Uint8Array) || output.byteLength < 100) throw new Error('Không tạo được video đầu ra hợp lệ.')
-    options.onProgress?.(100, 'Đã xuất video đã crop. Hãy kiểm tra góc và âm thanh.')
+    options.onProgress?.(100, 'Đã xử lý vùng logo được nhận diện. Hãy kiểm tra toàn bộ video và âm thanh.')
     return new Blob([output], { type: 'video/mp4' })
   } finally {
     await ffmpeg.deleteFile(inputName).catch(() => undefined)
