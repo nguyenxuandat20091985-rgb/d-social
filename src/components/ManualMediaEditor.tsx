@@ -59,12 +59,16 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
   function point(event: React.PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!
     const rect = canvas.getBoundingClientRect()
-    return { x: (event.clientX - rect.left) * canvas.width / rect.width, y: (event.clientY - rect.top) * canvas.height / rect.height }
+    // The canvas is displayed with its intrinsic aspect ratio. Map pointer coordinates
+    // through the rendered rectangle so the red overlay and the inpainting mask stay aligned.
+    const x = (event.clientX - rect.left) * canvas.width / Math.max(1, rect.width)
+    const y = (event.clientY - rect.top) * canvas.height / Math.max(1, rect.height)
+    return { x: Math.max(0, Math.min(canvas.width, x)), y: Math.max(0, Math.min(canvas.height, y)) }
   }
   function paint(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current || !canvasRef.current || !maskRef.current) return
     const { x, y } = point(event)
-    const radius = brush * canvasRef.current.width / canvasRef.current.clientWidth / 2
+    const radius = brush * canvasRef.current.width / Math.max(1, canvasRef.current.getBoundingClientRect().width) / 2
     const mask = maskRef.current.getContext('2d')!
     mask.fillStyle = '#fff'
     mask.beginPath(); mask.arc(x, y, radius, 0, Math.PI * 2); mask.fill()
@@ -232,7 +236,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
       <button type="button" onClick={resetMask} disabled={!ready || working} aria-label="Xóa nét tô">Làm lại</button>
     </div>
     <p className="ds-clean-hint">Tô đỏ sát logo hoặc chữ cần xóa.</p>
-    <canvas ref={canvasRef} className="ds-clean-mask-canvas touch-none" style={{ maxHeight: '48svh', objectFit: 'contain' }}
+    <canvas ref={canvasRef} className="ds-clean-mask-canvas touch-none"
       onPointerDown={event => { drawingRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); paint(event) }}
       onPointerMove={paint} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} />
     <div className="ds-clean-brush">
