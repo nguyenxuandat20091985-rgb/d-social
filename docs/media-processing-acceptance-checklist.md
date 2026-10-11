@@ -1,6 +1,6 @@
 # D-Social Media Processing Service — acceptance checklist
 
-Preview only: https://d-social-media-quality-preview.onrender.com/media-test
+Preview only: https://d-social-media-quality-preview.onrender.com
 
 This is an isolated test build. Do not upload sensitive/private media unless comfortable processing it in the browser. The browser does not intentionally upload selected media to a processing server. Keep your original files. Do not use unreviewed output for publishing.
 
