@@ -113,7 +113,7 @@ export function MediaProcessingTestPage() {
         <p>Xóa watermark ngay trên thiết bị</p>
       </div>
       <label className="ds-clean-pick">
-        {selectedFile ? 'Đổi ảnh' : 'Chọn ảnh'}
+        {selectedFile ? 'Đổi tệp' : 'Chọn ảnh/video'}
         <input aria-label="Chọn ảnh hoặc video" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,video/x-m4v" disabled={busy} onChange={event => { void handleFile(event.currentTarget.files?.[0]); event.currentTarget.value = '' }} />
       </label>
     </header>
@@ -136,11 +136,11 @@ export function MediaProcessingTestPage() {
               </label>}
       </div>
 
-      {isImage && selectedFile && <div className="ds-clean-tools">
-        <button type="button" className="ds-clean-secondary" disabled={busy} onClick={() => setManualOpen(value => !value)}>
+      {selectedFile && <div className="ds-clean-tools">
+        {isImage && <button type="button" className="ds-clean-secondary" disabled={busy} onClick={() => setManualOpen(value => !value)}>
           {manualOpen ? 'Ẩn tô thủ công' : '✎ Tô vùng thủ công'}
-        </button>
-        {previewUrl && <><button type="button" className="ds-clean-secondary" onClick={() => setShowOriginal(value => !value)}>{showOriginal ? 'Xem kết quả' : 'So sánh ảnh gốc'}</button><a className="ds-clean-secondary" href={previewUrl} download={isVideo ? 'dsocial-clean.mp4' : 'dsocial-clean.png'}>Tải kết quả</a></>}
+        </button>}
+        {previewUrl && <><button type="button" className="ds-clean-secondary" onClick={() => setShowOriginal(value => !value)}>{showOriginal ? 'Xem kết quả' : 'So sánh tệp gốc'}</button><a className="ds-clean-secondary" href={previewUrl} download={isVideo ? 'dsocial-clean.mp4' : 'dsocial-clean.png'}>Tải kết quả</a></>}
       </div>}
 
       {isImage && selectedFile && !manualOpen && <button type="button" className="ds-clean-primary" disabled={busy} onClick={() => void runAutomatic()}>
