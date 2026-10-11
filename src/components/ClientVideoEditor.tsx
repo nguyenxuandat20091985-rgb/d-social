@@ -20,8 +20,8 @@ async function detectLogoInVideoFrame(file: File): Promise<LogoRegion> {
           reject(new Error('Không đọc được kích thước video.'))
           return
         }
-        video.currentTime = Math.min(0.5, Math.max(0, video.duration / 10))
         video.onseeked = () => { window.clearTimeout(timer); resolve({ width: video.videoWidth, height: video.videoHeight }) }
+        video.currentTime = Math.min(0.5, Math.max(0, video.duration / 10))
       }
       video.onerror = () => { window.clearTimeout(timer); reject(new Error('Trình duyệt không đọc được video này.')) }
       video.src = url
