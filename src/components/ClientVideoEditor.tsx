@@ -126,6 +126,10 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
 
   async function analyze() {
     if (busy) return
+    if (!file.size || file.size > 12 * 1024 * 1024) {
+      setError('Bản thử nghiệm chỉ nhận video có dung lượng tối đa 12 MB để hạn chế tràn bộ nhớ trên điện thoại.')
+      return
+    }
     controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
