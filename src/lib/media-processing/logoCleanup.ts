@@ -17,7 +17,7 @@ export type ClientImageCleanupResult = {
   height: number
   candidates: LogoCandidate[]
   sha256: string
-  engine: 'paddleocr-ppocrv5-lama-v1' | 'tesseract-corner-text-lama-v1' | 'tesseract-plus-tiktok-color-lama-v1' | 'paddleocr-ppocrv5-fast-v1' | 'tesseract-corner-text-fast-v1' | 'weak-device-local-fallback-v1' | 'detection-only-v1'
+  engine: 'paddleocr-ppocrv5-lama-v1' | 'tesseract-corner-text-lama-v1' | 'tesseract-plus-tiktok-color-lama-v1' | 'paddleocr-ppocrv5-fast-v1' | 'tesseract-corner-text-fast-v1' | 'weak-device-local-fallback-v1' | 'detection-only-v1' | 'reviewed-candidates-lama-v1'
 }
 
 export type CleanupOptions = {
@@ -458,13 +458,8 @@ export async function cleanupCornerTextFromImage(
       throw new Error('Để ưu tiên chất lượng, chế độ tự động không dùng nội suy nhanh trên thiết bị này. Hãy dùng tô vùng thủ công; thiết bị này chỉ có nội suy nhanh thử nghiệm, có thể để lại vết.')
     }
 
-    if (hardware?.tier === 'strong') {
-      options.onProgress?.(68, 'Thiết bị mạnh: đang chạy LaMa AI cục bộ…')
-      await inpaintCandidateBoxesWithLama(canvas, context, candidates, options)
-    } else {
-      options.onProgress?.(68, hardware?.tier === 'weak' ? 'Thiết bị cấu hình thấp: bỏ qua model 208 MB, chạy nội suy cục bộ nhẹ. Server fallback chỉ bật khi có endpoint xác thực nhận mask nhỏ.' : 'Thiết bị trung bình: bỏ qua model 208 MB, đang nội suy nhanh trên Web Worker…')
-      await inpaintCandidateBoxesFast(canvas, context, candidates, options)
-    }
+    options.onProgress?.(68, 'Thiết bị phù hợp: đang chạy LaMa AI cục bộ…')
+    await inpaintCandidateBoxesWithLama(canvas, context, candidates, options)
 
     options.onProgress?.(98, 'Đang xuất và kiểm tra ảnh đã xử lý…')
     const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
@@ -483,7 +478,7 @@ export async function cleanupCornerTextFromImage(
       height: canvas.height,
       candidates,
       sha256,
-      engine: hardware?.tier !== 'strong' ? (hardware?.tier === 'weak' ? 'weak-device-local-fallback-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-fast-v1' : 'tesseract-corner-text-fast-v1') : usedColorHeuristic ? 'tesseract-plus-tiktok-color-lama-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-lama-v1' : 'tesseract-corner-text-lama-v1',
+      engine: options.candidateRegions?.length ? 'reviewed-candidates-lama-v1' : usedColorHeuristic ? 'tesseract-plus-tiktok-color-lama-v1' : paddleCandidates.length ? 'paddleocr-ppocrv5-lama-v1' : 'tesseract-corner-text-lama-v1',
     }
   } finally {
     bitmap?.close()
