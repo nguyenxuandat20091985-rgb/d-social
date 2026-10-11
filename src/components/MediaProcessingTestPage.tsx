@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { inspectMediaOnDevice, type MediaInspection } from '../lib/mediaProcessingClient'
-import { cleanupCornerTextFromImage, type ClientImageCleanupResult } from '../lib/media-processing/logoCleanup'
+import { cleanupCornerTextFromImage, type ClientImageCleanupResult, type LogoCandidate } from '../lib/media-processing/logoCleanup'
 import { ManualMediaEditor } from './ManualMediaEditor'
 import { ClientVideoEditor } from './ClientVideoEditor'
 
@@ -14,6 +14,7 @@ export function MediaProcessingTestPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [showOriginal, setShowOriginal] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [pendingCandidates, setPendingCandidates] = useState<LogoCandidate[]>([])
   const [notice, setNotice] = useState('')
   const controllerRef = useRef<AbortController | null>(null)
   const urlsRef = useRef<string[]>([])
@@ -29,6 +30,7 @@ export function MediaProcessingTestPage() {
     const url = keepUrl(URL.createObjectURL(blob))
     setPreviewUrl(url)
     setShowOriginal(false)
+    setPendingCandidates([])
     setNotice('Đã xử lý xong · hãy kiểm tra ảnh trước khi đăng.')
     setResult(previous => ({ ...(previous ?? {}), error: undefined }))
   }
@@ -43,6 +45,7 @@ export function MediaProcessingTestPage() {
     setBusy(true)
     setNotice('')
     setResult(null)
+    setPendingCandidates([])
     setPreviewUrl(null)
     setShowOriginal(true)
     const sourceUrl = keepUrl(URL.createObjectURL(file))
@@ -63,34 +66,66 @@ export function MediaProcessingTestPage() {
     }
   }
 
-  async function runAutomatic(fileToProcess: File | null = selectedFile, allowBusy = false) {
-    if (!fileToProcess || (busy && !allowBusy) || !fileToProcess.type.startsWith('image/')) return
+  async function runAutomatic(fileToProcess: File | null = selectedFile) {
+    if (!fileToProcess || busy || !fileToProcess.type.startsWith('image/')) return
     const controller = new AbortController()
     controllerRef.current?.abort()
     controllerRef.current = controller
     setBusy(true)
     setNotice('')
+    setPendingCandidates([])
     setResult(previous => ({ ...(previous ?? {}), error: undefined }))
     try {
-      const cleanup = await cleanupCornerTextFromImage(fileToProcess, {
+      const analysis = await cleanupCornerTextFromImage(fileToProcess, {
         signal: controller.signal,
         fastOnly: false,
+        detectOnly: true,
+        onProgress: (_progress, stage) => setNotice(stage),
+      })
+      if (controller.signal.aborted) return
+      setPendingCandidates(analysis.candidates)
+      setNotice('Đã phân tích xong nhưng chưa xóa ảnh. Hãy kiểm tra các vùng nghi vấn rồi xác nhận bước tiếp theo.')
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      setResult(previous => ({
+        ...(previous ?? {}),
+        error: error instanceof Error ? error.message : 'Chưa nhận diện chắc chắn logo.',
+      }))
+      setNotice('Chưa nhận diện chắc chắn. Anh có thể tô vùng cần xóa thủ công.')
+      setManualOpen(true)
+    } finally {
+      if (!controller.signal.aborted) setBusy(false)
+    }
+  }
+
+  async function confirmAutomatic() {
+    if (!selectedFile || !pendingCandidates.length || busy) return
+    const controller = new AbortController()
+    controllerRef.current?.abort()
+    controllerRef.current = controller
+    setBusy(true)
+    setNotice('Đang phục hồi nền trong các vùng anh đã xác nhận…')
+    try {
+      const cleanup = await cleanupCornerTextFromImage(selectedFile, {
+        signal: controller.signal,
+        fastOnly: false,
+        candidateRegions: pendingCandidates,
         onProgress: (_progress, stage) => setNotice(stage),
       })
       if (controller.signal.aborted) return
       const url = keepUrl(URL.createObjectURL(cleanup.blob))
       setPreviewUrl(url)
-      setDownloadUrl(url)
+      setShowOriginal(false)
       setResult(previous => ({ ...(previous ?? {}), cleanup, error: undefined }))
-      setNotice('Đã xử lý xong · hãy phóng to kiểm tra kết quả.')
+      setPendingCandidates([])
+      setNotice('Đã xử lý xong. So sánh với ảnh gốc và phóng to kiểm tra trước khi dùng.')
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       setResult(previous => ({
         ...(previous ?? {}),
-        error: error instanceof Error ? error.message : 'Tự động chưa xóa được watermark.',
+        error: error instanceof Error ? error.message : 'Không phục hồi được các vùng đã chọn.',
       }))
-      setNotice('Chưa nhận diện chắc chắn. Anh có thể tô vùng cần xóa.')
-      setManualOpen(true)
+      setNotice('Xử lý thất bại; ảnh gốc vẫn được giữ nguyên.')
     } finally {
       if (!controller.signal.aborted) setBusy(false)
     }
@@ -144,8 +179,18 @@ export function MediaProcessingTestPage() {
       </div>}
 
       {isImage && selectedFile && !manualOpen && <button type="button" className="ds-clean-primary" disabled={busy} onClick={() => void runAutomatic()}>
-        {busy ? <><span className="ds-clean-spinner" />Đang xử lý…</> : '✦ Xóa watermark tự động'}
+        {busy ? <><span className="ds-clean-spinner" />Đang phân tích…</> : pendingCandidates.length ? 'Phân tích lại logo' : '1. Phân tích logo'}
       </button>}
+
+      {isImage && selectedFile && pendingCandidates.length > 0 && !manualOpen && <section className="ds-clean-video-review">
+        <p className="ds-clean-hint">Đã phát hiện {pendingCandidates.length} vùng nghi vấn. Chưa có pixel nào bị thay đổi. Hãy kiểm tra nội dung/vị trí; nếu không đúng logo, hãy chọn tô thủ công thay vì xác nhận.</p>
+        <ul className="ds-clean-candidate-list">
+          {pendingCandidates.map((candidate, index) => <li key={index}>{candidate.text} · {candidate.region} · {Math.round(candidate.confidence)}% · x={candidate.x}, y={candidate.y}, {candidate.width}×{candidate.height}px</li>)}
+        </ul>
+        <button type="button" className="ds-clean-primary" disabled={busy} onClick={() => void confirmAutomatic()}>
+          {busy ? <><span className="ds-clean-spinner" />Đang phục hồi nền…</> : '2. Xác nhận vùng và xóa'}
+        </button>
+      </section>}
 
       {isVideo && selectedFile && <div className="ds-clean-video-tool">
         <ClientVideoEditor file={selectedFile} onProcessed={acceptOutput} onStatus={setNotice} />
