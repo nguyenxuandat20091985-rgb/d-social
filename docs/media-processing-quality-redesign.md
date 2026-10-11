@@ -9,6 +9,17 @@ Implementation status (2026-10-11): isolated preview deployment created at https
 - The current adaptive preview service is not evidence that logo removal quality is acceptable. A successful build or HTTP 200 is not a visual-quality pass.
 - Never report a file as cleaned when no logo region was confidently identified or when the output has not been inspected.
 
+## Phase status
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0 — isolation | Complete | Dedicated feature branch and separate Render preview; production untouched |
+| 1 — safety/test harness | Initial gate passed | Node regression suite runs through npm prebuild; latest Render build succeeded |
+| 2 — image pipeline | Prototype ready for acceptance | Detection/restoration separated; candidate review before restore; LaMa route on qualifying devices; weak-device interpolation is clearly labeled and not silently selected |
+| 3 — video pipeline | Prototype ready for acceptance, quality incomplete | Three-point sampling, visible candidate boxes, user-drawn static region, output decode check; still uses fixed-region delogo rather than temporal AI inpainting/tracking |
+| 4 — real-device QA | Pending owner test | Requires representative media and real Android/iOS/desktop browsers |
+| 5 — production review | Not started by design | No production merge/deploy until visual acceptance and explicit approval |
+
 ## Goals
 
 1. Support Android, iOS, and desktop browsers with one responsive interface.
