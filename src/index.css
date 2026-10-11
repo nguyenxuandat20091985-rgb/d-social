@@ -428,3 +428,10 @@ body {
 @media(max-height:650px){.ds-clean-shell{gap:7px;padding-top:calc(7px + env(safe-area-inset-top));padding-bottom:calc(6px + env(safe-area-inset-bottom))}.ds-clean-workspace{gap:7px}.ds-clean-header{gap:8px}.ds-clean-mark{width:32px;height:32px}.ds-clean-header h1{font-size:15px}.ds-clean-primary{min-height:42px}.ds-clean-manual{gap:5px;padding:7px}.ds-clean-hint{font-size:10px}.ds-clean-mask-canvas{max-height:38svh}}
 
 .ds-clean-video-card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.ds-clean-video-card .ds-clean-primary{margin-top:0}
+
+.ds-clean-video-review{display:flex;flex-direction:column;gap:8px;min-height:0;padding:8px;border:1px solid #dbe3ef;border-radius:12px;background:#f8fafc}
+.ds-clean-candidate-list{display:flex;flex-direction:column;gap:5px;max-height:100px;overflow:auto;margin:0;padding:0 0 0 18px;color:#475569;font-size:10px;line-height:1.4}
+.ds-clean-candidate-list li{overflow-wrap:anywhere}
+.ds-clean-video-card .ds-clean-tools .ds-clean-primary{flex:1;min-width:0;width:auto;padding:0 8px;font-size:11px}
+.ds-clean-video-card .ds-clean-mask-canvas{flex:0 0 auto;max-height:360px}
+@media(max-width:420px){.ds-clean-video-card{padding:8px}.ds-clean-video-card .ds-clean-tools{align-items:stretch;flex-direction:column}.ds-clean-video-card .ds-clean-tools .ds-clean-primary{width:100%;min-height:42px}}
