@@ -236,6 +236,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
       <button type="button" onClick={resetMask} disabled={!ready || working} aria-label="Xóa nét tô">Làm lại</button>
     </div>
     <p className="ds-clean-hint">Tô đỏ sát logo hoặc chữ cần xóa.</p>
+    {hardware?.tier !== 'strong' && <p className="ds-clean-notice ds-clean-error">Thiết bị này chưa đủ điều kiện chạy LaMa AI. Nút bên dưới dùng nội suy nhanh thử nghiệm, có thể để lại vết hoặc làm méo nền; chỉ dùng để so sánh và luôn giữ ảnh gốc.</p>}
     <canvas ref={canvasRef} className="ds-clean-mask-canvas touch-none"
       onPointerDown={event => { drawingRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); paint(event) }}
       onPointerMove={paint} onPointerUp={() => { drawingRef.current = false }} onPointerCancel={() => { drawingRef.current = false }} />
@@ -245,7 +246,7 @@ export function ManualMediaEditor({ file, onProcessed, onStatus }: Props) {
       <span>{brush}</span>
     </div>
     <button type="button" className="ds-clean-primary" disabled={!ready || working} onClick={() => void (hardware?.tier === 'strong' ? processLama() : processFast())}>
-      {working ? <><span className="ds-clean-spinner" />Đang xóa…</> : 'Xóa vùng đã tô'}
+      {working ? <><span className="ds-clean-spinner" />Đang xóa…</> : hardware?.tier === 'strong' ? 'Xóa vùng đã tô bằng LaMa AI' : 'Thử nội suy nhanh vùng đã tô'}
     </button>
   </section>
 }
