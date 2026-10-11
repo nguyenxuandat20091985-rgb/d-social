@@ -125,7 +125,8 @@ export function MediaProcessingTestPage() {
         ...(previous ?? {}),
         error: error instanceof Error ? error.message : 'Không phục hồi được các vùng đã chọn.',
       }))
-      setNotice('Xử lý thất bại; ảnh gốc vẫn được giữ nguyên.')
+      setNotice('Chế độ tự động ưu tiên chất lượng không chạy được trên thiết bị này. Đã chuyển sang tô thủ công; nội suy nhanh chỉ là thử nghiệm.')
+      setManualOpen(true)
     } finally {
       if (!controller.signal.aborted) setBusy(false)
     }
