@@ -313,7 +313,7 @@ export async function cleanupCornerTextFromImage(
     let paddleCandidates: LogoCandidate[] = options.candidateRegions ? [...options.candidateRegions] : []
     // Detection and restoration are separate stages. When a reviewed candidate list is
     // supplied, skip OCR and reuse those exact regions rather than detecting again.
-    if (!options.fastOnly && !options.detectOnly && !options.candidateRegions) {
+    if (!options.fastOnly && !options.candidateRegions) {
       try {
         paddleCandidates = await detectWithPaddleOCR(file, canvas.width, canvas.height, options)
       } catch (error) {
@@ -322,7 +322,7 @@ export async function cleanupCornerTextFromImage(
       }
     }
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý ảnh.', 'AbortError')
-    if (!options.fastOnly && !options.detectOnly && !options.candidateRegions && !paddleCandidates.length) {
+    if (!options.fastOnly && !options.candidateRegions && !paddleCandidates.length) {
       options.onProgress?.(18, 'Đang khởi tạo Tesseract dự phòng…')
       worker = await createWorker('eng+vie', 1, {
         logger: event => {
