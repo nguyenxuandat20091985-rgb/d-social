@@ -4,11 +4,12 @@ import { readFile } from 'node:fs/promises'
 
 const root = new URL('../', import.meta.url)
 const read = path => readFile(new URL(path, root), 'utf8')
-const [videoEditor, videoCleanup, mediaPage, imageCleanup] = await Promise.all([
+const [videoEditor, videoCleanup, mediaPage, imageCleanup, mainRouter] = await Promise.all([
   read('src/components/ClientVideoEditor.tsx'),
   read('src/lib/media-processing/videoCleanup.ts'),
   read('src/components/MediaProcessingTestPage.tsx'),
   read('src/lib/media-processing/logoCleanup.ts'),
+  read('src/main.tsx'),
 ])
 
 test('video cleanup requires an explicit user action and region review', () => {
@@ -44,4 +45,9 @@ test('uploading an image does not automatically modify it and original/result co
   assert.match(mediaPage, /2\. Xác nhận vùng và xóa/)
   assert.match(mediaPage, /detectOnly: true/)
   assert.match(imageCleanup, /candidateRegions\?: LogoCandidate\[\]/)
+})
+
+test('quality preview routes directly to the isolated test UI', () => {
+  assert.match(mainRouter, /d-social-media-quality-preview\.onrender\.com/)
+  assert.match(mainRouter, /return <MediaProcessingTestPage \/>/)
 })
