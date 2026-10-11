@@ -10,8 +10,9 @@ export function MediaProcessingTestPage() {
   const [busy, setBusy] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [result, setResult] = useState<ResultState | null>(null)
+  const [originalUrl, setOriginalUrl] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+  const [showOriginal, setShowOriginal] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [notice, setNotice] = useState('')
   const controllerRef = useRef<AbortController | null>(null)
@@ -27,7 +28,7 @@ export function MediaProcessingTestPage() {
   function acceptOutput(blob: Blob) {
     const url = keepUrl(URL.createObjectURL(blob))
     setPreviewUrl(url)
-    setDownloadUrl(url)
+    setShowOriginal(false)
     setNotice('Đã xử lý xong · hãy kiểm tra ảnh trước khi đăng.')
     setResult(previous => ({ ...(previous ?? {}), error: undefined }))
   }
@@ -42,18 +43,17 @@ export function MediaProcessingTestPage() {
     setBusy(true)
     setNotice('')
     setResult(null)
-    setDownloadUrl(null)
-    const originalUrl = keepUrl(URL.createObjectURL(file))
-    setPreviewUrl(originalUrl)
+    setPreviewUrl(null)
+    setShowOriginal(true)
+    const sourceUrl = keepUrl(URL.createObjectURL(file))
+    setOriginalUrl(sourceUrl)
     try {
       const inspection = await inspectMediaOnDevice(file, { signal: controller.signal, onProgress: () => undefined })
       if (controller.signal.aborted) return
       setResult({ inspection })
-      if (inspection.mediaType === 'video') {
-        setNotice('Video đã tải lên. Hiện bộ xử lý video chưa tự nhận diện logo theo từng khung hình; thao tác hiện tại chỉ cắt nhẹ mép video, không bảo đảm xóa logo.')
-      } else if (file.type.startsWith('image/')) {
-        await runAutomatic(file, true)
-      }
+      setNotice(inspection.mediaType === 'video'
+        ? 'Đã đọc thông tin video. Chưa có gì bị thay đổi; hãy chạy thử có chủ đích và kiểm tra kết quả trước khi sử dụng.'
+        : 'Đã đọc thông tin ảnh. Ảnh gốc vẫn được giữ nguyên; chọn chế độ tự động hoặc tô vùng thủ công khi sẵn sàng.')
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setResult({ error: error instanceof Error ? error.message : 'Không đọc được tệp.' })
@@ -120,10 +120,14 @@ export function MediaProcessingTestPage() {
 
     <section className="ds-clean-workspace">
       <div className={manualOpen ? "ds-clean-preview ds-clean-preview-hidden" : "ds-clean-preview"}>
-        {previewUrl && isVideo && result?.inspection?.mediaType === 'video'
-          ? <video src={previewUrl} controls playsInline className="ds-clean-media" />
-          : previewUrl
-            ? <img src={previewUrl} alt="Xem trước ảnh" className="ds-clean-media" />
+        {(showOriginal || !previewUrl) && originalUrl && isVideo
+          ? <video src={originalUrl} controls playsInline className="ds-clean-media" />
+          : (showOriginal || !previewUrl) && originalUrl
+            ? <img src={originalUrl} alt="Ảnh gốc" className="ds-clean-media" />
+            : previewUrl && isVideo
+              ? <video src={previewUrl} controls playsInline className="ds-clean-media" />
+              : previewUrl
+                ? <img src={previewUrl} alt="Ảnh đã xử lý" className="ds-clean-media" />
             : <label className="ds-clean-empty">
                 <span className="ds-clean-upload-icon">＋</span>
                 <strong>Chọn ảnh để bắt đầu</strong>
@@ -136,7 +140,7 @@ export function MediaProcessingTestPage() {
         <button type="button" className="ds-clean-secondary" disabled={busy} onClick={() => setManualOpen(value => !value)}>
           {manualOpen ? 'Ẩn tô thủ công' : '✎ Tô vùng thủ công'}
         </button>
-        {downloadUrl && <a className="ds-clean-secondary" href={downloadUrl} download="dsocial-clean.png">Tải ảnh</a>}
+        {previewUrl && <><button type="button" className="ds-clean-secondary" onClick={() => setShowOriginal(value => !value)}>{showOriginal ? 'Xem kết quả' : 'So sánh ảnh gốc'}</button><a className="ds-clean-secondary" href={previewUrl} download={isVideo ? 'dsocial-clean.mp4' : 'dsocial-clean.png'}>Tải kết quả</a></>}
       </div>}
 
       {isImage && selectedFile && !manualOpen && <button type="button" className="ds-clean-primary" disabled={busy} onClick={() => void runAutomatic()}>
@@ -155,6 +159,6 @@ export function MediaProcessingTestPage() {
       {result?.inspection && !manualOpen && <p className="ds-clean-meta">{result.inspection.width && result.inspection.height ? `${result.inspection.width} × ${result.inspection.height} px · ` : ''}{(result.inspection.sizeBytes / 1024 / 1024).toFixed(1)} MB</p>}
       {busy && <button type="button" className="ds-clean-cancel" onClick={cancel}>Hủy</button>}
     </section>
-    <footer className="ds-clean-footer">Ảnh được xử lý trên thiết bị của anh.</footer>
+    <footer className="ds-clean-footer">Tệp gốc được giữ riêng; xử lý cục bộ trên thiết bị. Luôn kiểm tra kết quả trước khi đăng.</footer>
   </main>
 }
