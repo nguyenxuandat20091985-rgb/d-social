@@ -236,6 +236,8 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
       const output = await cropVideoCornersOnDevice(file, {
         signal: controller.signal,
         logoRegion: region,
+        frameWidth: dimensions.width,
+        frameHeight: dimensions.height,
         onProgress: (_progress, stage) => onStatus?.(stage),
       })
       if (controller.signal.aborted) return
