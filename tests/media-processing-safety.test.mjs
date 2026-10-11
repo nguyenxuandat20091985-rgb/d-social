@@ -17,6 +17,7 @@ test('video cleanup requires an explicit user action and region review', () => {
   assert.match(videoEditor, /1\. Phân tích nhiều khung hình/)
   assert.match(videoEditor, /2\. Xóa vùng đỏ đã xác nhận/)
   assert.match(videoEditor, /onPointerDown=/)
+  assert.match(videoEditor, /file\.size > 12 \* 1024 \* 1024/)
 })
 
 test('video analysis samples multiple times and keeps OCR detection separate from restoration', () => {
@@ -45,6 +46,8 @@ test('uploading an image does not automatically modify it and original/result co
   assert.match(mediaPage, /2\. Xác nhận vùng và xóa/)
   assert.match(mediaPage, /detectOnly: true/)
   assert.match(imageCleanup, /candidateRegions\?: LogoCandidate\[\]/)
+  assert.match(imageCleanup, /hardware\?\.tier !== 'strong'/)
+  assert.match(mediaPage, /nội suy nhanh chỉ là thử nghiệm/)
 })
 
 test('quality preview routes directly to the isolated test UI', () => {
