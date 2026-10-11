@@ -67,18 +67,20 @@ export async function cropVideoCornersOnDevice(file: File, options: {
     const height = Math.floor(Math.min(region.height, options.frameHeight - y) / 2) * 2
     if (width < 2 || height < 2) throw new Error('Vùng logo nằm ngoài khung hình hoặc quá nhỏ.')
     const filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}:show=0`
-    await withTimeout(
+    const encodeCode = await withTimeout(
       ffmpeg.exec(['-i', inputName, '-vf', filter, '-map', '0:v:0', '-map', '0:a?', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', outputName]),
       45000,
       'Xử lý video vượt quá 45 giây. Đã dừng để tránh treo ứng dụng; hãy chọn video ngắn hơn hoặc dung lượng nhỏ hơn.',
     ).catch(error => { resetFFmpeg(ffmpeg); throw error })
+    if (encodeCode !== 0) throw new Error('FFmpeg báo lỗi khi mã hóa video. Tệp gốc vẫn được giữ nguyên.')
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     options.onProgress?.(94, 'Đang giải mã kiểm tra toàn bộ video đầu ra…')
-    await withTimeout(
+    const validationCode = await withTimeout(
       ffmpeg.exec(['-v', 'error', '-i', outputName, '-f', 'null', '-']),
       20000,
       'Kiểm tra toàn bộ video đầu ra quá lâu. Không đánh dấu kết quả là hợp lệ.',
     ).catch(error => { resetFFmpeg(ffmpeg); throw error })
+    if (validationCode !== 0) throw new Error('Video đầu ra không vượt qua kiểm tra giải mã toàn bộ. Hãy giữ tệp gốc và thử lại.')
     if (options.signal?.aborted) throw new DOMException('Đã hủy xử lý video.', 'AbortError')
     const output = await ffmpeg.readFile(outputName)
     if (!(output instanceof Uint8Array) || output.byteLength < 100) throw new Error('Không tạo được video đầu ra hợp lệ.')
