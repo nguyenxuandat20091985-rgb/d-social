@@ -418,13 +418,13 @@ body {
 .ds-clean-manual-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;font-size:13px}
 .ds-clean-manual-head button{padding:5px 9px;border-radius:9px;background:#f1f5f9;color:#475569;font-size:11px;font-weight:700}
 .ds-clean-hint{flex-shrink:0;font-size:11px;color:#64748b}
-.ds-clean-mask-canvas{display:block;width:100%;height:min(48svh,420px);min-height:0;flex:1;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
+.ds-clean-mask-canvas{display:block;width:100%;height:auto;max-height:min(48svh,420px);min-height:0;flex:0 1 auto;object-fit:fill;touch-action:none;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
 .ds-clean-brush{display:flex;align-items:center;gap:10px;flex-shrink:0;font-size:11px;color:#64748b}
 .ds-clean-brush input{flex:1;min-width:0;accent-color:#2454d7}
 .ds-clean-brush span{min-width:20px;text-align:right}
 .ds-clean-video-tool{flex:1;min-height:0;overflow:auto}
 @keyframes ds-clean-spin{to{transform:rotate(360deg)}}
 @media(min-width:640px){.ds-clean-shell{padding:22px 20px 14px}.ds-clean-workspace{gap:12px}.ds-clean-preview{border-radius:22px}.ds-clean-media{max-height:100%}}
-@media(max-height:650px){.ds-clean-shell{gap:7px;padding-top:calc(7px + env(safe-area-inset-top));padding-bottom:calc(6px + env(safe-area-inset-bottom))}.ds-clean-workspace{gap:7px}.ds-clean-header{gap:8px}.ds-clean-mark{width:32px;height:32px}.ds-clean-header h1{font-size:15px}.ds-clean-primary{min-height:42px}.ds-clean-manual{gap:5px;padding:7px}.ds-clean-hint{font-size:10px}.ds-clean-mask-canvas{height:38svh}}
+@media(max-height:650px){.ds-clean-shell{gap:7px;padding-top:calc(7px + env(safe-area-inset-top));padding-bottom:calc(6px + env(safe-area-inset-bottom))}.ds-clean-workspace{gap:7px}.ds-clean-header{gap:8px}.ds-clean-mark{width:32px;height:32px}.ds-clean-header h1{font-size:15px}.ds-clean-primary{min-height:42px}.ds-clean-manual{gap:5px;padding:7px}.ds-clean-hint{font-size:10px}.ds-clean-mask-canvas{max-height:38svh}}
 
 .ds-clean-video-card{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.ds-clean-video-card .ds-clean-primary{margin-top:0}
