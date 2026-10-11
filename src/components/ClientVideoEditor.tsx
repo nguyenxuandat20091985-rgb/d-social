@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useState } from 'react'
 import { cleanupCornerTextFromImage } from '../lib/media-processing/logoCleanup'
 import { cropVideoCornersOnDevice } from '../lib/media-processing/videoCleanup'
 
@@ -58,7 +58,6 @@ async function detectLogoInVideoFrame(file: File): Promise<LogoRegion> {
 export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const autoStartedRef = useRef(false)
 
   async function process() {
     if (busy) return
@@ -78,17 +77,11 @@ export function ClientVideoEditor({ file, onProcessed, onStatus }: Props) {
     } finally { setBusy(false) }
   }
 
-  useEffect(() => {
-    if (autoStartedRef.current) return
-    autoStartedRef.current = true
-    void process()
-  }, [file])
-
   return <section className="ds-clean-video-card">
-    <p className="ds-clean-hint">Tự quét khung hình đầu để tìm logo ở góc rồi xử lý trực tiếp trên điện thoại. Logo thay đổi vị trí hoặc nằm giữa khung hình có thể chưa được phát hiện.</p>
+    <p className="ds-clean-hint">Bản thử nghiệm hiện chỉ kiểm tra một khung hình và xử lý một vùng cố định ở góc bằng nội suy. Cách này chưa đạt chuẩn xóa logo chất lượng cao, có thể để lại vết hoặc ảnh hưởng nền. Chỉ bấm thử trên bản sao video và xem lại toàn bộ kết quả trước khi sử dụng.</p>
     {error && <p className="ds-clean-notice ds-clean-error" role="alert">{error}</p>}
     <button type="button" disabled={busy} onClick={() => void process()} className="ds-clean-primary">
-      {busy ? <><span className="ds-clean-spinner" />Đang tìm và xử lý video…</> : 'Thử xử lý lại video'}
+      {busy ? <><span className="ds-clean-spinner" />Đang tìm và xử lý video…</> : 'Chạy thử bộ xử lý hiện tại'}
     </button>
   </section>
 }
