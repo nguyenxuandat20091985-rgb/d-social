@@ -49,7 +49,11 @@ export function MediaProcessingTestPage() {
       const inspection = await inspectMediaOnDevice(file, { signal: controller.signal, onProgress: () => undefined })
       if (controller.signal.aborted) return
       setResult({ inspection })
-      if (inspection.mediaType === 'video') setNotice('Video đã sẵn sàng.')
+      if (inspection.mediaType === 'video') {
+        setNotice('Video đã tải lên. Hiện bộ xử lý video chưa tự nhận diện logo theo từng khung hình; thao tác hiện tại chỉ cắt nhẹ mép video, không bảo đảm xóa logo.')
+      } else if (file.type.startsWith('image/')) {
+        await runAutomatic(file, true)
+      }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setResult({ error: error instanceof Error ? error.message : 'Không đọc được tệp.' })
@@ -59,8 +63,8 @@ export function MediaProcessingTestPage() {
     }
   }
 
-  async function runAutomatic() {
-    if (!selectedFile || busy || !selectedFile.type.startsWith('image/')) return
+  async function runAutomatic(fileToProcess: File | null = selectedFile, allowBusy = false) {
+    if (!fileToProcess || (busy && !allowBusy) || !fileToProcess.type.startsWith('image/')) return
     const controller = new AbortController()
     controllerRef.current?.abort()
     controllerRef.current = controller
@@ -68,10 +72,10 @@ export function MediaProcessingTestPage() {
     setNotice('')
     setResult(previous => ({ ...(previous ?? {}), error: undefined }))
     try {
-      const cleanup = await cleanupCornerTextFromImage(selectedFile, {
+      const cleanup = await cleanupCornerTextFromImage(fileToProcess, {
         signal: controller.signal,
-        fastOnly: true,
-        onProgress: () => undefined,
+        fastOnly: false,
+        onProgress: (_progress, stage) => setNotice(stage),
       })
       if (controller.signal.aborted) return
       const url = keepUrl(URL.createObjectURL(cleanup.blob))
