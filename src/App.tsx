@@ -752,6 +752,46 @@ function Feed({ userId }) {
     if (append) setPageLoading(true)
     else { setLoading(true); setLoadError(''); setHasMore(true) }
     try {
+      if (mode === 'popular') {
+        // Featured is ranked across the community by server-side interactions in the rolling 24-hour window.
+        const { data: ranked, error: rankingError } = await supabase.rpc('get_home_featured_posts')
+        if (rankingError) throw new Error(rankingError.message || 'Không thể tính thứ hạng Nổi bật.')
+        const rankedIds = (ranked || []).map(row => row.id).filter(Boolean)
+        if (!rankedIds.length) {
+          setPosts([])
+          setHasMore(false)
+          const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
+          setPeople(peeps || [])
+          return
+        }
+        let featuredQuery = await supabase.from('posts')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id)')
+          .in('id', rankedIds)
+          .eq('is_published', true)
+          .is('deleted_at', null)
+        if (featuredQuery.error) {
+          featuredQuery = await supabase.from('posts')
+            .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id)')
+            .in('id', rankedIds)
+            .eq('is_published', true)
+        }
+        if (featuredQuery.error) throw new Error(featuredQuery.error.message || 'Không thể tải bài Nổi bật.')
+        const byId = new Map((featuredQuery.data || []).map(post => [post.id, post]))
+        const orderedPosts = rankedIds.map(id => byId.get(id)).filter(Boolean)
+        const authorIds = [...new Set(orderedPosts.map(post => post.author_id || post.user_id).filter(Boolean))]
+        let profileMap = {}
+        if (authorIds.length) {
+          const { data: profiles, error: profileError } = await supabase.from('profiles')
+            .select('id,full_name,username,avatar_url').in('id', authorIds)
+          if (profileError) throw profileError
+          profileMap = Object.fromEntries((profiles || []).map(profile => [profile.id, profile]))
+        }
+        setPosts(orderedPosts.map(post => ({ ...post, profiles: profileMap[post.author_id || post.user_id] || null })))
+        setHasMore(false)
+        const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
+        setPeople(peeps || [])
+        return
+      }
       let followedIds = null
       if (mode === 'following') {
         const follows = await supabase.from('follows').select('following_id').eq('follower_id', userId)
@@ -832,7 +872,7 @@ function Feed({ userId }) {
           <button type="button" onClick={() => changeMode('popular')} aria-pressed={feedMode === 'popular'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'popular' ? 'd-btn-primary' : 'd-muted'}`}><TrendingUp size={15} /> Nổi bật</button>
         </div>
       </section>
-      <div className="home-feed-heading"><div><h2>{feedMode === 'latest' ? 'Bài viết mới' : feedMode === 'following' ? 'Từ người đang theo dõi' : 'Bài viết nổi bật'}</h2><p>{feedMode === 'latest' ? 'Chia sẻ và kết nối mỗi ngày' : feedMode === 'following' ? 'Cập nhật từ những tài khoản anh theo dõi' : 'Xếp theo lượt thích trong các bài đã tải'}</p></div><button type="button" onClick={() => load({ mode: feedMode })} disabled={loading || pageLoading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
+      <div className="home-feed-heading"><div><h2>{feedMode === 'latest' ? 'Bài viết mới' : feedMode === 'following' ? 'Từ người đang theo dõi' : 'Bài viết nổi bật'}</h2><p>{feedMode === 'latest' ? 'Chia sẻ và kết nối mỗi ngày' : feedMode === 'following' ? 'Cập nhật từ những tài khoản anh theo dõi' : 'Xếp theo tương tác hợp lệ trong 24 giờ gần nhất trên toàn cộng đồng'}</p></div><button type="button" onClick={() => load({ mode: feedMode })} disabled={loading || pageLoading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
       {loading && <div className="home-feed-loading"><span className="home-loading-dot" /> Đang tải bài viết...</div>}
       {!loading && loadError && <div className="d-card p-6 text-center"><p className="text-sm mb-3" style={{color: 'var(--d-danger)'}}>{loadError}</p><button type="button" className="d-btn-primary text-sm" onClick={() => load({ mode: feedMode })}>Thử tải lại</button></div>}
       {!loading && !loadError && posts.length === 0 && <div className="home-empty d-card p-8 text-center"><div className="home-empty-icon"><MessageSquare size={25}/></div><h3>{feedMode === 'following' ? 'Chưa có bài viết từ người anh theo dõi' : 'Chưa có bài viết mới'}</h3><p>{feedMode === 'following' ? 'Theo dõi hoặc kết bạn với mọi người để xem bài viết của họ tại đây.' : 'Hãy chia sẻ điều đầu tiên để bắt đầu cuộc trò chuyện cùng cộng đồng.'}</p><button type="button" className="d-btn-primary text-sm mt-4" onClick={() => setShowComposer(true)}><Plus size={16}/> Tạo bài viết</button></div>}
