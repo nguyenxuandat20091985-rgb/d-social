@@ -1,3 +1,15 @@
+type CreatorSettings = {
+  colorFilter?: string
+  overlayText?: string
+  sticker?: string
+  trimStart?: number
+  trimEnd?: number
+  originalVolume?: number
+  musicVolume?: number
+  audioSource?: string
+  audioTrackUrl?: string
+}
+
 const FILTERS = {
   none: 'none',
   warm: 'saturate(1.15) sepia(.18)',
@@ -6,7 +18,7 @@ const FILTERS = {
   cool: 'saturate(.9) hue-rotate(12deg)',
 }
 
-function drawOverlay(context, canvas, settings) {
+function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, settings: CreatorSettings) {
   const sticker = String(settings.sticker || '')
   const text = String(settings.overlayText || '').trim()
   if (!sticker && !text) return
@@ -36,18 +48,18 @@ function drawOverlay(context, canvas, settings) {
   context.shadowOffsetY = 0
 }
 
-function canvasBlob(canvas, type, quality) {
+function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Không kết xuất được media trên thiết bị này.')), type, quality))
 }
 
-async function processImage(file, settings) {
+async function processImage(file: File, settings: CreatorSettings): Promise<File> {
   const hasEdits = (settings.colorFilter && settings.colorFilter !== 'none') || settings.overlayText || settings.sticker
   if (!hasEdits) return file
   const imageUrl = URL.createObjectURL(file)
   try {
     const image = new Image()
     image.src = imageUrl
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       image.onload = resolve
       image.onerror = () => reject(new Error('Không đọc được ảnh để áp dụng chỉnh sửa.'))
     })
@@ -56,7 +68,7 @@ async function processImage(file, settings) {
     canvas.height = image.naturalHeight
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Thiết bị không hỗ trợ kết xuất ảnh.')
-    context.filter = FILTERS[settings.colorFilter] || 'none'
+    context.filter = FILTERS[settings.colorFilter as keyof typeof FILTERS] || 'none'
     context.drawImage(image, 0, 0)
     context.filter = 'none'
     drawOverlay(context, canvas, settings)
@@ -69,8 +81,8 @@ async function processImage(file, settings) {
   }
 }
 
-function waitForEvent(target, successEvent, errorEvent, timeoutMs = 12000) {
-  return new Promise((resolve, reject) => {
+function waitForEvent(target: EventTarget, successEvent: string, errorEvent: string | null, timeoutMs = 12000): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => finish(new Error('Hết thời gian chờ khi xử lý media.')), timeoutMs)
     const cleanup = () => {
       clearTimeout(timer)
@@ -100,7 +112,7 @@ function chooseRecorderMimeType() {
   return options.find(type => MediaRecorder.isTypeSupported?.(type)) || ''
 }
 
-async function processVideo(file, settings, onProgress) {
+async function processVideo(file: File, settings: CreatorSettings, onProgress?: (percent: number) => void): Promise<File> {
   if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) {
     throw new Error('Trình duyệt này chưa hỗ trợ xuất video đã chỉnh sửa. Hãy cập nhật Chrome/Safari hoặc dùng trình duyệt khác.')
   }
@@ -110,11 +122,11 @@ async function processVideo(file, settings, onProgress) {
   video.playsInline = true
   video.muted = false
   video.src = videoUrl
-  let audioContext
-  let music
+  let audioContext: AudioContext | null = null
+  let music: HTMLAudioElement | null = null
   let animationFrame = 0
-  let recorder
-  let canvasStream
+  let recorder: MediaRecorder | null = null
+  let canvasStream: MediaStream | null = null
   try {
     await waitForEvent(video, 'loadedmetadata', 'error')
     const duration = Number(video.duration)
@@ -124,7 +136,7 @@ async function processVideo(file, settings, onProgress) {
     if (end - start < 15 || end - start > 60 || end > duration || start >= duration) {
       throw new Error('Video phải có đoạn xuất dài từ 15 đến 60 giây và nằm trong thời lượng video gốc.')
     }
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Không thể tua đến đoạn video đã chọn.')), 10000)
       const onSeek = () => { clearTimeout(timer); resolve() }
       video.addEventListener('seeked', onSeek, { once: true })
@@ -140,7 +152,9 @@ async function processVideo(file, settings, onProgress) {
     if (!context) throw new Error('Không tạo được khung hình kết xuất.')
     canvasStream = canvas.captureStream(30)
 
-    audioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const AudioContextConstructor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextConstructor) throw new Error('Trình duyệt không hỗ trợ trộn âm thanh khi xuất video.')
+    audioContext = new AudioContextConstructor()
     const destination = audioContext.createMediaStreamDestination()
     const originalGain = audioContext.createGain()
     originalGain.gain.value = Math.max(0, Math.min(100, Number(settings.originalVolume ?? 100))) / 100
@@ -166,9 +180,9 @@ async function processVideo(file, settings, onProgress) {
 
     const mimeType = chooseRecorderMimeType()
     if (!mimeType) throw new Error('Trình duyệt không có định dạng MediaRecorder tương thích để xuất video.')
-    const chunks = []
+    const chunks: Blob[] = []
     recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 3_500_000, audioBitsPerSecond: 128_000 })
-    const recorded = new Promise((resolve, reject) => {
+    const recorded = new Promise<Blob>((resolve, reject) => {
       recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data) }
       recorder.onerror = () => reject(new Error('Xuất video thất bại. Hãy thử lại với video ngắn hơn.'))
       recorder.onstop = () => {
@@ -229,7 +243,7 @@ async function processVideo(file, settings, onProgress) {
   }
 }
 
-export async function processCreatorMedia(file, settings = {}, onProgress) {
+export async function processCreatorMedia(file: File, settings: CreatorSettings = {}, onProgress?: (percent: number) => void): Promise<File> {
   if (!file) return file
   if (file.type.startsWith('image/')) return processImage(file, settings)
   if (file.type.startsWith('video/')) return processVideo(file, settings, onProgress)
