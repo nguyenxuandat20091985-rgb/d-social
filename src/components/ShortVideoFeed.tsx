@@ -43,7 +43,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
   const [commentError, setCommentError] = useState('')
   const [shareNotice, setShareNotice] = useState('')
 
-  const videos = useMemo(() => posts.filter(post => post?.media_type === 'video' && post?.media_url), [posts])
+  const videos = useMemo(() => posts.filter(post => !!post?.media_url), [posts])
 
   useEffect(() => {
     setActiveId(current => videos.some(post => post.id === current) ? current : (videos[0]?.id || null))
