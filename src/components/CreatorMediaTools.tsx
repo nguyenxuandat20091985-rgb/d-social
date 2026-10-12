@@ -28,7 +28,12 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
     const video = document.createElement('video')
     video.preload = 'metadata'
     video.onloadedmetadata = () => {
-      setDuration(Number.isFinite(video.duration) ? video.duration : 0)
+      const actualDuration = Number.isFinite(video.duration) ? video.duration : 0
+      setDuration(actualDuration)
+      const currentEnd = Number(settings?.trimEnd || 60)
+      if (actualDuration > 0 && (currentEnd > actualDuration || currentEnd > 60)) {
+        onChange?.({ ...settings, trimEnd: Math.floor(Math.min(60, actualDuration)) })
+      }
       URL.revokeObjectURL(url)
     }
     video.onerror = () => URL.revokeObjectURL(url)
