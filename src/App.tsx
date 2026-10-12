@@ -754,42 +754,38 @@ function Feed({ userId }) {
     else { setLoading(true); setLoadError(''); setHasMore(true) }
     try {
       if (mode === 'popular') {
-        // Featured is ranked across the community by server-side interactions in the rolling 24-hour window.
-        const { data: ranked, error: rankingError } = await supabase.rpc('get_home_featured_posts')
-        if (rankingError) throw new Error(rankingError.message || 'Không thể tính thứ hạng Nổi bật.')
-        const rankedIds = (ranked || []).map(row => row.id).filter(Boolean)
-        if (!rankedIds.length) {
-          setPosts([])
-          setHasMore(false)
-          const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
-          setPeople(peeps || [])
-          return
-        }
-        let featuredQuery = await supabase.from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id)')
-          .in('id', rankedIds)
+        // Short videos: newest first, 20 per page. No engagement score or 5-item cap.
+        const offset = append ? posts.length : 0
+        let videoQuery = supabase.from('posts')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .is('deleted_at', null)
-        if (featuredQuery.error) {
-          featuredQuery = await supabase.from('posts')
-            .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id)')
-            .in('id', rankedIds)
+          .not('media_url', 'is', null)
+          .order('created_at', { ascending: false })
+        let { data, error } = await videoQuery.range(offset, offset + 19)
+        if (error) {
+          const fallback = await supabase.from('posts')
+            .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
             .eq('is_published', true)
+            .is('deleted_at', null)
+            .not('media_url', 'is', null)
+            .order('created_at', { ascending: false })
+            .range(offset, offset + 19)
+          if (fallback.error) throw new Error(fallback.error.message || 'Không thể tải video ngắn.')
+          data = fallback.data
         }
-        if (featuredQuery.error) throw new Error(featuredQuery.error.message || 'Không thể tải bài Nổi bật.')
-        const byId = new Map((featuredQuery.data || []).map(post => [post.id, post]))
-        const orderedPosts = rankedIds.map(id => byId.get(id)).filter(Boolean)
-        const authorIds = [...new Set(orderedPosts.map(post => post.author_id || post.user_id).filter(Boolean))]
-        let profileMap = {}
-        if (authorIds.length) {
-          const { data: profiles, error: profileError } = await supabase.from('profiles')
-            .select('id,full_name,username,avatar_url').in('id', authorIds)
-          if (profileError) throw profileError
-          profileMap = Object.fromEntries((profiles || []).map(profile => [profile.id, profile]))
-        }
-        setPosts(orderedPosts.map(post => ({ ...post, profiles: profileMap[post.author_id || post.user_id] || null })))
-        setHasMore(false)
-        const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
+        const page = (data || []).filter(post => !!post.media_url && !post.deleted_at)
+        setHasMore(page.length === 20)
+        setPosts(current => {
+          if (!append) return page
+          const seen = new Set(current.map(post => post.id))
+          return [...current, ...page.filter(post => !seen.has(post.id))]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        })
+        const { data: peeps } = await supabase.from('profiles')
+          .select('id,username,full_name,avatar_url')
+          .order('created_at', { ascending: false })
+          .limit(16)
         setPeople(peeps || [])
         return
       }
@@ -859,7 +855,7 @@ function Feed({ userId }) {
         </div>
       )
     }
-    return <ShortVideoFeed posts={posts} userId={userId} onBack={() => { setFeedMode('latest'); setPosts([]); setLoading(true) }} />
+    return <ShortVideoFeed posts={posts} userId={userId} hasMore={hasMore} pageLoading={pageLoading} loadMore={() => { if (!pageLoading && hasMore) load({ append: true, mode: 'popular' }) }} onBack={() => { setFeedMode('latest'); setPosts([]); setLoading(true) }} />
   }
 
   const changeMode = mode => {
