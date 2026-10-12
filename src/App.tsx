@@ -144,6 +144,7 @@ function Composer({ userId, onPublished, onClose }) {
   const creatorToolsRef = React.useRef(null)
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
+  const [creatorStep, setCreatorStep] = useState('edit')
   const [error, setError] = useState('')
   const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
 
@@ -257,6 +258,44 @@ function Composer({ userId, onPublished, onClose }) {
 
   const formatSize = size => size >= 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(size / 1024)) + ' KB'
 
+
+  const publishAsStory = async () => {
+    if (busy || !files[0]) return
+    if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
+    if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng media và âm thanh trước khi đăng tin.')
+    if (files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn nhạc Pixabay hoặc dùng âm thanh gốc.')
+    setBusy(true); setError(''); let uploadedPath = null
+    try {
+      const sourceFile = files[0]
+      const uploadFile = await processCreatorMedia(sourceFile, creatorSettings, percent => setStage('Đang kết xuất video: ' + percent + '%…'))
+      setStage('Đang tải media lên…')
+      const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'bin'
+      const path = userId + '/stories/' + crypto.randomUUID() + '.' + ext
+      const up = await supabase.storage.from('social-media').upload(path, uploadFile, { contentType: uploadFile.type, upsert: false })
+      if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
+      uploadedPath = path
+      const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+      const { error: insertError } = await supabase.from('stories').insert({ user_id:userId, media_url, media_type:sourceFile.type.startsWith('video/')?'video':'image', caption:null, expires_at:new Date(Date.now()+24*60*60*1000).toISOString(), creator_settings:creatorSettings, privacy:creatorSettings.privacy||'public', audio_url:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackUrl||null):null, audio_title:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackTitle||null):null, is_muted:false, copyright_audio_status:'unknown' })
+      if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
+      onClose?.(); Promise.resolve().then(()=>onPublished?.()).catch(err=>console.error('Không làm mới Tin 24 giờ:',err))
+    } catch (e) { if(uploadedPath) try { await supabase.storage.from('social-media').remove([uploadedPath]) } catch {} setError(e?.message||'Không đăng được tin.') }
+    finally { setBusy(false); setStage('') }
+  }
+
+  if (files.length > 0 && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      {files[0].type.startsWith('video/') ? <video src={previews[0]} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
+      {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+    </div>
+    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFiles([])} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button><span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black tracking-wide">D-SOCIAL · v2.0 Fullscreen</span></div>
+    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
+    <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
+      <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-12 flex-1 rounded-full border border-white/60 bg-white/10 px-3 text-sm font-bold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
+      <button type="button" disabled={busy} onClick={()=>setCreatorStep('caption')} className="min-h-12 flex-1 rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">Tiếp →</button>
+    </div>
+    {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
+  </div>
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-2 sm:p-3"
@@ -265,7 +304,7 @@ function Composer({ userId, onPublished, onClose }) {
     >
       <section className="d-card home-post-composer w-full max-w-2xl overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" style={{ maxHeight: '92dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Tạo bài viết">
         <div className="flex items-center justify-between mb-3">
-          <div><div className="font-bold text-base">Tạo bài viết</div><div className="text-xs d-muted mt-0.5">Chia sẻ với cộng đồng của bạn</div></div>
+          <div><div className="font-bold text-base">Tạo bài viết · v2.0 Fullscreen</div><div className="text-xs d-muted mt-0.5">Bước 2/2 · Nhập caption và đăng bài</div></div>
           {onClose && <button type="button" onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center" aria-label="Đóng" title={busy ? 'Đóng cửa sổ; quá trình đăng tiếp tục ở nền' : 'Đóng'}><X size={18} /></button>}
         </div>
         <textarea value={text} onChange={e => { setText(e.target.value); if (error) setError('') }} maxLength={2000} placeholder="Bạn đang nghĩ gì?" disabled={busy} className="home-post-textarea w-full bg-transparent resize-y outline-none min-h-[112px] text-[15px] disabled:opacity-70" autoFocus />
@@ -283,10 +322,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        {files.length > 0 && <div ref={creatorToolsRef} className="scroll-mt-3">
-          <div className="p-4 bg-yellow-200 text-black font-bold rounded-lg my-3">TEST TOOLBAR</div>
-          <CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" />
-        </div>}
+        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>setCreatorStep('edit')}>Quay lại chỉnh sửa media</button></div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
