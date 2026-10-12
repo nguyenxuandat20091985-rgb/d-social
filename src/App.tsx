@@ -122,9 +122,6 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
   return (
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-3 px-1">
-        <div>
-          <div className="font-black text-sm"> </div>
-        </div>
         <button type="button" onClick={onAddStory} className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl px-3 py-2" style={{ color: 'var(--d-primary)', background: 'var(--d-primary-soft)' }}><CirclePlus size={16}/> Đăng tin</button>
       </div>
       <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-hide">
