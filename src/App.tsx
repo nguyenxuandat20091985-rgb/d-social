@@ -278,7 +278,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        {files.length > 0 && <CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" />}
+        <CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" />
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
