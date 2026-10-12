@@ -196,20 +196,28 @@ function Composer({ userId, onPublished, onClose }) {
     setBusy(true)
     const uploadedPaths = []
     try {
-      let media_url = null, media_type = null
-      const image_urls = []
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
+      setStage(files.length > 1 ? `Đang tải đồng thời ${files.length} ảnh lên…` : files[0]?.type.startsWith('video/') ? 'Đang tải video lên…' : files.length ? 'Đang tải ảnh lên…' : 'Đang lưu bài viết…')
+      // Upload attachments concurrently to reduce waiting time on mobile networks.
+      // Wait for every upload to settle so successful files can always be cleaned up on failure.
+      const uploads = await Promise.allSettled(files.map(async file => {
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
         if (up.error) throw new Error(`Không tải được ${file.name}: ${up.error.message}`)
         uploadedPaths.push(path)
-        let url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-        if (file.type.startsWith('video/')) { media_url = url; media_type = 'video' }
-        else { image_urls.push(url); if (!media_url) media_url = url; media_type = 'image' }
-      }
+        return {
+          file,
+          url: supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl,
+        }
+      }))
+      const failedUpload = uploads.find(result => result.status === 'rejected')
+      if (failedUpload) throw failedUpload.reason
+
+      const media = uploads.map(result => result.value)
+      const image_urls = media.filter(item => item.file.type.startsWith('image/')).map(item => item.url)
+      const video = media.find(item => item.file.type.startsWith('video/'))
+      const media_url = video?.url || image_urls[0] || null
+      const media_type = video ? 'video' : image_urls.length ? 'image' : null
       setStage('Đang lưu bài viết…')
       const { error: err } = await supabase.from('posts').insert({
         author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type,
