@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Heart, MessageCircle, Share2, Plus, Check, Play, Pause,
-  Volume2, VolumeX, Music2, Send, X, LoaderCircle
+  Volume2, VolumeX, Music2, Disc3, Search, Bookmark, Send, X, LoaderCircle
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { moderateText } from '../lib/moderation'
@@ -44,8 +44,21 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
   const [commentBusy, setCommentBusy] = useState(false)
   const [commentError, setCommentError] = useState('')
   const [shareNotice, setShareNotice] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [savedById, setSavedById] = useState({})
+  const [saveCounts, setSaveCounts] = useState({})
 
-  const videos = useMemo(() => posts.filter(post => !!post?.media_url), [posts])
+  const allVideos = useMemo(() => posts.filter(post => !!post?.media_url), [posts])
+  const videos = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase('vi')
+    if (!query) return allVideos
+    return allVideos.filter(post => {
+      const profile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles
+      return [post.content, profile?.full_name, profile?.username]
+        .some(value => String(value || '').toLocaleLowerCase('vi').includes(query))
+    })
+  }, [allVideos, searchQuery])
 
   useEffect(() => {
     setActiveId(current => videos.some(post => post.id === current) ? current : (videos[0]?.id || null))
@@ -145,6 +158,56 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
     loadEngagement().catch(error => console.error('Không tải được tương tác video:', error))
     return () => { cancelled = true }
   }, [videos, userId])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadSavedVideos = async () => {
+      if (!supabase || !userId || !videos.length) {
+        if (!cancelled) { setSavedById({}); setSaveCounts({}) }
+        return
+      }
+      const ids = videos.map(post => post.id)
+      const { data: savedRows, error: savedError } = await supabase
+        .from('saved_posts')
+        .select('post_id')
+        .eq('user_id', userId)
+        .in('post_id', ids)
+      const savedState = {}
+      if (!savedError) (savedRows || []).forEach(row => { savedState[row.post_id] = true })
+      const countRows = await Promise.all(videos.map(async post => {
+        const { data, error } = await supabase.rpc('short_video_save_count', { p_post_id: post.id })
+        return [post.id, error ? (savedState[post.id] ? 1 : 0) : Number(data || 0)]
+      }))
+      if (!cancelled) {
+        setSavedById(savedState)
+        setSaveCounts(Object.fromEntries(countRows))
+      }
+    }
+    loadSavedVideos().catch(error => console.error('Không tải được lượt lưu video:', error))
+    return () => { cancelled = true }
+  }, [videos, userId])
+
+  const toggleSave = async post => {
+    if (!supabase || !userId) {
+      setShareNotice('Anh cần đăng nhập để lưu video.')
+      window.setTimeout(() => setShareNotice(''), 2200)
+      return
+    }
+    const alreadySaved = !!savedById[post.id]
+    setSavedById(current => ({ ...current, [post.id]: !alreadySaved }))
+    setSaveCounts(current => ({ ...current, [post.id]: Math.max(0, (current[post.id] || 0) + (alreadySaved ? -1 : 1)) }))
+    const result = alreadySaved
+      ? await supabase.from('saved_posts').delete().eq('user_id', userId).eq('post_id', post.id)
+      : await supabase.from('saved_posts').insert({ user_id: userId, post_id: post.id })
+    if (result.error) {
+      setSavedById(current => ({ ...current, [post.id]: alreadySaved }))
+      setSaveCounts(current => ({ ...current, [post.id]: Math.max(0, (current[post.id] || 0) + (alreadySaved ? 1 : -1)) }))
+      setShareNotice('Chưa lưu được video. Anh thử lại nhé.')
+    } else {
+      setShareNotice(alreadySaved ? 'Đã bỏ lưu video' : 'Đã lưu')
+    }
+    window.setTimeout(() => setShareNotice(''), 2200)
+  }
 
   const togglePlay = useCallback((postId) => {
     if (postId !== activeId) {
@@ -260,8 +323,8 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
         <button type="button" onClick={onBack} className="absolute left-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/10" aria-label="Quay lại"><ArrowLeft size={22}/></button>
         <div className="max-w-sm text-center">
           <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-white/10"><Music2 size={28}/></div>
-          <h2 className="text-xl font-bold">Chưa có video ngắn nổi bật</h2>
-          <p className="mt-2 text-sm leading-6 text-white/65">Video mới của cộng đồng sẽ xuất hiện tại đây.</p>
+          <h2 className="text-xl font-bold">{searchQuery.trim() ? 'Không tìm thấy video phù hợp' : 'Chưa có video ngắn nổi bật'}</h2>
+          <p className="mt-2 text-sm leading-6 text-white/65">{searchQuery.trim() ? 'Thử từ khóa khác nhé.' : 'Video mới của cộng đồng sẽ xuất hiện tại đây.'}</p>
           <button type="button" onClick={onBack} className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-bold text-black">Về Trang chủ</button>
         </div>
       </div>
@@ -305,7 +368,14 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
                 aria-label={`Video của ${authorName}`}
               />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-black/75" />
-              <button type="button" onClick={onBack} className="absolute left-3 top-3 z-20 grid h-11 w-11 place-items-center rounded-full bg-black/35 backdrop-blur-sm" aria-label="Quay lại Trang chủ"><ArrowLeft size={23}/></button>
+              <button type="button" onClick={onBack} className="absolute left-3 top-3 z-30 grid h-11 w-11 place-items-center rounded-full bg-black/35 backdrop-blur-sm" aria-label="Quay lại Trang chủ"><ArrowLeft size={23}/></button>
+              <button type="button" onClick={() => setSearchOpen(value => !value)} className="absolute right-3 top-3 z-30 grid h-11 w-11 place-items-center rounded-full bg-black/35 backdrop-blur-sm" aria-label={searchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm video'}><Search size={22}/></button>
+              {searchOpen && <div className="absolute left-4 right-4 top-16 z-30 flex items-center gap-2 rounded-full border border-white/20 bg-black/75 px-4 py-2 backdrop-blur-md" onClick={event => event.stopPropagation()}>
+                <Search size={18} className="shrink-0 text-white/70"/>
+                <input autoFocus value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery('') } }} placeholder="Tìm video, người đăng, từ khóa..." className="min-w-0 flex-1 bg-transparent py-1 text-sm text-white outline-none placeholder:text-white/55" aria-label="Từ khóa tìm video"/>
+                {!!searchQuery && <button type="button" onClick={() => setSearchQuery('')} className="grid h-7 w-7 place-items-center rounded-full bg-white/10" aria-label="Xóa từ khóa"><X size={15}/></button>}
+                <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery('') }} className="grid h-7 w-7 place-items-center rounded-full bg-white/10" aria-label="Đóng tìm kiếm"><X size={15}/></button>
+              </div>}
               <div className="absolute right-3 bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex w-14 flex-col items-center gap-3">
                 <div className="relative mb-1">
                   <MiniAvatar src={profile?.avatar_url} name={authorName} size={46}/>
@@ -318,6 +388,10 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
                 <button type="button" onClick={() => loadComments(post)} className="flex min-h-10 flex-col items-center gap-0.5 text-white drop-shadow" aria-label="Mở bình luận">
                   <MessageCircle size={30} fill="rgba(0,0,0,.12)" strokeWidth={2.3}/>
                   <span className="text-xs font-semibold">{compactCount(commentCounts[post.id])}</span>
+                </button>
+                <button type="button" onClick={() => toggleSave(post)} className="flex min-h-10 flex-col items-center gap-0.5 drop-shadow" aria-label={savedById[post.id] ? 'Bỏ lưu video' : 'Lưu video'}>
+                  <Bookmark size={28} strokeWidth={2.3} fill={savedById[post.id] ? '#facc15' : 'rgba(0,0,0,.12)'} color={savedById[post.id] ? '#facc15' : 'white'}/>
+                  <span className="text-xs font-semibold">{compactCount(saveCounts[post.id])}</span>
                 </button>
                 <button type="button" onClick={() => sharePost(post)} className="flex min-h-10 flex-col items-center gap-0.5 text-white drop-shadow" aria-label="Chia sẻ video">
                   <Share2 size={29} strokeWidth={2.3}/><span className="text-xs font-semibold">Chia sẻ</span>
@@ -334,10 +408,10 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
                 </div>
                 {post.content && <p className="mb-3 max-w-[min(78vw,520px)] whitespace-pre-wrap break-words text-sm leading-5 drop-shadow [text-shadow:0_1px_3px_rgba(0,0,0,.65)]">{post.content}</p>}
                 <div className="flex max-w-full items-center gap-2 text-xs text-white/90">
-                  <Music2 size={15} className={`music-disc-icon shrink-0 ${isActive && !paused ? 'is-spinning' : 'is-paused'}`} aria-hidden="true"/><span className="truncate">{authorName} · Âm thanh gốc</span>
+                  <Disc3 size={19} className={`music-disc-icon shrink-0 ${isActive && !paused ? 'is-spinning' : 'is-paused'}`} aria-hidden="true"/><span className="truncate">{authorName} · Âm thanh gốc</span>
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 z-20 h-[3px] bg-white/30" aria-label="Tiến trình video">
+              <div className="absolute bottom-0 left-0 right-0 z-20 h-[2px] bg-white/30" aria-label="Tiến trình video">
                 <div className="h-full bg-white" style={{ width: `${isActive && duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} />
               </div>
               <input
