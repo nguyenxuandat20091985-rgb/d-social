@@ -260,12 +260,13 @@ function Composer({ userId, onPublished, onClose }) {
         </div>
         <textarea value={text} onChange={e => { setText(e.target.value); if (error) setError('') }} maxLength={2000} placeholder="Bạn đang nghĩ gì?" disabled={busy} className="home-post-textarea w-full bg-transparent resize-y outline-none min-h-[112px] text-[15px] disabled:opacity-70" autoFocus />
         {files.length > 0 && <div className="home-post-media-grid mt-3 mb-3">
-          {files.map((file, index) => <div key={file.name + file.size + index} className="home-post-media-item">
+          {files.map((file, index) => <div key={file.name + file.size + index} className="home-post-media-item relative">
             {file.type.startsWith('image/') && previews[index]
-              ? <img src={previews[index]} alt={`Xem trước ${file.name}`} className="home-post-media-preview" />
+              ? <img src={previews[index]} alt={`Xem trước ${file.name}`} className="home-post-media-preview" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />
               : file.type.startsWith('video/') && previews[index]
-                ? <video src={previews[index]} controls playsInline preload="metadata" className="home-post-media-preview home-post-video-preview" />
+                ? <video src={previews[index]} controls playsInline preload="metadata" className="home-post-media-preview home-post-video-preview" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />
                 : null}
+            {(creatorSettings.overlayText || creatorSettings.sticker) && <div className="pointer-events-none absolute inset-x-2 bottom-12 z-[2] text-center font-bold text-white drop-shadow-[0_2px_5px_rgba(0,0,0,.9)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
             <div className="flex items-center justify-between gap-2 p-2">
               <div className="min-w-0"><span className="block text-xs font-semibold truncate">{file.name}</span><span className="block text-[11px] d-muted">{formatSize(file.size)}</span></div>
               <button type="button" disabled={busy} onClick={() => setFiles(current => current.filter((_, i) => i !== index))} className="d-muted p-2 min-w-10 min-h-10 grid place-items-center disabled:opacity-40" aria-label={`Bỏ ${file.name}`}><X size={16} /></button>
@@ -379,8 +380,8 @@ function StoryComposer({ userId, onClose, onPublished }) {
       <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" disabled={busy} className="d-muted p-2 disabled:opacity-40" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
       <p className="text-xs d-muted mb-3">Chọn một ảnh hoặc video. Tin sẽ tự ẩn sau 24 giờ.</p>
       <div className="home-story-file-picker flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 min-h-36 d-border-c" style={{ background: 'var(--d-surface-2)' }}>
-        {previewUrl && file?.type.startsWith('image/') ? <img src={previewUrl} alt="Xem trước ảnh tin" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
-          previewUrl && file?.type.startsWith('video/') ? <video src={previewUrl} controls playsInline preload="metadata" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
+        {previewUrl && file?.type.startsWith('image/') ? <div className="relative w-full"><img src={previewUrl} alt="Xem trước ảnh tin" className="home-story-preview max-h-64 w-full rounded-xl object-contain" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />{(creatorSettings.overlayText || creatorSettings.sticker) && <div className="pointer-events-none absolute inset-x-2 bottom-3 text-center font-bold text-white drop-shadow-[0_2px_5px_rgba(0,0,0,.9)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}</div> :
+          previewUrl && file?.type.startsWith('video/') ? <div className="relative w-full"><video src={previewUrl} controls playsInline preload="metadata" className="home-story-preview max-h-64 w-full rounded-xl object-contain" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />{(creatorSettings.overlayText || creatorSettings.sticker) && <div className="pointer-events-none absolute inset-x-2 bottom-3 text-center font-bold text-white drop-shadow-[0_2px_5px_rgba(0,0,0,.9)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}</div> :
           <ImageIcon size={28} style={{ color: 'var(--d-primary)' }}/>}
         <span className="text-sm font-semibold text-center break-all">{file ? file.name : 'Chưa chọn ảnh hoặc video'}</span>
         {file && <span className="text-xs d-muted">{fileSize}</span>}
@@ -727,7 +728,7 @@ function PostCard({ post, userId, onRemoved }) {
             <button type="button" onClick={() => setShowMusicPicker(true)} className="mt-2 rounded-lg px-3 py-2 font-bold text-black" style={{ background: '#FACC15' }}>Đổi bài hát</button>
           </div>}
           {activeAudioUrl && <div className="absolute left-3 bottom-3 z-[2] rounded-full bg-black/70 px-3 py-1.5 text-xs text-white">♫ {activeAudioTitle || 'Nhạc thay thế'}</div>}
-          {showSoundButton && <button
+          {showSoundButton && !copyrightMuted && <button
             type="button"
             onClick={toggleHomeVideoSound}
             className="absolute right-3 bottom-14 z-[2] inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2 text-xs font-semibold text-white shadow"
