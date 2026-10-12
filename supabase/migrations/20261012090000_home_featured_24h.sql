@@ -26,50 +26,63 @@ as $$
     where coalesce(p.is_published, true) = true
       and (to_jsonb(p)->>'deleted_at' is null or to_jsonb(p)->>'deleted_at' = '')
   ),
-  likes as (
+  likes_24h as (
     select l.post_id, l.user_id, l.created_at
     from public.post_likes l
     join eligible_posts ep on ep.id = l.post_id
     where l.created_at >= now() - interval '24 hours'
       and l.created_at <= now()
   ),
-  comments as (
-    select c.post_id, c.user_id, c.created_at
+  comments_24h as (
+    select c.post_id, c.id as comment_id, c.user_id, c.created_at
     from public.post_comments c
     join eligible_posts ep on ep.id = c.post_id
     where c.created_at >= now() - interval '24 hours'
       and c.created_at <= now()
   ),
-  interaction_counts as (
+  engagers as (
+    select post_id, user_id, created_at from likes_24h
+    union all
+    select post_id, user_id, created_at from comments_24h
+  ),
+  likes_count as (
+    select post_id, count(distinct user_id)::bigint as n
+    from likes_24h group by post_id
+  ),
+  comments_count as (
+    select post_id, count(distinct comment_id)::bigint as n
+    from comments_24h group by post_id
+  ),
+  engager_count as (
+    select post_id,
+      count(distinct user_id)::bigint as unique_engagers,
+      count(*) filter (where created_at >= now() - interval '2 hours')::bigint as last_2h_events,
+      count(*) filter (where created_at < now() - interval '2 hours')::bigint as prior_22h_events
+    from engagers group by post_id
+  ),
+  scored as (
     select ep.id,
-      count(distinct l.user_id)::bigint as likes_24h,
-      count(distinct c.id)::bigint as comments_24h,
-      count(distinct engager.user_id)::bigint as unique_engagers,
-      count(*) filter (where engager.created_at >= now() - interval '2 hours')::bigint as last_2h_events,
-      count(*) filter (where engager.created_at < now() - interval '2 hours')::bigint as prior_22h_events
+      coalesce(lc.n, 0)::bigint as likes_24h,
+      coalesce(cc.n, 0)::bigint as comments_24h,
+      coalesce(ec.unique_engagers, 0)::bigint as unique_engagers,
+      (
+        coalesce(lc.n, 0)
+        + 3 * coalesce(cc.n, 0)
+        + least(10::numeric, coalesce(ec.unique_engagers, 0) * 0.5)
+        + least(10::numeric, greatest(0::numeric,
+            coalesce(ec.last_2h_events, 0) * 0.5
+            - (coalesce(ec.prior_22h_events, 0) / 11.0) * 0.5
+          ))
+      )::numeric as score
     from eligible_posts ep
-    left join likes l on l.post_id = ep.id
-    left join comments c on c.post_id = ep.id
-    left join lateral (
-      select l2.user_id, l2.created_at from likes l2 where l2.post_id = ep.id
-      union all
-      select c2.user_id, c2.created_at from comments c2 where c2.post_id = ep.id
-    ) engager on true
-    group by ep.id
+    left join likes_count lc on lc.post_id = ep.id
+    left join comments_count cc on cc.post_id = ep.id
+    left join engager_count ec on ec.post_id = ep.id
   )
-  select ic.id,
-    (ic.likes_24h + 3 * ic.comments_24h
-      + least(10::numeric, ic.unique_engagers * 0.5)
-      + least(10::numeric, greatest(0::numeric,
-          ic.last_2h_events * 0.5 - (ic.prior_22h_events / 11.0) * 0.5
-        ))
-    )::numeric as score,
-    ic.likes_24h,
-    ic.comments_24h,
-    ic.unique_engagers
-  from interaction_counts ic
-  where ic.likes_24h > 0 or ic.comments_24h > 0
-  order by score desc, ic.unique_engagers desc, ic.comments_24h desc, ic.id
+  select s.id, s.score, s.likes_24h, s.comments_24h, s.unique_engagers
+  from scored s
+  where s.likes_24h > 0 or s.comments_24h > 0
+  order by s.score desc, s.unique_engagers desc, s.comments_24h desc, s.id
   limit 5;
 $$;
 
