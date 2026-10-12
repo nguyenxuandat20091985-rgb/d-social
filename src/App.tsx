@@ -18,6 +18,7 @@ import { ShareMenu } from './components/ShareMenu'
 import { LOGO_SRC } from './lib/brand'
 import { ShortVideoFeed } from './components/ShortVideoFeed'
 import { CreatorMediaTools } from './components/CreatorMediaTools'
+import { MusicReplaceDialog } from './components/MusicReplaceDialog'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -419,8 +420,13 @@ function StoryViewer({ story, onClose, onPrev, onNext, hasPrev, hasNext, positio
 
 function PostCard({ post, userId, onRemoved }) {
   const homeVideoRef = React.useRef(null)
+  const replacementAudioRef = React.useRef(null)
   const soundButtonTimerRef = React.useRef(null)
   const [videoMuted, setVideoMuted] = useState(true)
+  const [showMusicPicker, setShowMusicPicker] = useState(false)
+  const [activeAudioUrl, setActiveAudioUrl] = useState(post.copyright_audio_status === 'replaced' ? post.audio_url : null)
+  const [activeAudioTitle, setActiveAudioTitle] = useState(post.copyright_audio_status === 'replaced' ? post.audio_title : '')
+  const [copyrightMuted, setCopyrightMuted] = useState(Boolean(post.is_muted || post.copyright_audio_status === 'muted_copyright'))
   const [showSoundButton, setShowSoundButton] = useState(true)
   const [liked, setLiked] = useState(Boolean(userId && post.likes?.some(x => x.user_id === userId)))
   const [count, setCount] = useState(post.likes?.length || 0)
@@ -504,6 +510,41 @@ function PostCard({ post, userId, onRemoved }) {
     }
   }, [post.id, post.media_type, post.media_url])
 
+  useEffect(() => {
+    const video = homeVideoRef.current
+    const audio = replacementAudioRef.current
+    if (!video || !audio || !activeAudioUrl) return
+    const syncTime = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && Math.abs(audio.currentTime - (video.currentTime % audio.duration)) > 0.6) audio.currentTime = video.currentTime % audio.duration
+    }
+    const onPlay = () => { syncTime(); audio.play().catch(() => {}) }
+    const onPause = () => audio.pause()
+    video.muted = true
+    setVideoMuted(true)
+    audio.volume = Math.max(0, Math.min(1, Number(post.creator_settings?.musicVolume ?? 30) / 100))
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
+    video.addEventListener('timeupdate', syncTime)
+    return () => {
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
+      video.removeEventListener('timeupdate', syncTime)
+      audio.pause()
+    }
+  }, [activeAudioUrl, post.id])
+
+  const applyReplacementTrack = async track => {
+    if (!supabase || !userId) return
+    const { error } = await supabase.from('posts').update({
+      audio_url: track.previewUrl, audio_title: track.title, is_muted: false, copyright_audio_status: 'replaced'
+    }).eq('id', post.id).eq('author_id', userId)
+    if (error) { alert('Không lưu được bài nhạc thay thế: ' + error.message); return }
+    setActiveAudioUrl(track.previewUrl)
+    setActiveAudioTitle(track.title)
+    setCopyrightMuted(false)
+    setShowMusicPicker(false)
+  }
+
   const revealSoundButton = () => {
     setShowSoundButton(true)
     if (soundButtonTimerRef.current) window.clearTimeout(soundButtonTimerRef.current)
@@ -515,6 +556,13 @@ function PostCard({ post, userId, onRemoved }) {
   const toggleHomeVideoSound = () => {
     const video = homeVideoRef.current
     if (!video) return
+    if (activeAudioUrl && replacementAudioRef.current) {
+      const nextMuted = !videoMuted
+      setVideoMuted(nextMuted)
+      replacementAudioRef.current.volume = nextMuted ? 0 : Math.max(0.01, Math.min(1, Number(post.creator_settings?.musicVolume ?? 30) / 100))
+      setShowSoundButton(true)
+      return
+    }
     const nextMuted = !videoMuted
     video.muted = nextMuted
     setVideoMuted(nextMuted)
@@ -665,7 +713,7 @@ function PostCard({ post, userId, onRemoved }) {
             ref={homeVideoRef}
             src={post.media_url}
             controls
-            muted={videoMuted}
+            muted={videoMuted || Boolean(activeAudioUrl) || copyrightMuted}
             playsInline
             preload="metadata"
             className="block w-full h-auto"
@@ -673,6 +721,12 @@ function PostCard({ post, userId, onRemoved }) {
             onClick={revealSoundButton}
             aria-label="Video bài viết trên Trang chủ"
           />
+          {activeAudioUrl && <audio ref={replacementAudioRef} src={activeAudioUrl} preload="metadata" className="hidden" />}
+          {copyrightMuted && <div className="absolute left-3 right-3 top-3 z-[3] rounded-xl bg-black/75 px-3 py-2 text-xs font-semibold text-white shadow">
+            <div>Âm thanh bị tắt do bản quyền</div>
+            <button type="button" onClick={() => setShowMusicPicker(true)} className="mt-2 rounded-lg px-3 py-2 font-bold text-black" style={{ background: '#FACC15' }}>Đổi bài hát</button>
+          </div>}
+          {activeAudioUrl && <div className="absolute left-3 bottom-3 z-[2] rounded-full bg-black/70 px-3 py-1.5 text-xs text-white">♫ {activeAudioTitle || 'Nhạc thay thế'}</div>}
           {showSoundButton && <button
             type="button"
             onClick={toggleHomeVideoSound}
@@ -705,6 +759,7 @@ function PostCard({ post, userId, onRemoved }) {
         </button>
         <ShareMenu postId={post.id} text={content} author={name} />
       </div>
+      {showMusicPicker && <MusicReplaceDialog onClose={() => setShowMusicPicker(false)} onSelect={applyReplacementTrack} />}
       {showComments && (
         <div className="px-4 pb-4 space-y-2 border-t d-border-c pt-3">
           {comments.map(c => (
@@ -778,7 +833,7 @@ function Feed({ userId }) {
         // Short videos: newest first, 20 per page. No engagement score or 5-item cap.
         const offset = append ? posts.length : 0
         let videoQuery = supabase.from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,creator_settings,audio_url,audio_title,is_muted,copyright_audio_status,reach_multiplier,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .is('deleted_at', null)
           .not('media_url', 'is', null)
