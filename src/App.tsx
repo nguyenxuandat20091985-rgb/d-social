@@ -123,8 +123,7 @@ function StoryRail({ people, stories = [], userId, onAddStory, onViewStory }) {
     <section className="d-card p-3 mb-3">
       <div className="flex items-center justify-between mb-3 px-1">
         <div>
-          <div className="font-black text-sm">Tin 24 giờ</div>
-          <div className="text-[11px] d-muted">Ảnh/video tự hết hạn sau 24 giờ</div>
+          <div className="font-black text-sm"> </div>
         </div>
         <button type="button" onClick={onAddStory} className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl px-3 py-2" style={{ color: 'var(--d-primary)', background: 'var(--d-primary-soft)' }}><CirclePlus size={16}/> Đăng tin</button>
       </div>
