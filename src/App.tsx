@@ -263,7 +263,7 @@ function Composer({ userId, onPublished, onClose }) {
       style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       onClick={e => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <section className="d-card home-post-composer w-full max-w-2xl max-h-[92dvh] overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" role="dialog" aria-modal="true" aria-label="Tạo bài viết">
+      <section className="d-card home-post-composer w-full max-w-2xl overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" style={{ maxHeight: '92dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Tạo bài viết">
         <div className="flex items-center justify-between mb-3">
           <div><div className="font-bold text-base">Tạo bài viết</div><div className="text-xs d-muted mt-0.5">Chia sẻ với cộng đồng của bạn</div></div>
           {onClose && <button type="button" onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center" aria-label="Đóng" title={busy ? 'Đóng cửa sổ; quá trình đăng tiếp tục ở nền' : 'Đóng'}><X size={18} /></button>}
@@ -283,7 +283,10 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        <div ref={creatorToolsRef} className="scroll-mt-3"><CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" /></div>
+        {files.length > 0 && <div ref={creatorToolsRef} className="scroll-mt-3">
+          <div className="p-4 bg-yellow-200 text-black font-bold rounded-lg my-3">TEST TOOLBAR</div>
+          <CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" />
+        </div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
@@ -396,7 +399,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const fileSize = file ? (file.size >= 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(file.size / 1024)) + ' KB') : ''
 
   return <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center bg-black/55 p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}>
-    <section className="d-card home-story-composer w-full max-w-lg p-4 max-h-[90dvh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
+    <section className="d-card home-story-composer w-full max-w-lg p-4" style={{ maxHeight: '90dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
       <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" disabled={busy} className="d-muted p-2 disabled:opacity-40" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
       <p className="text-xs d-muted mb-3">Chọn một ảnh hoặc video. Tin sẽ tự ẩn sau 24 giờ.</p>
       <div className="home-story-file-picker flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 min-h-36 d-border-c" style={{ background: 'var(--d-surface-2)' }}>
@@ -411,7 +414,10 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
-      <div ref={creatorToolsRef} className="scroll-mt-3"><CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="story" /></div>
+      {file && <div ref={creatorToolsRef} className="scroll-mt-3">
+        <div className="p-4 bg-yellow-200 text-black font-bold rounded-lg my-3">TEST TOOLBAR</div>
+        <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="story" />
+      </div>}
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
