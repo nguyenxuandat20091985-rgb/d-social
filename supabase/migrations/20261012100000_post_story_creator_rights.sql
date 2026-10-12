@@ -32,12 +32,16 @@ alter table public.stories
 create or replace function public.dsocial_apply_report_reach_policy()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
-as $$
+as $
 declare
   report_count integer;
 begin
+  if (select auth.uid()) is null then
+    raise exception 'Authentication required';
+  end if;
+
   if new.target_type = 'post'
     and (
       lower(new.reason) like '%bản quyền hình ảnh%'
@@ -67,6 +71,10 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.dsocial_apply_report_reach_policy() from public;
+revoke all on function public.dsocial_apply_report_reach_policy() from anon;
+revoke all on function public.dsocial_apply_report_reach_policy() from authenticated;
 
 drop trigger if exists dsocial_report_reach_policy on public.reports;
 create trigger dsocial_report_reach_policy
