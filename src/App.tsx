@@ -19,6 +19,7 @@ import { LOGO_SRC } from './lib/brand'
 import { ShortVideoFeed } from './components/ShortVideoFeed'
 import { CreatorMediaTools } from './components/CreatorMediaTools'
 import { MusicReplaceDialog } from './components/MusicReplaceDialog'
+import { processCreatorMedia } from './lib/mediaExport'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -201,8 +202,12 @@ function Composer({ userId, onPublished, onClose }) {
       let media_url = null, media_type = null
       const image_urls = []
       for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
+        const sourceFile = files[i]
+        setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
+        const file = await processCreatorMedia(sourceFile, creatorSettings, percent => {
+          if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+        })
+        setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
@@ -337,9 +342,14 @@ function StoryComposer({ userId, onClose, onPublished }) {
     setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
     let uploadedPath = null
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
+      setStage(file.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
+      const uploadFile = await processCreatorMedia(file, creatorSettings, percent => {
+        if (file.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+      })
+      setStage(file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
+      const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
-      const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
+      const up = await supabase.storage.from('social-media').upload(path, uploadFile, { contentType: uploadFile.type, upsert: false })
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
       let media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
