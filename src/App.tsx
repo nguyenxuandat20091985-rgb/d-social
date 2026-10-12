@@ -16,6 +16,7 @@ import { Notifications } from './components/NotificationsPanel'
 import { PublicProfilePage } from './components/PublicProfilePage'
 import { ShareMenu } from './components/ShareMenu'
 import { LOGO_SRC } from './lib/brand'
+import { ShortVideoFeed } from './components/ShortVideoFeed'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -847,6 +848,19 @@ function Feed({ userId }) {
   useEffect(() => { load({ mode: feedMode }); loadStories() }, [userId, feedMode])
 
   const currentProfile = people.find(p => p.id === userId)
+
+  // Nổi bật is a dedicated full-screen short-video experience; other feed modes stay unchanged.
+  if (feedMode === 'popular') {
+    if (loading) {
+      return (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <button type="button" onClick={() => { setFeedMode('latest'); setPosts([]); setLoading(true) }} className="absolute left-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-white/10" aria-label="Quay lại Trang chủ"><ChevronLeft size={23}/></button>
+          <div className="flex flex-col items-center gap-3 text-sm text-white/75"><span className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white"/><span>Đang tải video nổi bật…</span></div>
+        </div>
+      )
+    }
+    return <ShortVideoFeed posts={posts} userId={userId} onBack={() => { setFeedMode('latest'); setPosts([]); setLoading(true) }} />
+  }
 
   const changeMode = mode => {
     if (mode === feedMode) return
