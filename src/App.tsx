@@ -17,6 +17,7 @@ import { PublicProfilePage } from './components/PublicProfilePage'
 import { ShareMenu } from './components/ShareMenu'
 import { LOGO_SRC } from './lib/brand'
 import { ShortVideoFeed } from './components/ShortVideoFeed'
+import { CreatorMediaTools } from './components/CreatorMediaTools'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -141,6 +142,7 @@ function Composer({ userId, onPublished, onClose }) {
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
+  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
 
   useEffect(() => {
     try {
@@ -188,6 +190,8 @@ function Composer({ userId, onPublished, onClose }) {
     if (!text.trim() && !files.length) return setError('Nhập nội dung hoặc đính kèm ảnh/video trước khi đăng.')
     const mod = moderateText(text)
     if (!mod.allowed) return setError(mod.reason)
+    if (files.length && !creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng ảnh/video và âm thanh trước khi đăng.')
+    if (files.length === 1 && files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn một bản nhạc Pixabay hoặc chuyển về âm thanh gốc.')
     if (!postRateLimit(userId)) return setError('Anh đăng quá nhanh. Vui lòng chờ 60 giây rồi thử lại.')
 
     setBusy(true)
@@ -211,6 +215,10 @@ function Composer({ userId, onPublished, onClose }) {
       const { error: err } = await supabase.from('posts').insert({
         author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type,
         image_urls: image_urls.length ? image_urls : null, is_published: true,
+        creator_settings: creatorSettings,
+        audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
+        audio_title: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackTitle || null) : null,
+        is_muted: false, copyright_audio_status: 'unknown',
       })
       if (err) throw new Error(`Không lưu được bài viết: ${err.message}`)
 
@@ -263,6 +271,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
+        {files.length > 0 && <CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" />}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
@@ -270,9 +279,11 @@ function Composer({ userId, onPublished, onClose }) {
             <ImageIcon size={19} /><Video size={19} /><span className="text-xs font-semibold">{files.length ? 'Thêm tệp' : 'Ảnh/video'}</span>
             <input hidden type="file" accept="image/*,video/*" multiple disabled={busy} onChange={e => { pick(e.target.files); e.target.value = '' }} />
           </label>
-          <button type="button" disabled={busy || (!text.trim() && !files.length)} onClick={publish} className="d-btn-primary home-post-submit text-sm min-w-28 min-h-11">
-            {busy ? 'Đang đăng…' : 'Đăng bài'}
-          </button>
+          <div className="flex gap-2">
+            <button type="button" disabled={busy || (!text.trim() && !files.length)} onClick={publish} className="d-btn-primary home-post-submit text-sm min-h-11 px-3">
+              {busy ? 'Đang đăng…' : 'Đăng ngay'}
+            </button>
+          </div>
         </div>
         <p className="text-[11px] d-muted mt-2">Tối đa 10 ảnh mỗi bài; video đăng riêng. Bản nháp được lưu trên thiết bị.</p>
       </section>
@@ -287,6 +298,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
+  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
 
   useEffect(() => {
     if (!file) { setPreviewUrl(''); return }
@@ -316,6 +328,8 @@ function StoryComposer({ userId, onClose, onPublished }) {
     if (!file) return setError('Chọn một ảnh hoặc video để đăng tin.')
     const mod = moderateText(caption)
     if (!mod.allowed) return setError(mod.reason)
+    if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng ảnh/video và âm thanh trước khi đăng tin.')
+    if (file.type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn một bản nhạc Pixabay hoặc chuyển về âm thanh gốc.')
     setBusy(true)
     setError('')
     setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
@@ -331,6 +345,10 @@ function StoryComposer({ userId, onClose, onPublished }) {
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
         caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        creator_settings: creatorSettings,
+        audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
+        audio_title: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackTitle || null) : null,
+        is_muted: false, copyright_audio_status: 'unknown',
       })
       if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
 
@@ -371,6 +389,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
+      <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="story" />
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
@@ -575,9 +594,11 @@ function PostCard({ post, userId, onRemoved }) {
   }
 
   const reportPost = async () => {
-    const reason = prompt('Lý do báo cáo (spam, lừa đảo, nội dung xấu, vi phạm bản quyền ảnh/video/nhạc...)')
-    if (!reason?.trim() || !supabase) return
-    const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.trim().slice(0, 500) })
+    const choice = prompt('Chọn lý do báo cáo bằng số:\n1. Vi phạm bản quyền hình ảnh\n2. Giả mạo thương hiệu\n3. Nội dung không phù hợp')
+    const reasons = { '1': 'Vi phạm bản quyền hình ảnh', '2': 'Giả mạo thương hiệu', '3': 'Nội dung không phù hợp' }
+    const reason = reasons[String(choice || '').trim()]
+    if (!reason || !supabase || !userId) return
+    const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason })
     alert(error ? error.message : 'Đã gửi báo cáo. Cảm ơn bạn.')
     setMenu(false)
   }
