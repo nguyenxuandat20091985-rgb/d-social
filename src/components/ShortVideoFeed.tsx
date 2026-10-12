@@ -29,7 +29,9 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
   const lastLoadRequestedCount = useRef(0)
   const [activeId, setActiveId] = useState(posts[0]?.id || null)
   const [paused, setPaused] = useState(false)
-  const [muted, setMuted] = useState(true)
+  const [muted, setMuted] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
   const [likedById, setLikedById] = useState({})
   const [likeCounts, setLikeCounts] = useState({})
   const [commentCounts, setCommentCounts] = useState({})
@@ -87,12 +89,26 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
       video.muted = muted
       if (active && !paused) {
         const attempt = video.play()
-        if (attempt?.catch) attempt.catch(() => setPaused(true))
+        if (attempt?.catch) attempt.catch(() => {
+          // Some mobile browsers block autoplay with sound. Fall back to muted playback
+          // rather than leaving the feed stuck; the viewer can enable sound explicitly.
+          video.muted = true
+          setMuted(true)
+          const fallbackAttempt = video.play()
+          if (fallbackAttempt?.catch) fallbackAttempt.catch(() => setPaused(true))
+        })
       } else {
         video.pause()
       }
     })
   }, [activeId, paused, muted, videos])
+
+  const seekActiveVideo = useCallback((nextTime) => {
+    const video = videoRefs.current.get(activeId)
+    if (!video || !Number.isFinite(nextTime)) return
+    video.currentTime = Math.max(0, Math.min(nextTime, video.duration || nextTime))
+    setCurrentTime(video.currentTime)
+  }, [activeId])
 
   useEffect(() => {
     let cancelled = false
@@ -245,7 +261,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
         <div className="max-w-sm text-center">
           <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-white/10"><Music2 size={28}/></div>
           <h2 className="text-xl font-bold">Chưa có video ngắn nổi bật</h2>
-          <p className="mt-2 text-sm leading-6 text-white/65">Khi cộng đồng có video được quan tâm trong 24 giờ qua, video sẽ xuất hiện tại đây.</p>
+          <p className="mt-2 text-sm leading-6 text-white/65">Video mới của cộng đồng sẽ xuất hiện tại đây.</p>
           <button type="button" onClick={onBack} className="mt-5 rounded-full bg-white px-5 py-3 text-sm font-bold text-black">Về Trang chủ</button>
         </div>
       </div>
@@ -255,7 +271,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
   return (
     <div className="fixed inset-0 z-[100] bg-black text-white" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div ref={scrollerRef} className="h-full w-full overflow-y-auto snap-y snap-mandatory overscroll-contain" style={{ scrollbarWidth: 'none' }} aria-label="Video ngắn nổi bật">
-        {videos.map((post, index) => {
+        {videos.map(post => {
           const profile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles
           const authorName = profile?.full_name || profile?.username || 'Thành viên D'
           const authorId = post.author_id || post.user_id
@@ -275,32 +291,35 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
                 src={post.media_url}
                 poster={post.thumbnail_url || undefined}
                 className="absolute inset-0 h-full w-full object-cover"
-                style={{ background: '#050505' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#050505' }}
                 playsInline
                 loop
                 muted={muted}
-                preload={index === 0 ? 'auto' : 'metadata'}
+                preload={isActive ? 'auto' : 'metadata'}
                 onClick={() => togglePlay(post.id)}
+                onLoadedMetadata={event => { if (isActive) { setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0); setCurrentTime(event.currentTarget.currentTime || 0) } }}
+                onDurationChange={event => { if (isActive) setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0) }}
+                onTimeUpdate={event => { if (isActive) { setCurrentTime(event.currentTarget.currentTime || 0); setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0) } }}
                 onPlay={() => { if (isActive) setPaused(false) }}
                 onPause={() => { if (isActive) setPaused(true) }}
                 aria-label={`Video của ${authorName}`}
               />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-black/75" />
               <button type="button" onClick={onBack} className="absolute left-3 top-3 z-20 grid h-11 w-11 place-items-center rounded-full bg-black/35 backdrop-blur-sm" aria-label="Quay lại Trang chủ"><ArrowLeft size={23}/></button>
-              <div className="absolute right-3 bottom-[calc(112px+env(safe-area-inset-bottom))] z-20 flex w-14 flex-col items-center gap-5">
+              <div className="absolute right-3 bottom-[calc(84px+env(safe-area-inset-bottom))] z-20 flex w-14 flex-col items-center gap-3">
                 <div className="relative mb-1">
                   <MiniAvatar src={profile?.avatar_url} name={authorName} size={46}/>
                   {userId && authorId !== userId && <button type="button" onClick={() => toggleFollow(post)} disabled={busyFollowId === authorId} className="absolute -bottom-2 left-1/2 grid h-6 w-6 -translate-x-1/2 place-items-center rounded-full bg-rose-500 text-white ring-2 ring-black disabled:opacity-60" aria-label={isFollowing ? 'Bỏ theo dõi' : 'Theo dõi tác giả'}>{isFollowing ? <Check size={14}/> : <Plus size={15} strokeWidth={3}/>}</button>}
                 </div>
-                <button type="button" onClick={() => toggleLike(post)} className="flex min-h-12 flex-col items-center gap-1 text-white drop-shadow" aria-label={isLiked ? 'Bỏ thả tim' : 'Thả tim'}>
+                <button type="button" onClick={() => toggleLike(post)} className="flex min-h-10 flex-col items-center gap-0.5 text-white drop-shadow" aria-label={isLiked ? 'Bỏ thả tim' : 'Thả tim'}>
                   <Heart size={31} fill={isLiked ? '#fb7185' : 'rgba(0,0,0,.15)'} color={isLiked ? '#fb7185' : 'white'} strokeWidth={2.3}/>
                   <span className="text-xs font-semibold">{compactCount(likeCounts[post.id])}</span>
                 </button>
-                <button type="button" onClick={() => loadComments(post)} className="flex min-h-12 flex-col items-center gap-1 text-white drop-shadow" aria-label="Mở bình luận">
+                <button type="button" onClick={() => loadComments(post)} className="flex min-h-10 flex-col items-center gap-0.5 text-white drop-shadow" aria-label="Mở bình luận">
                   <MessageCircle size={30} fill="rgba(0,0,0,.12)" strokeWidth={2.3}/>
                   <span className="text-xs font-semibold">{compactCount(commentCounts[post.id])}</span>
                 </button>
-                <button type="button" onClick={() => sharePost(post)} className="flex min-h-12 flex-col items-center gap-1 text-white drop-shadow" aria-label="Chia sẻ video">
+                <button type="button" onClick={() => sharePost(post)} className="flex min-h-10 flex-col items-center gap-0.5 text-white drop-shadow" aria-label="Chia sẻ video">
                   <Share2 size={29} strokeWidth={2.3}/><span className="text-xs font-semibold">Chia sẻ</span>
                 </button>
                 <button type="button" onClick={() => setMuted(value => !value)} className="grid h-10 w-10 place-items-center rounded-full bg-black/35" aria-label={muted ? 'Bật tiếng' : 'Tắt tiếng'}>{muted ? <VolumeX size={19}/> : <Volume2 size={19}/>}</button>
@@ -318,7 +337,20 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
                   <Music2 size={15} className="shrink-0 animate-pulse"/><span className="truncate">{authorName} · Âm thanh gốc</span>
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/20"><div className="h-full w-0 bg-white/90" /></div>
+              <div className="absolute bottom-0 left-0 right-0 z-20 h-[3px] bg-white/30" aria-label="Tiến trình video">
+                <div className="h-full bg-white" style={{ width: `${isActive && duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }} />
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={duration || 1}
+                step="0.1"
+                value={isActive ? Math.min(currentTime, duration || 0) : 0}
+                onChange={event => { if (isActive) seekActiveVideo(Number(event.target.value)) }}
+                className="absolute bottom-[-6px] left-0 z-30 h-4 w-full cursor-pointer opacity-0"
+                aria-label="Tua video"
+                tabIndex={isActive ? 0 : -1}
+              />
             </section>
           )
         })}
