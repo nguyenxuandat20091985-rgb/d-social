@@ -892,7 +892,7 @@ function Feed({ userId }) {
       const offset = append ? posts.length : 0
       let query = supabase
         .from('posts')
-        .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
+        .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,reach_multiplier,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
         .eq('is_published', true)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -901,7 +901,7 @@ function Feed({ userId }) {
       if (error) {
         let altQuery = supabase
           .from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,deleted_at,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,deleted_at,created_at,reach_multiplier,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
@@ -914,7 +914,11 @@ function Feed({ userId }) {
       setHasMore(page.length === 20)
       setPosts(current => {
         const combined = append ? [...current, ...page.filter(p => !current.some(old => old.id === p.id))] : page
-        if (mode === 'popular') return [...combined].sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0))
+        if (mode === 'popular') return [...combined].sort((a, b) => {
+          const scoreA = (a.likes?.length || 0) * Math.max(0, Math.min(1, Number(a.reach_multiplier ?? 1)))
+          const scoreB = (b.likes?.length || 0) * Math.max(0, Math.min(1, Number(b.reach_multiplier ?? 1)))
+          return scoreB - scoreA || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
         return combined
       })
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
