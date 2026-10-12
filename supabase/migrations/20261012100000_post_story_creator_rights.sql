@@ -34,7 +34,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = ''
-as $
+as $function$
 declare
   report_count integer;
 begin
@@ -70,7 +70,7 @@ begin
   end if;
   return new;
 end;
-$$;
+$function$;
 
 revoke all on function public.dsocial_apply_report_reach_policy() from public;
 revoke all on function public.dsocial_apply_report_reach_policy() from anon;
