@@ -93,7 +93,24 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
         <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-white placeholder:text-white/55" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…"/><button type="button" disabled={loading} onClick={searchAudio} className="rounded-xl bg-white px-3 text-black"><Search size={17}/></button></div>
         <button type="button" onClick={() => update({audioSource:'original',audioTrackId:null,audioTrackTitle:null,audioTrackUrl:null,isMuted:false})} className="rounded-lg border border-white/25 px-3 py-2 text-sm">Dùng âm thanh gốc</button>
         {loading && <p className="text-xs text-white/70">Đang tìm nhạc…</p>}{audioError && <p role="status" className="text-xs text-amber-300">{audioError}</p>}
-        {hits.map(track => <div key={track.id} className="flex items-center gap-2 rounded-xl bg-white/10 p-2"><button type="button" onClick={() => {const audio=document.getElementById('pixabay-preview-'+track.id);if(!audio)return;if(playingId===track.id){audio.pause();setPlayingId('')}else{document.querySelectorAll('[data-pixabay-preview]').forEach(el=>el.pause());audio.play().then(()=>setPlayingId(track.id)).catch(()=>setAudioError('Không phát được bản xem trước này.'))}}} className="rounded-full bg-white/15 p-2"><Play size={15}/></button><audio id={'pixabay-preview-'+track.id} data-pixabay-preview src={track.previewUrl} preload="none" className="hidden"/><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{track.title}</div><div className="text-xs text-white/60">{track.artist}</div></div><button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button></div>)}
+        {hits.map(track => (
+          <div key={track.id} className="flex items-center gap-2 rounded-xl bg-white/10 p-2">
+            <button type="button" onClick={() => {
+              const audio = document.getElementById('pixabay-preview-' + track.id)
+              if (!audio) return
+              if (playingId === track.id) {
+                audio.pause()
+                setPlayingId('')
+              } else {
+                document.querySelectorAll('[data-pixabay-preview]').forEach(el => el.pause())
+                audio.play().then(() => setPlayingId(track.id)).catch(() => setAudioError('Không phát được bản xem trước này.'))
+              }
+            }} className="rounded-full bg-white/15 p-2"><Play size={15}/></button>
+            <audio id={'pixabay-preview-' + track.id} data-pixabay-preview src={track.previewUrl} preload="none" className="hidden"/>
+            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{track.title}</div><div className="text-xs text-white/60">{track.artist}</div></div>
+            <button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button>
+          </div>
+        ))
         {selected.audioTrackTitle && <p className="text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
         <p className="text-[11px] text-white/60">Nguồn Pixabay · Kiểm tra quyền sử dụng của bản nhạc trước khi đăng.</p>
       </div>}
