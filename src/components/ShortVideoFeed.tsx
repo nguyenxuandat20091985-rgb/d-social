@@ -46,7 +46,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
   const videos = useMemo(() => posts.filter(post => post?.media_type === 'video' && post?.media_url), [posts])
 
   useEffect(() => {
-    setActiveId(videos[0]?.id || null)
+    setActiveId(current => videos.some(post => post.id === current) ? current : (videos[0]?.id || null))
     setPaused(false)
   }, [videos.map(post => post.id).join('|')])
 
