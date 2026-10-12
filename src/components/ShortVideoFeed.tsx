@@ -321,6 +321,12 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
     return (
       <div className="fixed inset-0 z-[100] grid place-items-center bg-black text-white px-6" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <button type="button" onClick={onBack} className="absolute left-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/10" aria-label="Quay lại"><ArrowLeft size={22}/></button>
+        <button type="button" onClick={() => setSearchOpen(value => !value)} className="absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white/10" aria-label={searchOpen ? 'Đóng tìm kiếm' : 'Tìm kiếm video'}><Search size={22}/></button>
+        {searchOpen && <div className="absolute left-4 right-4 top-16 z-10 flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2">
+          <Search size={18} className="shrink-0 text-white/70"/>
+          <input autoFocus value={searchQuery} onChange={event => setSearchQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') { setSearchOpen(false); setSearchQuery('') } }} placeholder="Tìm video, người đăng, từ khóa..." className="min-w-0 flex-1 bg-transparent py-1 text-sm text-white outline-none placeholder:text-white/55" aria-label="Từ khóa tìm video"/>
+          {!!searchQuery && <button type="button" onClick={() => setSearchQuery('')} aria-label="Xóa từ khóa"><X size={15}/></button>}
+        </div>}
         <div className="max-w-sm text-center">
           <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-white/10"><Music2 size={28}/></div>
           <h2 className="text-xl font-bold">{searchQuery.trim() ? 'Không tìm thấy video phù hợp' : 'Chưa có video ngắn nổi bật'}</h2>
