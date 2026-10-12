@@ -216,7 +216,7 @@ function Composer({ userId, onPublished, onClose }) {
       const { error: err } = await supabase.from('posts').insert({
         author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type,
         image_urls: image_urls.length ? image_urls : null, is_published: true,
-        creator_settings: creatorSettings,
+        creator_settings: creatorSettings, privacy: creatorSettings.privacy || 'public',
         audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
         audio_title: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackTitle || null) : null,
         is_muted: false, copyright_audio_status: 'unknown',
@@ -347,7 +347,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
         caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        creator_settings: creatorSettings,
+        creator_settings: creatorSettings, privacy: creatorSettings.privacy || 'public',
         audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
         audio_title: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackTitle || null) : null,
         is_muted: false, copyright_audio_status: 'unknown',
