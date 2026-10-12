@@ -187,6 +187,7 @@ function Composer({ userId, onPublished, onClose }) {
       return
     }
     setError('')
+    setCreatorStep('edit')
     setFiles(all)
   }
 
