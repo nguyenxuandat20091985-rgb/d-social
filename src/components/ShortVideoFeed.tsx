@@ -22,10 +22,11 @@ function MiniAvatar({ src, name = 'D', size = 42 }) {
     : <span className="grid place-items-center rounded-full bg-blue-600 text-white font-bold shrink-0" style={{ width: size, height: size, fontSize: size * .42 }}>{letter}</span>
 }
 
-export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved }) {
+export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore = false, pageLoading = false, loadMore }) {
   const scrollerRef = useRef(null)
   const videoRefs = useRef(new Map())
   const cardRefs = useRef(new Map())
+  const lastLoadRequestedCount = useRef(0)
   const [activeId, setActiveId] = useState(posts[0]?.id || null)
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(true)
@@ -56,8 +57,14 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved }) {
         .filter(entry => entry.isIntersecting && entry.intersectionRatio >= 0.65)
         .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
       if (visible?.target?.dataset?.postId) {
-        setActiveId(visible.target.dataset.postId)
+        const postId = visible.target.dataset.postId
+        setActiveId(postId)
         setPaused(false)
+        const isLastVideo = videos[videos.length - 1]?.id === postId
+        if (isLastVideo && hasMore && !pageLoading && lastLoadRequestedCount.current !== videos.length) {
+          lastLoadRequestedCount.current = videos.length
+          loadMore?.()
+        }
       }
     }, { root: scrollerRef.current, threshold: [0.25, 0.65, 0.9] })
     videos.forEach(post => {
@@ -65,7 +72,12 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved }) {
       if (node) observer.observe(node)
     })
     return () => observer.disconnect()
-  }, [videos])
+  }, [videos, hasMore, pageLoading, loadMore])
+
+  useEffect(() => {
+    if (!pageLoading) return
+    // A newly appended page can trigger the next request once its last video becomes active.
+  }, [pageLoading, videos.length])
 
   useEffect(() => {
     videos.forEach(post => {
@@ -311,6 +323,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved }) {
           )
         })}
       </div>
+      {pageLoading && <div role="status" className="absolute bottom-6 left-1/2 z-[120] flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs text-white backdrop-blur"><LoaderCircle size={16} className="animate-spin"/> Đang tải video tiếp theo…</div>}
       {shareNotice && <div role="status" className="absolute left-1/2 top-16 z-[120] -translate-x-1/2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black shadow-xl">{shareNotice}</div>}
       {commentPost && (
         <div className="absolute inset-0 z-[130] flex items-end bg-black/55" onClick={() => setCommentPost(null)}>
