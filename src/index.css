@@ -385,3 +385,30 @@ body {
 @keyframes home-post-progress{from{transform:translateX(-10%)}to{transform:translateX(210%)}}
 @media(max-width:420px){.home-post-media-grid{grid-template-columns:1fr}.home-post-media-preview{max-height:220px}.home-post-composer{padding:12px}}
 @media(prefers-reduced-motion:reduce){.home-post-spinner,.home-post-progress span{animation:none}}
+
+
+/* D-Social short-video audio disc: rotate only while the active video is playing. */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.music-disc-icon {
+  animation: spin 4s linear infinite;
+  animation-play-state: paused;
+  transform-origin: center;
+}
+
+.music-disc-icon.is-spinning {
+  animation-play-state: running;
+}
+
+.music-disc-icon.is-paused {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-disc-icon {
+    animation: none;
+  }
+}

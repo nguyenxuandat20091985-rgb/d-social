@@ -334,7 +334,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
                 </div>
                 {post.content && <p className="mb-3 max-w-[min(78vw,520px)] whitespace-pre-wrap break-words text-sm leading-5 drop-shadow [text-shadow:0_1px_3px_rgba(0,0,0,.65)]">{post.content}</p>}
                 <div className="flex max-w-full items-center gap-2 text-xs text-white/90">
-                  <Music2 size={15} className="shrink-0 animate-pulse"/><span className="truncate">{authorName} · Âm thanh gốc</span>
+                  <Music2 size={15} className={`music-disc-icon shrink-0 ${isActive && !paused ? 'is-spinning' : 'is-paused'}`} aria-hidden="true"/><span className="truncate">{authorName} · Âm thanh gốc</span>
                 </div>
               </div>
               <div className="absolute bottom-0 left-0 right-0 z-20 h-[3px] bg-white/30" aria-label="Tiến trình video">

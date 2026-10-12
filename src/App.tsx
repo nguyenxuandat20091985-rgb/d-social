@@ -851,7 +851,7 @@ function Feed({ userId }) {
       return (
         <div className="fixed inset-0 z-[100] grid place-items-center bg-black text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <button type="button" onClick={() => { setFeedMode('latest'); setPosts([]); setLoading(true) }} className="absolute left-3 top-3 grid h-11 w-11 place-items-center rounded-full bg-white/10" aria-label="Quay lại Trang chủ"><ChevronLeft size={23}/></button>
-          <div className="flex flex-col items-center gap-3 text-sm text-white/75"><span className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white"/><span>Đang tải video nổi bật…</span></div>
+          <div className="flex flex-col items-center gap-3 text-sm text-white/75"><span className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white"/><span>Đang tải Video ngắn…</span></div>
         </div>
       )
     }
@@ -879,7 +879,7 @@ function Feed({ userId }) {
         <div className="grid grid-cols-3 gap-2">
           <button type="button" onClick={() => changeMode('latest')} aria-pressed={feedMode === 'latest'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'latest' ? 'd-btn-primary' : 'd-muted'}`}><Clock3 size={15} /> Mới nhất</button>
           <button type="button" onClick={() => changeMode('following')} aria-pressed={feedMode === 'following'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'following' ? 'd-btn-primary' : 'd-muted'}`}><UsersRound size={15} /> Đang theo dõi</button>
-          <button type="button" onClick={() => changeMode('popular')} aria-pressed={feedMode === 'popular'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'popular' ? 'd-btn-primary' : 'd-muted'}`}><TrendingUp size={15} /> Nổi bật</button>
+          <button type="button" onClick={() => changeMode('popular')} aria-pressed={feedMode === 'popular'} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-semibold ${feedMode === 'popular' ? 'd-btn-primary' : 'd-muted'}`}><Video size={15} /> Video ngắn</button>
         </div>
       </section>
       <div className="home-feed-heading"><div><h2>{feedMode === 'latest' ? 'Bài viết mới' : feedMode === 'following' ? 'Từ người đang theo dõi' : 'Bài viết nổi bật'}</h2><p>{feedMode === 'latest' ? 'Chia sẻ và kết nối mỗi ngày' : feedMode === 'following' ? 'Cập nhật từ những tài khoản anh theo dõi' : 'Xếp theo tương tác hợp lệ trong 24 giờ gần nhất trên toàn cộng đồng'}</p></div><button type="button" onClick={() => load({ mode: feedMode })} disabled={loading || pageLoading} aria-label="Làm mới bảng tin" title="Làm mới bảng tin" className="home-refresh"><RefreshCw size={17} className={loading ? 'animate-spin' : ''} /></button></div>
