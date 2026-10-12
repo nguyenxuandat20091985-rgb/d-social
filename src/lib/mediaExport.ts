@@ -60,7 +60,7 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
     const image = new Image()
     image.src = imageUrl
     await new Promise<void>((resolve, reject) => {
-      image.onload = resolve
+      image.onload = () => resolve()
       image.onerror = () => reject(new Error('Không đọc được ảnh để áp dụng chỉnh sửa.'))
     })
     const canvas = document.createElement('canvas')
@@ -89,7 +89,7 @@ function waitForEvent(target: EventTarget, successEvent: string, errorEvent: str
       target.removeEventListener(successEvent, onSuccess)
       if (errorEvent) target.removeEventListener(errorEvent, onError)
     }
-    const finish = error => {
+    const finish = (error?: Error) => {
       cleanup()
       error ? reject(error) : resolve()
     }
@@ -150,7 +150,8 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
     canvas.height = height - (height % 2)
     const context = canvas.getContext('2d', { alpha: false })
     if (!context) throw new Error('Không tạo được khung hình kết xuất.')
-    canvasStream = canvas.captureStream(30)
+    const activeCanvasStream = canvas.captureStream(30)
+    canvasStream = activeCanvasStream
 
     const AudioContextConstructor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioContextConstructor) throw new Error('Trình duyệt không hỗ trợ trộn âm thanh khi xuất video.')
@@ -175,48 +176,49 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
       musicGain.connect(destination)
       await musicReady
     }
-    destination.stream.getAudioTracks().forEach(track => canvasStream.addTrack(track))
+    destination.stream.getAudioTracks().forEach(track => activeCanvasStream.addTrack(track))
     if (audioContext.state === 'suspended') await audioContext.resume()
 
     const mimeType = chooseRecorderMimeType()
     if (!mimeType) throw new Error('Trình duyệt không có định dạng MediaRecorder tương thích để xuất video.')
     const chunks: Blob[] = []
-    recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: 3_500_000, audioBitsPerSecond: 128_000 })
+    const activeRecorder = new MediaRecorder(activeCanvasStream, { mimeType, videoBitsPerSecond: 3_500_000, audioBitsPerSecond: 128_000 })
+    recorder = activeRecorder
     const recorded = new Promise<Blob>((resolve, reject) => {
-      recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data) }
-      recorder.onerror = () => reject(new Error('Xuất video thất bại. Hãy thử lại với video ngắn hơn.'))
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType || mimeType })
+      activeRecorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data) }
+      activeRecorder.onerror = () => reject(new Error('Xuất video thất bại. Hãy thử lại với video ngắn hơn.'))
+      activeRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: activeRecorder.mimeType || mimeType })
         if (!blob.size) reject(new Error('Tệp video kết xuất rỗng.'))
         else resolve(blob)
       }
     })
     const draw = () => {
       if (video.readyState >= 2) {
-        context.filter = FILTERS[settings.colorFilter] || 'none'
+        context.filter = FILTERS[settings.colorFilter as keyof typeof FILTERS] || 'none'
         context.drawImage(video, 0, 0, canvas.width, canvas.height)
         context.filter = 'none'
         drawOverlay(context, canvas, settings)
         const progress = Math.min(100, Math.round(((video.currentTime - start) / (end - start)) * 100))
         onProgress?.(progress)
       }
-      if (video.currentTime < end && !video.ended && recorder.state === 'recording') animationFrame = requestAnimationFrame(draw)
+      if (video.currentTime < end && !video.ended && activeRecorder.state === 'recording') animationFrame = requestAnimationFrame(draw)
     }
-    recorder.start(250)
+    activeRecorder.start(250)
     if (music) {
       music.currentTime = 0
       await music.play()
     }
     await video.play()
     draw()
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Xuất video quá thời gian chờ.')), Math.max(90000, (end - start) * 8000))
       const stop = () => { clearTimeout(timer); resolve() }
       video.addEventListener('timeupdate', () => {
         if (video.currentTime >= end) {
           video.pause()
           if (music) music.pause()
-          if (recorder.state !== 'inactive') recorder.stop()
+          if (activeRecorder.state !== 'inactive') activeRecorder.stop()
           stop()
         }
       })
