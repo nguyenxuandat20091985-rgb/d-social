@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react'
-import { Music2, Search, Play, Pause, SlidersHorizontal, ShieldCheck, MapPin, AtSign, Type, Sticker } from 'lucide-react'
+import { Music2, Search, Play, Pause, SlidersHorizontal, ShieldCheck, MapPin, AtSign, Type, Sticker, Scissors, Palette, Volume2 } from 'lucide-react'
 
 const FILTERS = [
   { id: 'none', label: 'Gốc', css: 'none' },
@@ -17,6 +17,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
   const [loading, setLoading] = useState(false)
   const [audioError, setAudioError] = useState('')
   const [playingId, setPlayingId] = useState('')
+  const [activeTool, setActiveTool] = useState('music')
   const [duration, setDuration] = useState(0)
   const selected = settings || {}
   const update = patch => onChange?.({ ...selected, ...patch })
@@ -72,6 +73,37 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
   const maxStart = Math.max(0, duration - 15)
   const end = Number(selected.trimEnd || Math.min(60, duration || 60))
   const trimValid = !isVideo || (duration > 0 && end - start >= 15 && end - start <= 60 && end <= duration)
+
+  if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
+    <div className="absolute top-[max(18px,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto">
+      <button type="button" onClick={() => setActiveTool(activeTool === 'music' ? '' : 'music')} className="flex items-center gap-2 rounded-full bg-black/70 px-5 py-3 text-sm font-bold text-white shadow-lg border border-white/25"><Music2 size={18}/> Thêm âm thanh <span className="text-[10px] text-white/70">v2.0 Fullscreen</span></button>
+    </div>
+    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-4 pointer-events-auto">
+      {[
+        {id:'trim', label:'Cắt', icon:<Scissors size={22}/>},
+        {id:'text', label:'Chữ', icon:<Type size={22}/>},
+        {id:'sticker', label:'Sticker', icon:<Sticker size={22}/>},
+        {id:'filter', label:'Bộ lọc', icon:<Palette size={22}/>},
+        {id:'volume', label:'Âm lượng', icon:<Volume2 size={22}/>},
+      ].map(item => <button key={item.id} type="button" onClick={() => setActiveTool(activeTool === item.id ? '' : item.id)} className={`flex w-[58px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-white drop-shadow-lg ${activeTool === item.id ? 'bg-white/30 ring-1 ring-white' : 'bg-black/35'}`}><span>{item.icon}</span><span className="text-[10px] font-semibold">{item.label}</span></button>)}
+    </div>
+    {activeTool && <div className="absolute bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] left-3 right-3 max-h-[42dvh] overflow-y-auto rounded-2xl border border-white/20 bg-black/85 p-4 text-white shadow-2xl pointer-events-auto">
+      <div className="mb-3 flex items-center justify-between"><strong>{({music:'Thêm âm thanh · Pixabay',trim:'Cắt video (15–60 giây)',text:'Chèn chữ',sticker:'Sticker',filter:'Bộ lọc màu',volume:'Chỉnh âm lượng'})[activeTool]}</strong><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/15 px-3 py-1 text-sm">Đóng</button></div>
+      {activeTool === 'music' && <div className="space-y-3">
+        <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-white placeholder:text-white/55" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…"/><button type="button" disabled={loading} onClick={searchAudio} className="rounded-xl bg-white px-3 text-black"><Search size={17}/></button></div>
+        <button type="button" onClick={() => update({audioSource:'original',audioTrackId:null,audioTrackTitle:null,audioTrackUrl:null,isMuted:false})} className="rounded-lg border border-white/25 px-3 py-2 text-sm">Dùng âm thanh gốc</button>
+        {loading && <p className="text-xs text-white/70">Đang tìm nhạc…</p>}{audioError && <p role="status" className="text-xs text-amber-300">{audioError}</p>}
+        {hits.map(track => <div key={track.id} className="flex items-center gap-2 rounded-xl bg-white/10 p-2"><button type="button" onClick={() => {const audio=document.getElementById('pixabay-preview-'+track.id);if(!audio)return;if(playingId===track.id){audio.pause();setPlayingId('')}else{document.querySelectorAll('[data-pixabay-preview]').forEach(el=>el.pause());audio.play().then(()=>setPlayingId(track.id)).catch(()=>setAudioError('Không phát được bản xem trước này.'))}}} className="rounded-full bg-white/15 p-2"><Play size={15}/></button><audio id={'pixabay-preview-'+track.id} data-pixabay-preview src={track.previewUrl} preload="none" className="hidden"/><div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{track.title}</div><div className="text-xs text-white/60">{track.artist}</div></div><button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button></div>)}
+        {selected.audioTrackTitle && <p className="text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
+        <p className="text-[11px] text-white/60">Nguồn Pixabay · Kiểm tra quyền sử dụng của bản nhạc trước khi đăng.</p>
+      </div>}
+      {activeTool === 'trim' && <div className="space-y-3"><div className="grid grid-cols-2 gap-3"><label className="text-xs text-white/75">Bắt đầu (giây)<input className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white" type="number" min="0" max={maxStart} value={selected.trimStart ?? 0} onChange={e=>update({trimStart:Math.max(0,Number(e.target.value)||0})}/></label><label className="text-xs text-white/75">Kết thúc (giây)<input className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white" type="number" min="15" max={Math.min(60,duration||60)} value={selected.trimEnd ?? Math.min(60,duration||60)} onChange={e=>update({trimEnd:Math.max(0,Number(e.target.value)||0})}/></label></div><p className="text-xs text-white/65">{duration ? `Video dài ${Math.round(duration)} giây · Đoạn chọn ${Math.max(0,end-start)} giây` : 'Đang đọc thời lượng video…'}</p>{!trimValid && <p className="text-xs text-amber-300">Đoạn video phải dài 15–60 giây và nằm trong video gốc.</p>}</div>}
+      {activeTool === 'text' && <input className="w-full rounded-xl bg-white/10 px-3 py-3 text-white placeholder:text-white/50" maxLength={120} value={selected.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="Nhập chữ hiển thị trên media"/>}
+      {activeTool === 'sticker' && <div className="flex flex-wrap gap-2">{STICKERS.map(sticker=><button key={sticker} type="button" onClick={()=>update({sticker:selected.sticker===sticker?'':sticker})} className={`rounded-xl border px-3 py-2 text-2xl ${selected.sticker===sticker?'border-white bg-white/20':'border-white/20'}`}>{sticker}</button>)}</div>}
+      {activeTool === 'filter' && <div className="flex flex-wrap gap-2">{FILTERS.map(filter=><button key={filter.id} type="button" onClick={()=>update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${(selected.colorFilter||'none')===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div>}
+      {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
+    </div>}
+  </div>
 
   return <div className="mt-4 rounded-2xl border p-3 space-y-4" style={{ borderColor: 'var(--d-border)', background: 'var(--d-surface-2)' }}>
     <div className="flex items-center gap-2 font-bold"><SlidersHorizontal size={17}/> Công cụ chỉnh sửa</div>
