@@ -89,7 +89,14 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
       video.muted = muted
       if (active && !paused) {
         const attempt = video.play()
-        if (attempt?.catch) attempt.catch(() => setPaused(true))
+        if (attempt?.catch) attempt.catch(() => {
+          // Some mobile browsers block autoplay with sound. Fall back to muted playback
+          // rather than leaving the feed stuck; the viewer can enable sound explicitly.
+          video.muted = true
+          setMuted(true)
+          const fallbackAttempt = video.play()
+          if (fallbackAttempt?.catch) fallbackAttempt.catch(() => setPaused(true))
+        })
       } else {
         video.pause()
       }
@@ -264,7 +271,7 @@ export function ShortVideoFeed({ posts = [], userId, onBack, onRemoved, hasMore 
   return (
     <div className="fixed inset-0 z-[100] bg-black text-white" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div ref={scrollerRef} className="h-full w-full overflow-y-auto snap-y snap-mandatory overscroll-contain" style={{ scrollbarWidth: 'none' }} aria-label="Video ngắn nổi bật">
-        {videos.map((post, index) => {
+        {videos.map(post => {
           const profile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles
           const authorName = profile?.full_name || profile?.username || 'Thành viên D'
           const authorId = post.author_id || post.user_id
