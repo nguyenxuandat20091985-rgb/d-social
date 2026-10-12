@@ -141,6 +141,7 @@ function Composer({ userId, onPublished, onClose }) {
   })
   const [files, setFiles] = useState([])
   const [previews, setPreviews] = useState([])
+  const creatorToolsRef = React.useRef(null)
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
@@ -153,6 +154,10 @@ function Composer({ userId, onPublished, onClose }) {
       else localStorage.removeItem(key)
     } catch {}
   }, [text, userId])
+
+  useEffect(() => {
+    if (files.length) creatorToolsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [files.length])
 
   useEffect(() => {
     const urls = files.map(file => URL.createObjectURL(file))
@@ -278,7 +283,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        <CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" />
+        <div ref={creatorToolsRef} className="scroll-mt-3"><CreatorMediaTools file={files.length === 1 ? files[0] : null} settings={creatorSettings} onChange={setCreatorSettings} mode="post" /></div>
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
@@ -305,7 +310,12 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
+  const creatorToolsRef = React.useRef(null)
   const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
+
+  useEffect(() => {
+    if (file) creatorToolsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [file])
 
   useEffect(() => {
     if (!file) { setPreviewUrl(''); return }
@@ -401,7 +411,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
-      <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="story" />
+      <div ref={creatorToolsRef} className="scroll-mt-3"><CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="story" /></div>
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
