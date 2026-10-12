@@ -434,6 +434,21 @@ function StoryComposer({ userId, onClose, onPublished }) {
 
   const fileSize = file ? (file.size >= 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(file.size / 1024)) + ' KB') : ''
 
+
+  if (file) return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      {file.type.startsWith('video/') ? <video src={previewUrl} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
+      {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+    </div>
+    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFile(null)} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button><span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black tracking-wide">D-SOCIAL · v2.0 Fullscreen</span></div>
+    <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen"/>
+    <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
+      {error && <p role="alert" className="mb-2 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
+      <div className="mb-3 flex gap-2"><input value={caption} onChange={e=>setCaption(e.target.value)} maxLength={300} placeholder="Caption cho tin (không bắt buộc)" className="min-w-0 flex-1 rounded-xl bg-white/15 px-3 py-3 text-sm placeholder:text-white/60" disabled={busy}/><label className="rounded-xl bg-white/15 px-3 py-3 text-xs font-bold">Đổi<input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e=>{chooseFile(e.target.files);e.target.value=''}}/></label></div>
+      <button type="button" disabled={busy} onClick={publish} className="min-h-12 w-full rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
+    </div>
+  </div>
+
   return <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center bg-black/55 p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}>
     <section className="d-card home-story-composer w-full max-w-lg p-4" style={{ maxHeight: '90dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
       <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" disabled={busy} className="d-muted p-2 disabled:opacity-40" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
@@ -450,10 +465,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
-      {file && <div ref={creatorToolsRef} className="scroll-mt-3">
-        <div className="p-4 bg-yellow-200 text-black font-bold rounded-lg my-3">TEST TOOLBAR</div>
-        <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="story" />
-      </div>}
+
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
