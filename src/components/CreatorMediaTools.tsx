@@ -110,7 +110,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
             <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{track.title}</div><div className="text-xs text-white/60">{track.artist}</div></div>
             <button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button>
           </div>
-        ))
+        ))}
         {selected.audioTrackTitle && <p className="text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
         <p className="text-[11px] text-white/60">Nguồn Pixabay · Kiểm tra quyền sử dụng của bản nhạc trước khi đăng.</p>
       </div>}
