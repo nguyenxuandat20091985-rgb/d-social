@@ -127,7 +127,44 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
         {selected.audioTrackTitle && <p className="text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
         <p className="text-[11px] text-white/60">Nguồn Pixabay · Kiểm tra quyền sử dụng của bản nhạc trước khi đăng.</p>
       </div>}
-      {activeTool === 'trim' && <div className="space-y-3"><div className="grid grid-cols-2 gap-3"><label className="text-xs text-white/75">Bắt đầu (giây)<input className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white" type="number" min="0" max={maxStart} value={selected.trimStart ?? 0} onChange={e=>update({trimStart:Math.max(0,Number(e.target.value)||0})}/></label><label className="text-xs text-white/75">Kết thúc (giây)<input className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white" type="number" min="15" max={Math.min(60,duration||60)} value={selected.trimEnd ?? Math.min(60,duration||60)} onChange={e=>update({trimEnd:Math.max(0,Number(e.target.value)||0})}/></label></div><p className="text-xs text-white/65">{duration ? `Video dài ${Math.round(duration)} giây · Đoạn chọn ${Math.max(0,end-start)} giây` : 'Đang đọc thời lượng video…'}</p>{!trimValid && <p className="text-xs text-amber-300">Đoạn video phải dài 15–60 giây và nằm trong video gốc.</p>}</div>}
+      {activeTool === 'trim' && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs text-white/75">
+              Bắt đầu (giây)
+              <input
+                className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white"
+                type="number"
+                min="0"
+                max={maxStart}
+                value={selected.trimStart ?? 0}
+                onChange={event => update({ trimStart: Math.max(0, Number(event.target.value) || 0) })}
+              />
+            </label>
+            <label className="text-xs text-white/75">
+              Kết thúc (giây)
+              <input
+                className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white"
+                type="number"
+                min="15"
+                max={Math.min(60, duration || 60)}
+                value={selected.trimEnd ?? Math.min(60, duration || 60)}
+                onChange={event => update({ trimEnd: Math.max(0, Number(event.target.value) || 0) })}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-white/65">
+            {duration
+              ? `Video dài ${Math.round(duration)} giây · Đoạn chọn ${Math.max(0, end - start)} giây`
+              : 'Đang đọc thời lượng video…'}
+          </p>
+          {!trimValid && (
+            <p className="text-xs text-amber-300">
+              Đoạn video phải dài 15–60 giây và nằm trong video gốc.
+            </p>
+          )}
+        </div>
+      )}
       {activeTool === 'text' && <input className="w-full rounded-xl bg-white/10 px-3 py-3 text-white placeholder:text-white/50" maxLength={120} value={selected.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="Nhập chữ hiển thị trên media"/>}
       {activeTool === 'sticker' && <div className="flex flex-wrap gap-2">{STICKERS.map(sticker=><button key={sticker} type="button" onClick={()=>update({sticker:selected.sticker===sticker?'':sticker})} className={`rounded-xl border px-3 py-2 text-2xl ${selected.sticker===sticker?'border-white bg-white/20':'border-white/20'}`}>{sticker}</button>)}</div>}
       {activeTool === 'filter' && <div className="flex flex-wrap gap-2">{FILTERS.map(filter=><button key={filter.id} type="button" onClick={()=>update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${(selected.colorFilter||'none')===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div>}
