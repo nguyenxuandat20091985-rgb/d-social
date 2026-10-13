@@ -81,15 +81,24 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
       .catch(() => setAudioError('Không phát được bản xem trước này.'))
   }
 
-  const selectTrack = track => update({
-    audioSource: 'pixabay',
-    audioTrackId: track.id,
-    audioTrackTitle: track.title,
-    audioTrackArtist: track.artist,
-    audioTrackUrl: track.previewUrl,
-    audioTrackPageUrl: track.pageUrl,
-    isMuted: false,
-  })
+  const selectTrack = track => {
+    if (!track || !track.id || !track.previewUrl) {
+      setAudioError('Bài nhạc này chưa có đường dẫn phát hợp lệ. Hãy chọn bài khác.')
+      return
+    }
+    update({
+      audioSource: 'pixabay',
+      audioTrackId: track.id,
+      audioTrackTitle: track.title,
+      audioTrackArtist: track.artist,
+      audioTrackUrl: track.previewUrl,
+      audioTrackPageUrl: track.pageUrl,
+      isMuted: false,
+    })
+    document.querySelectorAll('[data-pixabay-preview]').forEach(element => element.pause())
+    setPlayingId('')
+    setActiveTool('')
+  }
 
   const start = Number(selected.trimStart || 0)
   const maxStart = Math.max(0, duration - 15)
@@ -98,7 +107,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
 
   if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
     <div className="absolute top-[max(18px,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto">
-      <button type="button" aria-expanded={activeTool === 'music'} onClick={() => { if (activeTool === 'music') setActiveTool(''); else { setActiveTool('music'); if (!hits.length && !loading) searchAudio() } }} className="flex items-center gap-2 rounded-full bg-black/75 px-4 py-2.5 text-sm font-semibold text-white shadow-lg border border-white/20 backdrop-blur-sm"><Music2 size={17}/> Thêm âm thanh <span className="text-[10px] text-white/70">{selected.audioTrackTitle ? '· Đã chọn nhạc' : ''}</span></button>
+      <button type="button" aria-expanded={activeTool === 'music'} onClick={() => { if (activeTool === 'music') setActiveTool(''); else { setActiveTool('music'); if (!hits.length && !loading) searchAudio() } }} className="flex items-center gap-1.5 rounded-full bg-black/75 px-3 py-1.5 text-xs font-semibold text-white shadow-lg border border-white/20 backdrop-blur-sm"><Music2 size={14}/> Thêm âm thanh</button>
     </div>
     <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
       {[
