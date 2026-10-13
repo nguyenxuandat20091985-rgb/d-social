@@ -31,8 +31,8 @@ function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
   context.textBaseline = 'middle'
   // Keep the same percentage-based anchor as the fullscreen preview and clamp it
   // to the visible canvas so text/stickers cannot be rendered off-screen.
-  const x = canvas.width * Math.max(0.04, Math.min(0.96, Number(settings.overlayX ?? 50) / 100))
-  const y = canvas.height * Math.max(0.04, Math.min(0.96, Number(settings.overlayY ?? 50) / 100))
+  const x = canvas.width * Math.max(0.08, Math.min(0.92, Number(settings.overlayX ?? 50) / 100))
+  const y = canvas.height * Math.max(0.08, Math.min(0.92, Number(settings.overlayY ?? 50) / 100))
   context.shadowColor = 'rgba(0,0,0,.85)'
   context.shadowBlur = 7 * scale
   context.shadowOffsetY = 2 * scale
