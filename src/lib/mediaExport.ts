@@ -146,11 +146,12 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
     }
     if (start > 0.05) {
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
+        let timer: ReturnType<typeof setTimeout>
+        const onSeek = () => { clearTimeout(timer); resolve() }
+        timer = setTimeout(() => {
           video.removeEventListener('seeked', onSeek)
           reject(new Error('Không thể tua đến đoạn video đã chọn.'))
         }, 10000)
-        const onSeek = () => { clearTimeout(timer); resolve() }
         video.addEventListener('seeked', onSeek, { once: true })
         video.currentTime = start
       })
