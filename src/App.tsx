@@ -145,6 +145,7 @@ function Composer({ userId, onPublished, onClose }) {
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
   const [creatorStep, setCreatorStep] = useState('edit')
+  const [creatorMode, setCreatorMode] = useState('picker')
   const [error, setError] = useState('')
   const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
 
@@ -168,27 +169,28 @@ function Composer({ userId, onPublished, onClose }) {
 
   const pick = selected => {
     const incoming = Array.from(selected || [])
-    if (!incoming.length) return
+    if (!incoming.length) return false
     const all = [...files, ...incoming]
     if (all.some(f => !['image/', 'video/'].some(x => f.type.startsWith(x)))) {
       setError('Chỉ hỗ trợ ảnh và video.')
-      return
+      return false
     }
     if (all.some(f => f.type.startsWith('video/')) && all.length > 1) {
       setError('Video phải đăng riêng; mỗi bài tối đa 10 ảnh.')
-      return
+      return false
     }
     if (all.length > 10) {
       setError('Mỗi bài đăng tối đa 10 ảnh.')
-      return
+      return false
     }
     if (all.some(f => f.size > (f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE))) {
       setError('Mỗi ảnh tối đa 8MB, video tối đa 30MB.')
-      return
+      return false
     }
     setError('')
     setCreatorStep('edit')
     setFiles(all)
+    return true
   }
 
   const publish = async () => {
@@ -283,16 +285,16 @@ function Composer({ userId, onPublished, onClose }) {
     finally { setBusy(false); setStage('') }
   }
 
-  if (files.length > 0 && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
+  if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
       {files[0].type.startsWith('video/') ? <video src={previews[0]} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
       {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
     </div>
-    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFiles([])} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button><span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black tracking-wide">D-SOCIAL · v2.0 Fullscreen</span></div>
+    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button><span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black tracking-wide">D-SOCIAL · v2.0 Fullscreen</span></div>
     <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-12 flex-1 rounded-full border border-white/60 bg-white/10 px-3 text-sm font-bold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
-      <button type="button" disabled={busy} onClick={()=>setCreatorStep('caption')} className="min-h-12 flex-1 rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">Tiếp →</button>
+      <button type="button" disabled={busy} onClick={()=>{ setCreatorStep('caption'); setCreatorMode('caption') }} className="min-h-12 flex-1 rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">Tiếp →</button>
     </div>
     {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
   </div>
@@ -323,13 +325,29 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>setCreatorStep('edit')}>Quay lại chỉnh sửa media</button></div>}
+        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>{ setCreatorStep('edit'); setCreatorMode('fullscreen') }}>Quay lại chỉnh sửa media</button></div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
           <label className="home-post-attach flex gap-2 d-muted cursor-pointer items-center min-h-11 px-3 rounded-xl" aria-label="Chọn ảnh hoặc video">
             <ImageIcon size={19} /><Video size={19} /><span className="text-xs font-semibold">{files.length ? 'Thêm tệp' : 'Ảnh/video'}</span>
-            <input hidden type="file" accept="image/*,video/*" multiple disabled={busy} onChange={e => { pick(e.target.files); e.target.value = '' }} />
+            <input
+              hidden
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              disabled={busy}
+              onChange={e => {
+                const input = e.currentTarget
+                const accepted = pick(input.files)
+                input.value = ''
+                if (accepted) {
+                  // Explicitly replace the picker modal with the full-screen editor.
+                  setCreatorStep('edit')
+                  setCreatorMode('fullscreen')
+                }
+              }}
+            />
           </label>
           <div className="flex gap-2">
             <button type="button" disabled={busy || (!text.trim() && !files.length)} onClick={publish} className="d-btn-primary home-post-submit text-sm min-h-11 px-3">
