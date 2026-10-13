@@ -307,7 +307,7 @@ function Composer({ userId, onPublished, onClose }) {
     >
       <section className="d-card home-post-composer w-full max-w-2xl overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" style={{ maxHeight: '92dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Tạo bài viết">
         <div className="flex items-center justify-between mb-3">
-          <div><div className="font-bold text-base">Tạo bài viết · v2.0 Fullscreen</div><div className="text-xs d-muted mt-0.5">Bước 2/2 · Nhập caption và đăng bài</div></div>
+          <div><div className="font-bold text-base">Tạo bài viết (v2.0 Test)</div><div className="text-xs d-muted mt-0.5">Bước 2/2 · Nhập caption và đăng bài</div></div>
           {onClose && <button type="button" onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center" aria-label="Đóng" title={busy ? 'Đóng cửa sổ; quá trình đăng tiếp tục ở nền' : 'Đóng'}><X size={18} /></button>}
         </div>
         <textarea value={text} onChange={e => { setText(e.target.value); if (error) setError('') }} maxLength={2000} placeholder="Bạn đang nghĩ gì?" disabled={busy} className="home-post-textarea w-full bg-transparent resize-y outline-none min-h-[112px] text-[15px] disabled:opacity-70" autoFocus />
