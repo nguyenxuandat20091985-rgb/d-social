@@ -19,5 +19,5 @@ test('legacy text and sticker settings are adapted into the shared layer rendere
   assert.match(exporter, /legacySettingsToLayers, normalizeCreatorLayers/)
   assert.match(exporter, /normalizeCreatorLayers\(settings\.layers \?\? legacySettingsToLayers\(settings\)\)/)
   assert.match(exporter, /layer\.kind === 'sticker'/)
-  assert.match(exporter, /layer\.kind === 'text'/)
+  assert.match(exporter, /layer\.kind !== 'text'/)
 })
