@@ -152,6 +152,7 @@ function Composer({ userId, onPublished, onClose }) {
   const fullscreenVideoRef = React.useRef(null)
   const fullscreenMusicRef = React.useRef(null)
   const [previewPlaying, setPreviewPlaying] = useState(false)
+  const [preparedMedia, setPreparedMedia] = useState(null)
 
   useEffect(() => {
     try {
@@ -200,6 +201,7 @@ function Composer({ userId, onPublished, onClose }) {
       return false
     }
     setError('')
+    setPreparedMedia(null)
     setCreatorStep('edit')
     setFiles(all)
     return true
@@ -225,9 +227,15 @@ function Composer({ userId, onPublished, onClose }) {
       for (let i = 0; i < files.length; i++) {
         const sourceFile = files[i]
         setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
-        const file = await processCreatorMedia(sourceFile, creatorSettings, percent => {
-          if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
-        })
+        const preparedIsCurrent = preparedMedia &&
+          preparedMedia.sourceFiles?.length === files.length &&
+          preparedMedia.sourceFiles.every((source, index) => source === files[index]) &&
+          preparedMedia.settingsKey === JSON.stringify(creatorSettings)
+        const file = preparedIsCurrent
+          ? preparedMedia.files[i]
+          : await processCreatorMedia(sourceFile, creatorSettings, percent => {
+              if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+            })
         setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
@@ -251,6 +259,7 @@ function Composer({ userId, onPublished, onClose }) {
 
       setText('')
       setFiles([])
+      setPreparedMedia(null)
       try { localStorage.removeItem(`d_home_draft_${userId}`) } catch {}
       onClose?.()
       // Close immediately after saving; let the feed refresh without blocking the composer.
@@ -265,6 +274,31 @@ function Composer({ userId, onPublished, onClose }) {
         }
       }
       setError(e?.message || 'Không thể đăng bài. Vui lòng thử lại.')
+    } finally {
+      setBusy(false)
+      setStage('')
+    }
+  }
+
+  const prepareMediaForCaption = async () => {
+    if (busy || !files.length) return
+    setBusy(true)
+    setError('')
+    const outputs = []
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const sourceFile = files[i]
+        setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video trước khi nhập caption…' : 'Đang áp dụng chỉnh sửa ảnh…')
+        const output = await processCreatorMedia(sourceFile, creatorSettings, percent => {
+          if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+        })
+        outputs.push(output)
+      }
+      setPreparedMedia({ sourceFiles: files.slice(), settingsKey: JSON.stringify(creatorSettings), files: outputs })
+      setCreatorStep('caption')
+      setCreatorMode('caption')
+    } catch (e) {
+      setError(e?.message || 'Không thể hoàn tất media. Anh có thể thử lại hoặc điều chỉnh đoạn video.')
     } finally {
       setBusy(false)
       setStage('')
@@ -364,7 +398,7 @@ function Composer({ userId, onPublished, onClose }) {
     <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-9 flex-1 rounded-full border border-white/60 bg-white/10 px-2 text-xs font-semibold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
-      <button type="button" disabled={busy} onClick={()=>{ setCreatorStep('caption'); setCreatorMode('caption') }} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">Tiếp →</button>
+      <button type="button" disabled={busy} onClick={prepareMediaForCaption} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">{busy ? (stage || 'Đang xử lý…') : 'Tiếp →'}</button>
     </div>
     {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl border border-white/20 bg-black/85 p-3 text-sm shadow-lg">{error}</p>}
   </div>
@@ -395,7 +429,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>{ setCreatorStep('edit'); setCreatorMode('fullscreen') }}>Quay lại chỉnh sửa media</button></div>}
+        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>{ setPreparedMedia(null); setCreatorStep('edit'); setCreatorMode('fullscreen') }}>Quay lại chỉnh sửa media</button></div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
