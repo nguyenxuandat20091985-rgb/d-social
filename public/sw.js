@@ -1,4 +1,4 @@
-const CACHE = 'd-social-v4-fullscreen'
+const CACHE = 'd-social-v5-fullscreen-creator-refresh'
 const PRECACHE = ['/', '/manifest.webmanifest', '/icons/icon-192.svg', '/icons/icon-512.svg']
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting()))
@@ -17,8 +17,10 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(req)
       .then(res => {
-        const copy = res.clone()
-        caches.open(CACHE).then(c => c.put(req, copy))
+        if (res.ok && res.type !== 'opaque') {
+          const copy = res.clone()
+          caches.open(CACHE).then(c => c.put(req, copy))
+        }
         return res
       })
       .catch(() => caches.match(req).then(r => r || caches.match('/')))
