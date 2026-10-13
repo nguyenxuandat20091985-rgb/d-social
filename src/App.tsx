@@ -299,12 +299,25 @@ function Composer({ userId, onPublished, onClose }) {
 
   if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline loop className="h-full w-full object-contain" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
+      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-contain" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
+        const video = fullscreenVideoRef.current
+        const music = fullscreenMusicRef.current
+        const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
+        const requestedEnd = Number(creatorSettings.trimEnd)
+        const end = Number.isFinite(requestedEnd) && requestedEnd > start ? Math.min(video?.duration || requestedEnd, requestedEnd) : Math.min(video?.duration || 60, 60)
+        if (video && previewPlaying && video.currentTime >= end) {
+          video.currentTime = start
+          if (music) music.currentTime = 0
+        } else if (video && music && previewPlaying && !music.paused) {
+          const expected = Math.max(0, video.currentTime - start)
+          if (Math.abs(music.currentTime - expected) > 0.45) music.currentTime = expected
+        }
+      }} style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
       {(creatorSettings.overlayText||creatorSettings.sticker) && <div
         className="absolute z-10 max-w-[78%] touch-none select-none text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]"
-        style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: creatorSettings.overlayText ? 'grab' : 'default', pointerEvents: creatorSettings.overlayText ? 'auto' : 'none', touchAction: 'none' }}
+        style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: (creatorSettings.overlayText || creatorSettings.sticker) ? 'grab' : 'default', pointerEvents: (creatorSettings.overlayText || creatorSettings.sticker) ? 'auto' : 'none', touchAction: 'none' }}
         onPointerDown={event => {
-          if (!creatorSettings.overlayText) return
+          if (!creatorSettings.overlayText && !creatorSettings.sticker) return
           const bounds = event.currentTarget.parentElement.getBoundingClientRect()
           textDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: creatorSettings.overlayX ?? 50, originY: creatorSettings.overlayY ?? 50, width: bounds.width, height: bounds.height }
           event.currentTarget.setPointerCapture(event.pointerId)
@@ -325,12 +338,20 @@ function Composer({ userId, onPublished, onClose }) {
         try {
           video.muted = false
           video.volume = Math.max(0, Math.min(100, Number(creatorSettings.originalVolume ?? 100))) / 100
-          if (creatorSettings.audioSource === 'pixabay' && creatorSettings.audioTrackUrl && music) {
+          const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
+          const requestedEnd = Number(creatorSettings.trimEnd)
+          const end = Number.isFinite(requestedEnd) && requestedEnd > start ? Math.min(video.duration || requestedEnd, requestedEnd) : Math.min(video.duration || 60, 60)
+          if (video.currentTime < start || video.currentTime >= end) video.currentTime = start
+          const shouldPlayMusic = creatorSettings.audioSource === 'pixabay' && !!creatorSettings.audioTrackUrl && !!music
+          if (shouldPlayMusic && music) {
             music.volume = Math.max(0, Math.min(100, Number(creatorSettings.musicVolume ?? 30))) / 100
-            music.currentTime = 0
-            await music.play()
+            // Resume the soundtrack at the point corresponding to the current
+            // trimmed video time instead of restarting it after every pause.
+            music.currentTime = Math.max(0, video.currentTime - start)
           }
-          await video.play()
+          // Schedule both play requests in the same event turn; never await the
+          // soundtrack first, which can make the video begin noticeably later.
+          await Promise.all([video.play(), ...(shouldPlayMusic && music ? [music.play()] : [])])
           setPreviewPlaying(true)
         } catch (playError) {
           music?.pause()
