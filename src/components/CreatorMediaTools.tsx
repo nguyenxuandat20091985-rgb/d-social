@@ -9,7 +9,13 @@ const FILTERS = [
   { id: 'vivid', label: 'Rực rỡ', css: 'saturate(1.45) contrast(1.05)' },
   { id: 'cool', label: 'Lạnh', css: 'saturate(.9) hue-rotate(12deg)' },
 ]
-const STICKERS = ['✨', '❤️', '🔥', '😂', '🎉', '🌿']
+const STICKER_GROUPS = [
+  { label: 'Cảm xúc', items: ['❤️','😍','🥰','😂','🤣','😭','🥹','😎','🥳','😘','🤗','😴','🤔','🙌','👏','💖','💔','💕','💯','✨'] },
+  { label: 'Biểu tượng', items: ['🔥','⭐','🌟','⚡','💫','☀️','🌈','☁️','🌙','☘️','🍀','🌸','🌷','🌻','🌹','💐','🎉','🎊','🎈','🎁','🏆','👑','💎','📌','💡','🎵','🎶','✅','❗','💬'] },
+  { label: 'Động vật', items: ['🐶','🐱','🐼','🐻','🐨','🦊','🐸','🐵','🐰','🦋','🐝','🐢','🐬','🦄','🐣','🦁','🐯','🐧','🦉','🐾'] },
+  { label: 'Đồ ăn', items: ['🍎','🍓','🍒','🍉','🍍','🥑','🍕','🍔','🍟','🌮','🍜','🍣','🍰','🧁','🍩','🍪','🍦','☕','🧋','🥤'] },
+  { label: 'Du lịch & hoạt động', items: ['✈️','🚗','🚲','🏖️','🏝️','⛰️','🏕️','🏙️','⚽','🏀','🎮','🎧','📷','🎬','🎨','🛍️','💻','📱','💌','🫶'] },
+]
 
 export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
   const [query, setQuery] = useState('')
@@ -165,8 +171,33 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
           )}
         </div>
       )}
-      {activeTool === 'text' && <input className="w-full rounded-xl bg-white/10 px-3 py-3 text-white placeholder:text-white/50" maxLength={120} value={selected.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="Nhập chữ hiển thị trên media"/>}
-      {activeTool === 'sticker' && <div className="flex flex-wrap gap-2">{STICKERS.map(sticker=><button key={sticker} type="button" onClick={()=>update({sticker:selected.sticker===sticker?'':sticker})} className={`rounded-xl border px-3 py-2 text-2xl ${selected.sticker===sticker?'border-white bg-white/20':'border-white/20'}`}>{sticker}</button>)}</div>}
+      {activeTool === 'text' && <div className="space-y-3">
+        <input className="w-full rounded-xl bg-white/10 px-3 py-2.5 text-white placeholder:text-white/50" maxLength={120} value={selected.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="Nhập chữ hiển thị trên media"/>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-white/75">Font chữ
+            <select className="mt-1 w-full rounded-lg bg-white/10 px-2 py-2 text-white" value={selected.overlayFont||'Roboto, Arial, sans-serif'} onChange={e=>update({overlayFont:e.target.value})}>
+              <option className="text-black" value="Roboto, Arial, sans-serif">Roboto</option>
+              <option className="text-black" value="Arial, Helvetica, sans-serif">Sans-serif</option>
+              <option className="text-black" value="Georgia, serif">Playfair / Serif</option>
+              <option className="text-black" value="'Trebuchet MS', sans-serif">Trebuchet</option>
+              <option className="text-black" value="monospace">Monospace</option>
+            </select>
+          </label>
+          <label className="text-xs text-white/75">Màu chữ
+            <span className="mt-1 flex items-center gap-2 rounded-lg bg-white/10 p-1.5">
+              <input aria-label="Chọn màu chữ" className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent" type="color" value={selected.overlayColor||'#ffffff'} onChange={e=>update({overlayColor:e.target.value})}/>
+              <span className="text-xs">{(selected.overlayColor||'#ffffff').toUpperCase()}</span>
+            </span>
+          </label>
+        </div>
+        <p className="text-[11px] text-white/65">Kéo trực tiếp dòng chữ trên ảnh/video để đổi vị trí.</p>
+      </div>}
+      {activeTool === 'sticker' && <div className="space-y-3">
+        {STICKER_GROUPS.map(group => <section key={group.label} className="space-y-1.5">
+          <div className="text-xs font-semibold text-white/70">{group.label}</div>
+          <div className="flex flex-wrap gap-1.5">{group.items.map(sticker=><button key={sticker} type="button" aria-label={'Sticker '+sticker} onClick={()=>update({sticker:selected.sticker===sticker?'':sticker})} className={`rounded-lg border px-2 py-1.5 text-xl ${selected.sticker===sticker?'border-white bg-white/20':'border-white/15 bg-white/5'}`}>{sticker}</button>)}</div>
+        </section>)}
+      </div>}
       {activeTool === 'filter' && <div className="flex flex-wrap gap-2">{FILTERS.map(filter=><button key={filter.id} type="button" onClick={()=>update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${(selected.colorFilter||'none')===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div>}
       {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
     </div>}
