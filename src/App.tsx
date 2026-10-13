@@ -142,12 +142,13 @@ function Composer({ userId, onPublished, onClose }) {
   const [files, setFiles] = useState([])
   const [previews, setPreviews] = useState([])
   const creatorToolsRef = React.useRef(null)
+  const textDragRef = React.useRef(null)
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
   const [creatorStep, setCreatorStep] = useState('edit')
   const [creatorMode, setCreatorMode] = useState('picker')
   const [error, setError] = useState('')
-  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
+  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', overlayFont: 'Roboto, Arial, sans-serif', overlayColor: '#ffffff', overlayX: 50, overlayY: 50, sticker: '', taggedUsers: '', location: '' })
 
   useEffect(() => {
     try {
@@ -288,13 +289,29 @@ function Composer({ userId, onPublished, onClose }) {
   if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
       {files[0].type.startsWith('video/') ? <video src={previews[0]} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
-      {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+      {(creatorSettings.overlayText||creatorSettings.sticker) && <div
+        className="absolute z-10 max-w-[78%] touch-none select-none text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]"
+        style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: creatorSettings.overlayText ? 'grab' : 'default', pointerEvents: creatorSettings.overlayText ? 'auto' : 'none', touchAction: 'none' }}
+        onPointerDown={event => {
+          if (!creatorSettings.overlayText) return
+          const bounds = event.currentTarget.parentElement.getBoundingClientRect()
+          textDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: creatorSettings.overlayX ?? 50, originY: creatorSettings.overlayY ?? 50, width: bounds.width, height: bounds.height }
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerMove={event => {
+          const drag = textDragRef.current
+          if (!drag || drag.pointerId !== event.pointerId) return
+          setCreatorSettings(current => ({ ...current, overlayX: Math.max(8, Math.min(92, drag.originX + (event.clientX - drag.startX) / drag.width * 100)), overlayY: Math.max(8, Math.min(92, drag.originY + (event.clientY - drag.startY) / drag.height * 100)) }))
+        }}
+        onPointerUp={() => { textDragRef.current = null }}
+        onPointerCancel={() => { textDragRef.current = null }}
+      >{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
     <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
-      <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-12 flex-1 rounded-full border border-white/60 bg-white/10 px-3 text-sm font-bold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
-      <button type="button" disabled={busy} onClick={()=>{ setCreatorStep('caption'); setCreatorMode('caption') }} className="min-h-12 flex-1 rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">Tiếp →</button>
+      <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-9 flex-1 rounded-full border border-white/60 bg-white/10 px-2 text-xs font-semibold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
+      <button type="button" disabled={busy} onClick={()=>{ setCreatorStep('caption'); setCreatorMode('caption') }} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">Tiếp →</button>
     </div>
     {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
   </div>
@@ -369,7 +386,8 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [error, setError] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
   const creatorToolsRef = React.useRef(null)
-  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
+  const textDragRef = React.useRef(null)
+  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', overlayFont: 'Roboto, Arial, sans-serif', overlayColor: '#ffffff', overlayX: 50, overlayY: 50, sticker: '', taggedUsers: '', location: '' })
 
   useEffect(() => {
     if (file) creatorToolsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
@@ -457,7 +475,23 @@ function StoryComposer({ userId, onClose, onPublished }) {
   if (file) return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
       {file.type.startsWith('video/') ? <video src={previewUrl} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
-      {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+      {(creatorSettings.overlayText||creatorSettings.sticker) && <div
+        className="absolute z-10 max-w-[78%] touch-none select-none text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]"
+        style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: creatorSettings.overlayText ? 'grab' : 'default', pointerEvents: creatorSettings.overlayText ? 'auto' : 'none', touchAction: 'none' }}
+        onPointerDown={event => {
+          if (!creatorSettings.overlayText) return
+          const bounds = event.currentTarget.parentElement.getBoundingClientRect()
+          textDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: creatorSettings.overlayX ?? 50, originY: creatorSettings.overlayY ?? 50, width: bounds.width, height: bounds.height }
+          event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onPointerMove={event => {
+          const drag = textDragRef.current
+          if (!drag || drag.pointerId !== event.pointerId) return
+          setCreatorSettings(current => ({ ...current, overlayX: Math.max(8, Math.min(92, drag.originX + (event.clientX - drag.startX) / drag.width * 100)), overlayY: Math.max(8, Math.min(92, drag.originY + (event.clientY - drag.startY) / drag.height * 100)) }))
+        }}
+        onPointerUp={() => { textDragRef.current = null }}
+        onPointerCancel={() => { textDragRef.current = null }}
+      >{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFile(null)} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
     <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen"/>
