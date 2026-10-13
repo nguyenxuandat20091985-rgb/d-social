@@ -59,6 +59,22 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
     } finally { setLoading(false) }
   }
 
+  const toggleTrackPreview = track => {
+    const audio = document.getElementById('pixabay-preview-' + track.id)
+    if (!audio) return
+    if (playingId === track.id) {
+      audio.pause()
+      setPlayingId('')
+      return
+    }
+    document.querySelectorAll('[data-pixabay-preview]').forEach(element => {
+      element.pause()
+    })
+    audio.play()
+      .then(() => setPlayingId(track.id))
+      .catch(() => setAudioError('Không phát được bản xem trước này.'))
+  }
+
   const selectTrack = track => update({
     audioSource: 'pixabay',
     audioTrackId: track.id,
@@ -95,17 +111,14 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
         {loading && <p className="text-xs text-white/70">Đang tìm nhạc…</p>}{audioError && <p role="status" className="text-xs text-amber-300">{audioError}</p>}
         {hits.map(track => (
           <div key={track.id} className="flex items-center gap-2 rounded-xl bg-white/10 p-2">
-            <button type="button" onClick={() => {
-              const audio = document.getElementById('pixabay-preview-' + track.id)
-              if (!audio) return
-              if (playingId === track.id) {
-                audio.pause()
-                setPlayingId('')
-              } else {
-                document.querySelectorAll('[data-pixabay-preview]').forEach(el => el.pause())
-                audio.play().then(() => setPlayingId(track.id)).catch(() => setAudioError('Không phát được bản xem trước này.'))
-              }
-            }} className="rounded-full bg-white/15 p-2"><Play size={15}/></button>
+            <button
+              type="button"
+              onClick={() => toggleTrackPreview(track)}
+              className="rounded-full bg-white/15 p-2"
+              aria-label={playingId === track.id ? 'Dừng nghe thử' : 'Nghe thử'}
+            >
+              {playingId === track.id ? <Pause size={15} /> : <Play size={15} />}
+            </button>
             <audio id={'pixabay-preview-' + track.id} data-pixabay-preview src={track.previewUrl} preload="none" className="hidden"/>
             <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{track.title}</div><div className="text-xs text-white/60">{track.artist}</div></div>
             <button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button>
