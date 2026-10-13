@@ -29,8 +29,10 @@ function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
   const scale = canvas.width / 720
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  const x = canvas.width * Math.max(0.08, Math.min(0.92, Number(settings.overlayX ?? 50) / 100))
-  const y = canvas.height * Math.max(0.08, Math.min(0.92, Number(settings.overlayY ?? 70) / 100))
+  // Keep the same percentage-based anchor as the fullscreen preview and clamp it
+  // to the visible canvas so text/stickers cannot be rendered off-screen.
+  const x = canvas.width * Math.max(0.04, Math.min(0.96, Number(settings.overlayX ?? 50) / 100))
+  const y = canvas.height * Math.max(0.04, Math.min(0.96, Number(settings.overlayY ?? 50) / 100))
   context.shadowColor = 'rgba(0,0,0,.85)'
   context.shadowBlur = 7 * scale
   context.shadowOffsetY = 2 * scale
@@ -142,12 +144,17 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
     if (end - start < 15 || end - start > 60 || end > duration || start >= duration) {
       throw new Error('Video phải có đoạn xuất dài từ 15 đến 60 giây và nằm trong thời lượng video gốc.')
     }
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Không thể tua đến đoạn video đã chọn.')), 10000)
-      const onSeek = () => { clearTimeout(timer); resolve() }
-      video.addEventListener('seeked', onSeek, { once: true })
-      video.currentTime = start
-    })
+    if (start > 0.05) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          video.removeEventListener('seeked', onSeek)
+          reject(new Error('Không thể tua đến đoạn video đã chọn.'))
+        }, 10000)
+        const onSeek = () => { clearTimeout(timer); resolve() }
+        video.addEventListener('seeked', onSeek, { once: true })
+        video.currentTime = start
+      })
+    }
 
     const width = Math.min(1280, video.videoWidth || 720)
     const height = Math.max(2, Math.round(width * (video.videoHeight || 1280) / (video.videoWidth || 720)))
@@ -211,24 +218,44 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
       if (video.currentTime < end && !video.ended && activeRecorder.state === 'recording') animationFrame = requestAnimationFrame(draw)
     }
     activeRecorder.start(250)
-    if (music) {
-      music.currentTime = 0
-      await music.play()
-    }
-    await video.play()
+    // Call both play() methods in the same task so the browser schedules their
+    // start together; awaiting music first would visibly delay the video.
+    const playbackStarted = Promise.all([
+      video.play(),
+      ...(music ? [music.play()] : []),
+    ])
+    await playbackStarted
     draw()
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Xuất video quá thời gian chờ.')), Math.max(90000, (end - start) * 8000))
-      const stop = () => { clearTimeout(timer); resolve() }
-      video.addEventListener('timeupdate', () => {
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error('Xuất video quá thời gian chờ.'))
+      }, Math.max(90000, (end - start) * 8000))
+      const cleanup = () => {
+        clearTimeout(timer)
+        video.removeEventListener('timeupdate', onTimeUpdate)
+        video.removeEventListener('error', onVideoError)
+      }
+      const stop = () => {
+        cleanup()
+        if (activeRecorder.state !== 'inactive') activeRecorder.stop()
+        resolve()
+      }
+      const onTimeUpdate = () => {
         if (video.currentTime >= end) {
           video.pause()
           if (music) music.pause()
-          if (activeRecorder.state !== 'inactive') activeRecorder.stop()
           stop()
         }
-      })
-      video.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Video bị lỗi trong khi xuất.')) }, { once: true })
+      }
+      const onVideoError = () => {
+        cleanup()
+        reject(new Error('Video bị lỗi trong khi xuất.'))
+      }
+      video.addEventListener('timeupdate', onTimeUpdate)
+      video.addEventListener('error', onVideoError, { once: true })
+      // Some mobile browsers emit sparse timeupdate events near the end.
+      if (video.currentTime >= end) stop()
     })
     const blob = await recorded
     const type = blob.type.includes('mp4') ? 'video/mp4' : 'video/webm'
