@@ -17,6 +17,9 @@ import { PublicProfilePage } from './components/PublicProfilePage'
 import { ShareMenu } from './components/ShareMenu'
 import { LOGO_SRC } from './lib/brand'
 import { ShortVideoFeed } from './components/ShortVideoFeed'
+import { CreatorMediaTools } from './components/CreatorMediaTools'
+import { MusicReplaceDialog } from './components/MusicReplaceDialog'
+import { processCreatorMedia } from './lib/mediaExport'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -138,9 +141,13 @@ function Composer({ userId, onPublished, onClose }) {
   })
   const [files, setFiles] = useState([])
   const [previews, setPreviews] = useState([])
+  const creatorToolsRef = React.useRef(null)
   const [busy, setBusy] = useState(false)
   const [stage, setStage] = useState('')
+  const [creatorStep, setCreatorStep] = useState('edit')
+  const [creatorMode, setCreatorMode] = useState('picker')
   const [error, setError] = useState('')
+  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
 
   useEffect(() => {
     try {
@@ -151,6 +158,10 @@ function Composer({ userId, onPublished, onClose }) {
   }, [text, userId])
 
   useEffect(() => {
+    if (files.length) creatorToolsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [files.length])
+
+  useEffect(() => {
     const urls = files.map(file => URL.createObjectURL(file))
     setPreviews(urls)
     return () => urls.forEach(url => URL.revokeObjectURL(url))
@@ -158,26 +169,28 @@ function Composer({ userId, onPublished, onClose }) {
 
   const pick = selected => {
     const incoming = Array.from(selected || [])
-    if (!incoming.length) return
+    if (!incoming.length) return false
     const all = [...files, ...incoming]
     if (all.some(f => !['image/', 'video/'].some(x => f.type.startsWith(x)))) {
       setError('Chỉ hỗ trợ ảnh và video.')
-      return
+      return false
     }
     if (all.some(f => f.type.startsWith('video/')) && all.length > 1) {
       setError('Video phải đăng riêng; mỗi bài tối đa 10 ảnh.')
-      return
+      return false
     }
     if (all.length > 10) {
       setError('Mỗi bài đăng tối đa 10 ảnh.')
-      return
+      return false
     }
     if (all.some(f => f.size > (f.type.startsWith('video/') ? MAX_VIDEO : MAX_IMAGE))) {
       setError('Mỗi ảnh tối đa 8MB, video tối đa 30MB.')
-      return
+      return false
     }
     setError('')
+    setCreatorStep('edit')
     setFiles(all)
+    return true
   }
 
   const publish = async () => {
@@ -188,6 +201,8 @@ function Composer({ userId, onPublished, onClose }) {
     if (!text.trim() && !files.length) return setError('Nhập nội dung hoặc đính kèm ảnh/video trước khi đăng.')
     const mod = moderateText(text)
     if (!mod.allowed) return setError(mod.reason)
+    if (files.length && !creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng ảnh/video và âm thanh trước khi đăng.')
+    if (files.length === 1 && files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn một bản nhạc Pixabay hoặc chuyển về âm thanh gốc.')
     if (!postRateLimit(userId)) return setError('Anh đăng quá nhanh. Vui lòng chờ 60 giây rồi thử lại.')
 
     setBusy(true)
@@ -196,8 +211,12 @@ function Composer({ userId, onPublished, onClose }) {
       let media_url = null, media_type = null
       const image_urls = []
       for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
+        const sourceFile = files[i]
+        setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
+        const file = await processCreatorMedia(sourceFile, creatorSettings, percent => {
+          if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+        })
+        setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
         const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
@@ -211,6 +230,10 @@ function Composer({ userId, onPublished, onClose }) {
       const { error: err } = await supabase.from('posts').insert({
         author_id: userId, user_id: userId, content: text.trim() || null, media_url, media_type,
         image_urls: image_urls.length ? image_urls : null, is_published: true,
+        creator_settings: creatorSettings, privacy: creatorSettings.privacy || 'public',
+        audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
+        audio_title: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackTitle || null) : null,
+        is_muted: false, copyright_audio_status: 'unknown',
       })
       if (err) throw new Error(`Không lưu được bài viết: ${err.message}`)
 
@@ -238,41 +261,99 @@ function Composer({ userId, onPublished, onClose }) {
 
   const formatSize = size => size >= 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(size / 1024)) + ' KB'
 
+
+  const publishAsStory = async () => {
+    if (busy || !files[0]) return
+    if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
+    if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng media và âm thanh trước khi đăng tin.')
+    if (files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn nhạc Pixabay hoặc dùng âm thanh gốc.')
+    setBusy(true); setError(''); let uploadedPath = null
+    try {
+      const sourceFile = files[0]
+      const uploadFile = await processCreatorMedia(sourceFile, creatorSettings, percent => setStage('Đang kết xuất video: ' + percent + '%…'))
+      setStage('Đang tải media lên…')
+      const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'bin'
+      const path = userId + '/stories/' + crypto.randomUUID() + '.' + ext
+      const up = await supabase.storage.from('social-media').upload(path, uploadFile, { contentType: uploadFile.type, upsert: false })
+      if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
+      uploadedPath = path
+      const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
+      const { error: insertError } = await supabase.from('stories').insert({ user_id:userId, media_url, media_type:sourceFile.type.startsWith('video/')?'video':'image', caption:null, expires_at:new Date(Date.now()+24*60*60*1000).toISOString(), creator_settings:creatorSettings, privacy:creatorSettings.privacy||'public', audio_url:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackUrl||null):null, audio_title:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackTitle||null):null, is_muted:false, copyright_audio_status:'unknown' })
+      if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
+      onClose?.(); Promise.resolve().then(()=>onPublished?.()).catch(err=>console.error('Không làm mới Tin 24 giờ:',err))
+    } catch (e) { if(uploadedPath) try { await supabase.storage.from('social-media').remove([uploadedPath]) } catch {} setError(e?.message||'Không đăng được tin.') }
+    finally { setBusy(false); setStage('') }
+  }
+
+  if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      {files[0].type.startsWith('video/') ? <video src={previews[0]} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
+      {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+    </div>
+    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button><span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black tracking-wide">D-SOCIAL · v2.0 Fullscreen</span></div>
+    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
+    <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
+      <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-12 flex-1 rounded-full border border-white/60 bg-white/10 px-3 text-sm font-bold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
+      <button type="button" disabled={busy} onClick={()=>{ setCreatorStep('caption'); setCreatorMode('caption') }} className="min-h-12 flex-1 rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">Tiếp →</button>
+    </div>
+    {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
+  </div>
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-2 sm:p-3"
       style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
       onClick={e => { if (e.target === e.currentTarget) onClose?.() }}
     >
-      <section className="d-card home-post-composer w-full max-w-2xl max-h-[92dvh] overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" role="dialog" aria-modal="true" aria-label="Tạo bài viết">
+      <section className="d-card home-post-composer w-full max-w-2xl overflow-y-auto p-3 sm:p-4 mb-0 shadow-2xl" style={{ maxHeight: '92dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Tạo bài viết">
         <div className="flex items-center justify-between mb-3">
-          <div><div className="font-bold text-base">Tạo bài viết</div><div className="text-xs d-muted mt-0.5">Chia sẻ với cộng đồng của bạn</div></div>
+          <div><div className="font-bold text-base">Tạo bài viết (v2.0 Test)</div><div className="text-xs d-muted mt-0.5">Bước 2/2 · Nhập caption và đăng bài</div></div>
           {onClose && <button type="button" onClick={onClose} className="d-muted p-2 min-w-11 min-h-11 grid place-items-center" aria-label="Đóng" title={busy ? 'Đóng cửa sổ; quá trình đăng tiếp tục ở nền' : 'Đóng'}><X size={18} /></button>}
         </div>
         <textarea value={text} onChange={e => { setText(e.target.value); if (error) setError('') }} maxLength={2000} placeholder="Bạn đang nghĩ gì?" disabled={busy} className="home-post-textarea w-full bg-transparent resize-y outline-none min-h-[112px] text-[15px] disabled:opacity-70" autoFocus />
         {files.length > 0 && <div className="home-post-media-grid mt-3 mb-3">
-          {files.map((file, index) => <div key={file.name + file.size + index} className="home-post-media-item">
+          {files.map((file, index) => <div key={file.name + file.size + index} className="home-post-media-item relative">
             {file.type.startsWith('image/') && previews[index]
-              ? <img src={previews[index]} alt={`Xem trước ${file.name}`} className="home-post-media-preview" />
+              ? <img src={previews[index]} alt={`Xem trước ${file.name}`} className="home-post-media-preview" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />
               : file.type.startsWith('video/') && previews[index]
-                ? <video src={previews[index]} controls playsInline preload="metadata" className="home-post-media-preview home-post-video-preview" />
+                ? <video src={previews[index]} controls playsInline preload="metadata" className="home-post-media-preview home-post-video-preview" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />
                 : null}
+            {(creatorSettings.overlayText || creatorSettings.sticker) && <div className="pointer-events-none absolute inset-x-2 bottom-12 z-[2] text-center font-bold text-white drop-shadow-[0_2px_5px_rgba(0,0,0,.9)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
             <div className="flex items-center justify-between gap-2 p-2">
               <div className="min-w-0"><span className="block text-xs font-semibold truncate">{file.name}</span><span className="block text-[11px] d-muted">{formatSize(file.size)}</span></div>
               <button type="button" disabled={busy} onClick={() => setFiles(current => current.filter((_, i) => i !== index))} className="d-muted p-2 min-w-10 min-h-10 grid place-items-center disabled:opacity-40" aria-label={`Bỏ ${file.name}`}><X size={16} /></button>
             </div>
           </div>)}
         </div>}
+        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>{ setCreatorStep('edit'); setCreatorMode('fullscreen') }}>Quay lại chỉnh sửa media</button></div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">
           <label className="home-post-attach flex gap-2 d-muted cursor-pointer items-center min-h-11 px-3 rounded-xl" aria-label="Chọn ảnh hoặc video">
             <ImageIcon size={19} /><Video size={19} /><span className="text-xs font-semibold">{files.length ? 'Thêm tệp' : 'Ảnh/video'}</span>
-            <input hidden type="file" accept="image/*,video/*" multiple disabled={busy} onChange={e => { pick(e.target.files); e.target.value = '' }} />
+            <input
+              hidden
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              disabled={busy}
+              onChange={e => {
+                const input = e.currentTarget
+                const accepted = pick(input.files)
+                input.value = ''
+                if (accepted) {
+                  // Explicitly replace the picker modal with the full-screen editor.
+                  setCreatorStep('edit')
+                  setCreatorMode('fullscreen')
+                }
+              }}
+            />
           </label>
-          <button type="button" disabled={busy || (!text.trim() && !files.length)} onClick={publish} className="d-btn-primary home-post-submit text-sm min-w-28 min-h-11">
-            {busy ? 'Đang đăng…' : 'Đăng bài'}
-          </button>
+          <div className="flex gap-2">
+            <button type="button" disabled={busy || (!text.trim() && !files.length)} onClick={publish} className="d-btn-primary home-post-submit text-sm min-h-11 px-3">
+              {busy ? 'Đang đăng…' : 'Đăng ngay'}
+            </button>
+          </div>
         </div>
         <p className="text-[11px] d-muted mt-2">Tối đa 10 ảnh mỗi bài; video đăng riêng. Bản nháp được lưu trên thiết bị.</p>
       </section>
@@ -287,6 +368,12 @@ function StoryComposer({ userId, onClose, onPublished }) {
   const [stage, setStage] = useState('')
   const [error, setError] = useState('')
   const [previewUrl, setPreviewUrl] = useState('')
+  const creatorToolsRef = React.useRef(null)
+  const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', sticker: '', taggedUsers: '', location: '' })
+
+  useEffect(() => {
+    if (file) creatorToolsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [file])
 
   useEffect(() => {
     if (!file) { setPreviewUrl(''); return }
@@ -316,14 +403,21 @@ function StoryComposer({ userId, onClose, onPublished }) {
     if (!file) return setError('Chọn một ảnh hoặc video để đăng tin.')
     const mod = moderateText(caption)
     if (!mod.allowed) return setError(mod.reason)
+    if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng ảnh/video và âm thanh trước khi đăng tin.')
+    if (file.type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn một bản nhạc Pixabay hoặc chuyển về âm thanh gốc.')
     setBusy(true)
     setError('')
     setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
     let uploadedPath = null
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
+      setStage(file.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
+      const uploadFile = await processCreatorMedia(file, creatorSettings, percent => {
+        if (file.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+      })
+      setStage(file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
+      const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
-      const up = await supabase.storage.from('social-media').upload(path, file, { contentType: file.type, upsert: false })
+      const up = await supabase.storage.from('social-media').upload(path, uploadFile, { contentType: uploadFile.type, upsert: false })
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
       let media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
@@ -331,6 +425,10 @@ function StoryComposer({ userId, onClose, onPublished }) {
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
         caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        creator_settings: creatorSettings, privacy: creatorSettings.privacy || 'public',
+        audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
+        audio_title: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackTitle || null) : null,
+        is_muted: false, copyright_audio_status: 'unknown',
       })
       if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
 
@@ -355,13 +453,28 @@ function StoryComposer({ userId, onClose, onPublished }) {
 
   const fileSize = file ? (file.size >= 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(file.size / 1024)) + ' KB') : ''
 
+
+  if (file) return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      {file.type.startsWith('video/') ? <video src={previewUrl} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
+      {(creatorSettings.overlayText||creatorSettings.sticker) && <div className="pointer-events-none absolute left-6 right-20 top-1/2 -translate-y-1/2 text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+    </div>
+    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFile(null)} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button><span className="rounded-full bg-black/55 px-3 py-2 text-xs font-black tracking-wide">D-SOCIAL · v2.0 Fullscreen</span></div>
+    <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen"/>
+    <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
+      {error && <p role="alert" className="mb-2 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
+      <div className="mb-3 flex gap-2"><input value={caption} onChange={e=>setCaption(e.target.value)} maxLength={300} placeholder="Caption cho tin (không bắt buộc)" className="min-w-0 flex-1 rounded-xl bg-white/15 px-3 py-3 text-sm placeholder:text-white/60" disabled={busy}/><label className="rounded-xl bg-white/15 px-3 py-3 text-xs font-bold">Đổi<input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e=>{chooseFile(e.target.files);e.target.value=''}}/></label></div>
+      <button type="button" disabled={busy} onClick={publish} className="min-h-12 w-full rounded-full bg-white px-5 text-sm font-black text-black disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
+    </div>
+  </div>
+
   return <div className="fixed inset-0 z-[65] flex items-end sm:items-center justify-center bg-black/55 p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose?.() }}>
-    <section className="d-card home-story-composer w-full max-w-lg p-4 max-h-[90dvh] overflow-y-auto" role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
+    <section className="d-card home-story-composer w-full max-w-lg p-4" style={{ maxHeight: '90dvh', height: 'auto', minHeight: 0, overflowY: 'auto', flexShrink: 1 }} role="dialog" aria-modal="true" aria-label="Đăng tin 24 giờ">
       <div className="flex items-center justify-between mb-3"><h2 className="font-black">Đăng tin 24 giờ</h2><button type="button" disabled={busy} className="d-muted p-2 disabled:opacity-40" onClick={onClose} aria-label="Đóng"><X size={19}/></button></div>
       <p className="text-xs d-muted mb-3">Chọn một ảnh hoặc video. Tin sẽ tự ẩn sau 24 giờ.</p>
       <div className="home-story-file-picker flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-4 min-h-36 d-border-c" style={{ background: 'var(--d-surface-2)' }}>
-        {previewUrl && file?.type.startsWith('image/') ? <img src={previewUrl} alt="Xem trước ảnh tin" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
-          previewUrl && file?.type.startsWith('video/') ? <video src={previewUrl} controls playsInline preload="metadata" className="home-story-preview max-h-64 w-full rounded-xl object-contain" /> :
+        {previewUrl && file?.type.startsWith('image/') ? <div className="relative w-full"><img src={previewUrl} alt="Xem trước ảnh tin" className="home-story-preview max-h-64 w-full rounded-xl object-contain" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />{(creatorSettings.overlayText || creatorSettings.sticker) && <div className="pointer-events-none absolute inset-x-2 bottom-3 text-center font-bold text-white drop-shadow-[0_2px_5px_rgba(0,0,0,.9)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}</div> :
+          previewUrl && file?.type.startsWith('video/') ? <div className="relative w-full"><video src={previewUrl} controls playsInline preload="metadata" className="home-story-preview max-h-64 w-full rounded-xl object-contain" style={{ filter: ({ warm: 'saturate(1.15) sepia(.18)', mono: 'grayscale(1)', vivid: 'saturate(1.45) contrast(1.05)', cool: 'saturate(.9) hue-rotate(12deg)' })[creatorSettings.colorFilter] || 'none' }} />{(creatorSettings.overlayText || creatorSettings.sticker) && <div className="pointer-events-none absolute inset-x-2 bottom-3 text-center font-bold text-white drop-shadow-[0_2px_5px_rgba(0,0,0,.9)]">{creatorSettings.sticker} {creatorSettings.overlayText}</div>}</div> :
           <ImageIcon size={28} style={{ color: 'var(--d-primary)' }}/>}
         <span className="text-sm font-semibold text-center break-all">{file ? file.name : 'Chưa chọn ảnh hoặc video'}</span>
         {file && <span className="text-xs d-muted">{fileSize}</span>}
@@ -371,6 +484,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
         </label>
       </div>
       <textarea value={caption} onChange={e => setCaption(e.target.value)} maxLength={300} placeholder="Thêm chú thích (không bắt buộc)" disabled={busy} className="d-input mt-3 resize-y min-h-20 w-full"/>
+
       {busy && <div className="mt-3" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-medium"><span className="home-story-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-story-progress mt-2 overflow-hidden rounded-full"><span/></div><p className="text-xs d-muted mt-1">Vui lòng giữ ứng dụng mở đến khi tải xong.</p></div>}
       {error && <p role="alert" aria-live="polite" className="text-sm mt-3 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
       <button type="button" disabled={busy || !file} onClick={publish} className="d-btn-primary w-full mt-3 min-h-11 disabled:opacity-50">
@@ -400,8 +514,13 @@ function StoryViewer({ story, onClose, onPrev, onNext, hasPrev, hasNext, positio
 
 function PostCard({ post, userId, onRemoved }) {
   const homeVideoRef = React.useRef(null)
+  const replacementAudioRef = React.useRef(null)
   const soundButtonTimerRef = React.useRef(null)
   const [videoMuted, setVideoMuted] = useState(true)
+  const [showMusicPicker, setShowMusicPicker] = useState(false)
+  const [activeAudioUrl, setActiveAudioUrl] = useState(post.copyright_audio_status === 'replaced' ? post.audio_url : null)
+  const [activeAudioTitle, setActiveAudioTitle] = useState(post.copyright_audio_status === 'replaced' ? post.audio_title : '')
+  const [copyrightMuted, setCopyrightMuted] = useState(Boolean(post.is_muted || post.copyright_audio_status === 'muted_copyright'))
   const [showSoundButton, setShowSoundButton] = useState(true)
   const [liked, setLiked] = useState(Boolean(userId && post.likes?.some(x => x.user_id === userId)))
   const [count, setCount] = useState(post.likes?.length || 0)
@@ -485,6 +604,41 @@ function PostCard({ post, userId, onRemoved }) {
     }
   }, [post.id, post.media_type, post.media_url])
 
+  useEffect(() => {
+    const video = homeVideoRef.current
+    const audio = replacementAudioRef.current
+    if (!video || !audio || !activeAudioUrl) return
+    const syncTime = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0 && Math.abs(audio.currentTime - (video.currentTime % audio.duration)) > 0.6) audio.currentTime = video.currentTime % audio.duration
+    }
+    const onPlay = () => { syncTime(); audio.play().catch(() => {}) }
+    const onPause = () => audio.pause()
+    video.muted = true
+    setVideoMuted(true)
+    audio.volume = Math.max(0, Math.min(1, Number(post.creator_settings?.musicVolume ?? 30) / 100))
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
+    video.addEventListener('timeupdate', syncTime)
+    return () => {
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
+      video.removeEventListener('timeupdate', syncTime)
+      audio.pause()
+    }
+  }, [activeAudioUrl, post.id])
+
+  const applyReplacementTrack = async track => {
+    if (!supabase || !userId) return
+    const { error } = await supabase.from('posts').update({
+      audio_url: track.previewUrl, audio_title: track.title, is_muted: false, copyright_audio_status: 'replaced'
+    }).eq('id', post.id).eq('author_id', userId)
+    if (error) { alert('Không lưu được bài nhạc thay thế: ' + error.message); return }
+    setActiveAudioUrl(track.previewUrl)
+    setActiveAudioTitle(track.title)
+    setCopyrightMuted(false)
+    setShowMusicPicker(false)
+  }
+
   const revealSoundButton = () => {
     setShowSoundButton(true)
     if (soundButtonTimerRef.current) window.clearTimeout(soundButtonTimerRef.current)
@@ -496,6 +650,13 @@ function PostCard({ post, userId, onRemoved }) {
   const toggleHomeVideoSound = () => {
     const video = homeVideoRef.current
     if (!video) return
+    if (activeAudioUrl && replacementAudioRef.current) {
+      const nextMuted = !videoMuted
+      setVideoMuted(nextMuted)
+      replacementAudioRef.current.volume = nextMuted ? 0 : Math.max(0.01, Math.min(1, Number(post.creator_settings?.musicVolume ?? 30) / 100))
+      setShowSoundButton(true)
+      return
+    }
     const nextMuted = !videoMuted
     video.muted = nextMuted
     setVideoMuted(nextMuted)
@@ -575,9 +736,11 @@ function PostCard({ post, userId, onRemoved }) {
   }
 
   const reportPost = async () => {
-    const reason = prompt('Lý do báo cáo (spam, lừa đảo, nội dung xấu, vi phạm bản quyền ảnh/video/nhạc...)')
-    if (!reason?.trim() || !supabase) return
-    const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason: reason.trim().slice(0, 500) })
+    const choice = prompt('Chọn lý do báo cáo bằng số:\n1. Vi phạm bản quyền hình ảnh\n2. Giả mạo thương hiệu\n3. Nội dung không phù hợp')
+    const reasons = { '1': 'Vi phạm bản quyền hình ảnh', '2': 'Giả mạo thương hiệu', '3': 'Nội dung không phù hợp' }
+    const reason = reasons[String(choice || '').trim()]
+    if (!reason || !supabase || !userId) return
+    const { error } = await supabase.from('reports').insert({ reporter_id: userId, target_type: 'post', target_id: post.id, reason })
     alert(error ? error.message : 'Đã gửi báo cáo. Cảm ơn bạn.')
     setMenu(false)
   }
@@ -644,7 +807,7 @@ function PostCard({ post, userId, onRemoved }) {
             ref={homeVideoRef}
             src={post.media_url}
             controls
-            muted={videoMuted}
+            muted={videoMuted || Boolean(activeAudioUrl) || copyrightMuted}
             playsInline
             preload="metadata"
             className="block w-full h-auto"
@@ -652,7 +815,13 @@ function PostCard({ post, userId, onRemoved }) {
             onClick={revealSoundButton}
             aria-label="Video bài viết trên Trang chủ"
           />
-          {showSoundButton && <button
+          {activeAudioUrl && <audio ref={replacementAudioRef} src={activeAudioUrl} preload="metadata" className="hidden" />}
+          {copyrightMuted && <div className="absolute left-3 right-3 top-3 z-[3] rounded-xl bg-black/75 px-3 py-2 text-xs font-semibold text-white shadow">
+            <div>Âm thanh bị tắt do bản quyền</div>
+            <button type="button" onClick={() => setShowMusicPicker(true)} className="mt-2 rounded-lg px-3 py-2 font-bold text-black" style={{ background: '#FACC15' }}>Đổi bài hát</button>
+          </div>}
+          {activeAudioUrl && <div className="absolute left-3 bottom-3 z-[2] rounded-full bg-black/70 px-3 py-1.5 text-xs text-white">♫ {activeAudioTitle || 'Nhạc thay thế'}</div>}
+          {showSoundButton && !copyrightMuted && <button
             type="button"
             onClick={toggleHomeVideoSound}
             className="absolute right-3 bottom-14 z-[2] inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2 text-xs font-semibold text-white shadow"
@@ -684,6 +853,7 @@ function PostCard({ post, userId, onRemoved }) {
         </button>
         <ShareMenu postId={post.id} text={content} author={name} />
       </div>
+      {showMusicPicker && <MusicReplaceDialog onClose={() => setShowMusicPicker(false)} onSelect={applyReplacementTrack} />}
       {showComments && (
         <div className="px-4 pb-4 space-y-2 border-t d-border-c pt-3">
           {comments.map(c => (
@@ -757,7 +927,7 @@ function Feed({ userId }) {
         // Short videos: newest first, 20 per page. No engagement score or 5-item cap.
         const offset = append ? posts.length : 0
         let videoQuery = supabase.from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,creator_settings,audio_url,audio_title,is_muted,copyright_audio_status,reach_multiplier,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .is('deleted_at', null)
           .not('media_url', 'is', null)
@@ -805,7 +975,7 @@ function Feed({ userId }) {
       const offset = append ? posts.length : 0
       let query = supabase
         .from('posts')
-        .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
+        .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,created_at,reach_multiplier,likes(user_id),profiles!author_id(full_name,username,avatar_url)')
         .eq('is_published', true)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -814,7 +984,7 @@ function Feed({ userId }) {
       if (error) {
         let altQuery = supabase
           .from('posts')
-          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,deleted_at,created_at,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
+          .select('id,author_id,user_id,content,media_url,media_type,image_urls,is_published,deleted_at,created_at,reach_multiplier,likes(user_id),profiles!user_id(full_name,username,avatar_url)')
           .eq('is_published', true)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
@@ -827,7 +997,11 @@ function Feed({ userId }) {
       setHasMore(page.length === 20)
       setPosts(current => {
         const combined = append ? [...current, ...page.filter(p => !current.some(old => old.id === p.id))] : page
-        if (mode === 'popular') return [...combined].sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0))
+        if (mode === 'popular') return [...combined].sort((a, b) => {
+          const scoreA = (a.likes?.length || 0) * Math.max(0, Math.min(1, Number(a.reach_multiplier ?? 1)))
+          const scoreB = (b.likes?.length || 0) * Math.max(0, Math.min(1, Number(b.reach_multiplier ?? 1)))
+          return scoreB - scoreA || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
         return combined
       })
       const { data: peeps } = await supabase.from('profiles').select('id,username,full_name,avatar_url').order('created_at', { ascending: false }).limit(16)
