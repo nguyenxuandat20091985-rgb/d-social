@@ -17,7 +17,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
   const [loading, setLoading] = useState(false)
   const [audioError, setAudioError] = useState('')
   const [playingId, setPlayingId] = useState('')
-  const [activeTool, setActiveTool] = useState('music')
+  const [activeTool, setActiveTool] = useState('')
   const [duration, setDuration] = useState(0)
   const selected = settings || {}
   const update = patch => onChange?.({ ...selected, ...patch })
@@ -92,18 +92,18 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
 
   if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
     <div className="absolute top-[max(18px,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto">
-      <button type="button" onClick={() => setActiveTool(activeTool === 'music' ? '' : 'music')} className="flex items-center gap-2 rounded-full bg-black/70 px-5 py-3 text-sm font-bold text-white shadow-lg border border-white/25"><Music2 size={18}/> Thêm âm thanh <span className="text-[10px] text-white/70">v2.0 Fullscreen</span></button>
+      <button type="button" aria-expanded={activeTool === 'music'} onClick={() => setActiveTool(activeTool === 'music' ? '' : 'music')} className="flex items-center gap-2 rounded-full bg-black/75 px-4 py-2.5 text-sm font-semibold text-white shadow-lg border border-white/20 backdrop-blur-sm"><Music2 size={17}/> Thêm âm thanh <span className="text-[10px] text-white/70">{selected.audioTrackTitle ? '· Đã chọn nhạc' : ''}</span></button>
     </div>
-    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-4 pointer-events-auto">
+    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
       {[
-        {id:'trim', label:'Cắt', icon:<Scissors size={22}/>},
-        {id:'text', label:'Chữ', icon:<Type size={22}/>},
-        {id:'sticker', label:'Sticker', icon:<Sticker size={22}/>},
-        {id:'filter', label:'Bộ lọc', icon:<Palette size={22}/>},
-        {id:'volume', label:'Âm lượng', icon:<Volume2 size={22}/>},
-      ].map(item => <button key={item.id} type="button" onClick={() => setActiveTool(activeTool === item.id ? '' : item.id)} className={`flex w-[58px] flex-col items-center gap-1 rounded-xl px-1 py-2 text-white drop-shadow-lg ${activeTool === item.id ? 'bg-white/30 ring-1 ring-white' : 'bg-black/35'}`}><span>{item.icon}</span><span className="text-[10px] font-semibold">{item.label}</span></button>)}
+        {id:'trim', label:'Cắt', icon:<Scissors size={17}/>},
+        {id:'text', label:'Chữ', icon:<Type size={17}/>},
+        {id:'sticker', label:'Sticker', icon:<Sticker size={17}/>},
+        {id:'filter', label:'Bộ lọc', icon:<Palette size={17}/>},
+        {id:'volume', label:'Âm lượng', icon:<Volume2 size={17}/>},
+      ].map(item => <button key={item.id} type="button" onClick={() => setActiveTool(activeTool === item.id ? '' : item.id)} className={`flex w-[46px] flex-col items-center gap-1 rounded-xl px-0.5 py-1.5 text-white drop-shadow-lg ${activeTool === item.id ? 'bg-white/30 ring-1 ring-white' : 'bg-black/35'}`}><span>{item.icon}</span><span className="text-[9px] font-semibold leading-tight">{item.label}</span></button>)}
     </div>
-    {activeTool && <div className="absolute bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] left-3 right-3 max-h-[42dvh] overflow-y-auto rounded-2xl border border-white/20 bg-black/85 p-4 text-white shadow-2xl pointer-events-auto">
+    {activeTool && <div className={`absolute ${activeTool === 'music' ? 'top-[max(62px,calc(env(safe-area-inset-top)+58px))] left-3 right-3 mx-auto w-auto max-w-md max-h-[48dvh]' : 'bottom-[max(96px,calc(env(safe-area-inset-bottom)+88px))] left-3 right-3 max-h-[42dvh]'} overflow-y-auto rounded-2xl border border-white/20 bg-black/90 p-3.5 text-white shadow-2xl backdrop-blur-md pointer-events-auto`}>
       <div className="mb-3 flex items-center justify-between"><strong>{({music:'Thêm âm thanh · Pixabay',trim:'Cắt video (15–60 giây)',text:'Chèn chữ',sticker:'Sticker',filter:'Bộ lọc màu',volume:'Chỉnh âm lượng'})[activeTool]}</strong><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/15 px-3 py-1 text-sm">Đóng</button></div>
       {activeTool === 'music' && <div className="space-y-3">
         <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-white placeholder:text-white/55" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…"/><button type="button" disabled={loading} onClick={searchAudio} className="rounded-xl bg-white px-3 text-black"><Search size={17}/></button></div>
