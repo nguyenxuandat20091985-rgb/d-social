@@ -46,9 +46,10 @@ function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
       context.fillText(layer.value, x, y)
       continue
     }
+    if (layer.kind !== 'text') continue
 
     const maxWidth = canvas.width * .9
-    let fontSize = Math.max(12, layer.fontSize * scale)
+    let fontSize = Math.max(18, layer.fontSize * scale)
     context.font = `700 ${fontSize}px ${layer.fontFamily}`
     while (context.measureText(layer.value).width > maxWidth && fontSize > 14) {
       fontSize -= 2
