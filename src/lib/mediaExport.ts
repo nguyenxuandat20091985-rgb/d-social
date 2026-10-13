@@ -1,6 +1,10 @@
 type CreatorSettings = {
   colorFilter?: string
   overlayText?: string
+  overlayFont?: string
+  overlayColor?: string
+  overlayX?: number
+  overlayY?: number
   sticker?: string
   trimStart?: number
   trimEnd?: number
@@ -25,23 +29,25 @@ function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
   const scale = canvas.width / 720
   context.textAlign = 'center'
   context.textBaseline = 'middle'
+  const x = canvas.width * Math.max(0.08, Math.min(0.92, Number(settings.overlayX ?? 50) / 100))
+  const y = canvas.height * Math.max(0.08, Math.min(0.92, Number(settings.overlayY ?? 70) / 100))
   context.shadowColor = 'rgba(0,0,0,.85)'
   context.shadowBlur = 7 * scale
   context.shadowOffsetY = 2 * scale
-  context.fillStyle = '#fff'
+  context.fillStyle = settings.overlayColor || '#ffffff'
   if (sticker) {
-    context.font = `${Math.max(24, 54 * scale)}px system-ui, sans-serif`
-    context.fillText(sticker, canvas.width / 2, canvas.height * .78)
+    context.font = `${Math.max(24, 54 * scale)}px ${settings.overlayFont || 'system-ui, sans-serif'}`
+    context.fillText(sticker, x, y)
   }
   if (text) {
     const maxWidth = canvas.width * .9
     let fontSize = Math.max(18, 38 * scale)
-    context.font = `700 ${fontSize}px system-ui, sans-serif`
+    context.font = `700 ${fontSize}px ${settings.overlayFont || 'system-ui, sans-serif'}`
     while (context.measureText(text).width > maxWidth && fontSize > 14) {
       fontSize -= 2
-      context.font = `700 ${fontSize}px system-ui, sans-serif`
+      context.font = `700 ${fontSize}px ${settings.overlayFont || 'system-ui, sans-serif'}`
     }
-    context.fillText(text, canvas.width / 2, canvas.height * (sticker ? .88 : .82), maxWidth)
+    context.fillText(text, x, y, maxWidth)
   }
   context.shadowColor = 'transparent'
   context.shadowBlur = 0
