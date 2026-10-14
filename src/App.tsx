@@ -332,8 +332,8 @@ function Composer({ userId, onPublished, onClose }) {
   }
 
   if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-cover" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
+    <div className="absolute inset-x-0 top-0 h-[47dvh] flex items-center justify-center overflow-hidden bg-black">
+      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-contain" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
         const video = fullscreenVideoRef.current
         const music = fullscreenMusicRef.current
         const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
@@ -395,7 +395,7 @@ function Composer({ userId, onPublished, onClose }) {
       {files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && creatorSettings.audioTrackUrl && <audio ref={fullscreenMusicRef} src={creatorSettings.audioTrackUrl} preload="auto" loop />}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
-    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
+    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-9 flex-1 rounded-full border border-white/60 bg-white/10 px-2 text-xs font-semibold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
       <button type="button" disabled={busy} onClick={prepareMediaForCaption} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">{busy ? (stage || 'Đang xử lý…') : 'Tiếp →'}</button>
@@ -560,8 +560,14 @@ function StoryComposer({ userId, onClose, onPublished }) {
 
 
   if (file) return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {file.type.startsWith('video/') ? <video src={previewUrl} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
+    <div className="absolute inset-x-0 top-0 h-[47dvh] flex items-center justify-center overflow-hidden bg-black">
+      {file.type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previewUrl} autoPlay muted playsInline loop onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
+      {file.type.startsWith('video/') && <button type="button" aria-label={previewPlaying ? 'Tạm dừng xem trước' : 'Phát xem trước'} onClick={() => {
+        const video = fullscreenVideoRef.current
+        if (!video) return
+        if (video.paused) video.play().then(() => setPreviewPlaying(true)).catch(() => setError('Chạm lại để phát video.'))
+        else { video.pause(); setPreviewPlaying(false) }
+      }} className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/65 p-4 text-white shadow-xl backdrop-blur-sm">{previewPlaying ? <Pause size={24}/> : <Play size={24}/>}</button>}
       {(creatorSettings.overlayText||creatorSettings.sticker) && <div
         className="absolute z-10 max-w-[78%] touch-none select-none text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]"
         style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: creatorSettings.overlayText ? 'grab' : 'default', pointerEvents: creatorSettings.overlayText ? 'auto' : 'none', touchAction: 'none' }}
@@ -581,7 +587,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
       >{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFile(null)} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
-    <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen"/>
+    <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
     <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       {error && <p role="alert" className="mb-2 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
       <div className="mb-3 flex gap-2"><input value={caption} onChange={e=>setCaption(e.target.value)} maxLength={300} placeholder="Caption cho tin (không bắt buộc)" className="min-w-0 flex-1 rounded-xl bg-white/15 px-3 py-3 text-sm placeholder:text-white/60" disabled={busy}/><label className="rounded-xl bg-white/15 px-3 py-3 text-xs font-bold">Đổi<input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e=>{chooseFile(e.target.files);e.target.value=''}}/></label></div>
