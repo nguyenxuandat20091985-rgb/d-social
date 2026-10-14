@@ -183,7 +183,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
       </button>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-[.12em] text-white/45"><span>VIDEO</span><span>{clock(start)}–{clock(end)}</span></div>
-        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current) seekFromPointer(event, 'playhead') }} className="relative h-[56px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
+        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current && !event.target.closest('[role="slider"]')) seekFromPointer(event, 'playhead') }} className="relative h-[56px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
           <div className="absolute inset-0 flex overflow-hidden rounded-md">
             {thumbnails.length ? thumbnails.map((src, index) => <img key={index} src={src} draggable="false" alt="" className="h-full min-w-0 flex-1 object-cover" />) : Array.from({ length: 9 }, (_, index) => <div key={index} className="h-full min-w-0 flex-1 animate-pulse border-r border-white/10 bg-gradient-to-b from-[#30333c] to-[#1a1c21]"/>)}
           </div>
