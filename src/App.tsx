@@ -395,7 +395,7 @@ function Composer({ userId, onPublished, onClose }) {
       {files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && creatorSettings.audioTrackUrl && <audio ref={fullscreenMusicRef} src={creatorSettings.audioTrackUrl} preload="auto" loop />}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
-    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
+    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-9 flex-1 rounded-full border border-white/60 bg-white/10 px-2 text-xs font-semibold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
       <button type="button" disabled={busy} onClick={prepareMediaForCaption} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">{busy ? (stage || 'Đang xử lý…') : 'Tiếp →'}</button>
