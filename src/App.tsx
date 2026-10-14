@@ -332,8 +332,8 @@ function Composer({ userId, onPublished, onClose }) {
   }
 
   if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-cover" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
+    <div className="absolute inset-x-0 top-0 h-[47dvh] flex items-center justify-center overflow-hidden bg-black">
+      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-contain" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
         const video = fullscreenVideoRef.current
         const music = fullscreenMusicRef.current
         const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
