@@ -88,8 +88,22 @@ function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: number): P
 }
 
 async function processImage(file: File, settings: CreatorSettings): Promise<File> {
-  const hasEdits = (settings.colorFilter && settings.colorFilter !== 'none') || normalizeCreatorLayers(settings.layers ?? legacySettingsToLayers(settings)).some(layer => layer.visible)
+  const layers = normalizeCreatorLayers(settings.layers ?? legacySettingsToLayers(settings))
+    .filter(layer => layer.visible)
+  const hasEdits = Boolean(
+    (settings.colorFilter && settings.colorFilter !== 'none') ||
+    layers.length ||
+    Number(settings.brightness ?? 0) !== 0 ||
+    Number(settings.contrast ?? 100) !== 100 ||
+    Number(settings.saturation ?? 100) !== 100 ||
+    Number(settings.hue ?? 0) !== 0 ||
+    Number(settings.rotation ?? 0) !== 0 ||
+    Boolean(settings.aspectRatio) ||
+    Boolean(settings.cropMode) ||
+    Boolean(settings.backgroundColor)
+  )
   if (!hasEdits) return file
+
   const imageUrl = URL.createObjectURL(file)
   try {
     const image = new Image()
@@ -98,18 +112,45 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
       image.onload = () => resolve()
       image.onerror = () => reject(new Error('Không đọc được ảnh để áp dụng chỉnh sửa.'))
     })
+
+    const sourceWidth = image.naturalWidth
+    const sourceHeight = image.naturalHeight
+    if (!sourceWidth || !sourceHeight) throw new Error('Ảnh không có kích thước hợp lệ.')
+
+    const rotation = ((Number(settings.rotation) || 0) % 360) * Math.PI / 180
+    const rotatedWidth = Math.abs(sourceWidth * Math.cos(rotation)) + Math.abs(sourceHeight * Math.sin(rotation))
+    const rotatedHeight = Math.abs(sourceWidth * Math.sin(rotation)) + Math.abs(sourceHeight * Math.cos(rotation))
+    const ratioMap: Record<string, number> = { '9:16': 9 / 16, '16:9': 16 / 9, '1:1': 1, '4:5': 4 / 5 }
+    const requestedRatio = settings.aspectRatio ? ratioMap[settings.aspectRatio] : undefined
+    const outputRatio = requestedRatio && Number.isFinite(requestedRatio) ? requestedRatio : rotatedWidth / rotatedHeight
+
+    // Bound output dimensions to avoid exhausting memory on high-resolution phones.
+    const longestSide = Math.min(2560, Math.max(1280, Math.round(Math.max(rotatedWidth, rotatedHeight))))
+    const width = Math.max(2, Math.round((outputRatio >= 1 ? longestSide : longestSide * outputRatio) / 2) * 2)
+    const height = Math.max(2, Math.round((outputRatio >= 1 ? longestSide / outputRatio : longestSide) / 2) * 2)
     const canvas = document.createElement('canvas')
-    canvas.width = image.naturalWidth
-    canvas.height = image.naturalHeight
-    const context = canvas.getContext('2d')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d', { alpha: file.type === 'image/png' })
     if (!context) throw new Error('Thiết bị không hỗ trợ kết xuất ảnh.')
+
+    context.fillStyle = settings.backgroundColor || '#000000'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.save()
+    context.translate(canvas.width / 2, canvas.height / 2)
+    context.rotate(rotation)
+    const scale = settings.cropMode === 'cover'
+      ? Math.max(canvas.width / rotatedWidth, canvas.height / rotatedHeight)
+      : Math.min(canvas.width / rotatedWidth, canvas.height / rotatedHeight)
     context.filter = filterForSettings(settings)
-    context.drawImage(image, 0, 0)
+    context.drawImage(image, -sourceWidth * scale / 2, -sourceHeight * scale / 2, sourceWidth * scale, sourceHeight * scale)
+    context.restore()
     context.filter = 'none'
     drawOverlay(context, canvas, settings)
+
     const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
     const blob = await canvasBlob(canvas, type, .92)
-    const name = file.name.replace(/\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg')
+    const name = file.name.replace(/\\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg')
     return new File([blob], name, { type, lastModified: Date.now() })
   } finally {
     URL.revokeObjectURL(imageUrl)
