@@ -169,8 +169,8 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
     const start = Math.max(0, Number(settings.trimStart) || 0)
     const requestedEnd = Number(settings.trimEnd)
     const end = Math.min(duration, Number.isFinite(requestedEnd) && requestedEnd > 0 ? requestedEnd : Math.min(60, duration))
-    if (end - start < 15 || end - start > 60 || end > duration || start >= duration) {
-      throw new Error('Video phải có đoạn xuất dài từ 15 đến 60 giây và nằm trong thời lượng video gốc.')
+    if (end - start < 1 || end - start > 60 || end > duration || start >= duration) {
+      throw new Error('Đoạn video xuất phải dài ít nhất 1 giây, không quá 60 giây và nằm trong thời lượng video gốc.')
     }
     if (start > 0.05) {
       await new Promise<void>((resolve, reject) => {
