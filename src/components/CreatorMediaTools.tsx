@@ -31,53 +31,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
   const update = patch => onChange?.({ ...selected, ...patch })
   const isVideo = file?.type?.startsWith('video/')
 
-  useEffect(() => {
-    setDuration(0)
-    setDurationError(false)
-    if (!file || !isVideo) return
-    const url = URL.createObjectURL(file)
-    const video = document.createElement('video')
-    let settled = false
-    const settleDuration = () => {
-      if (settled) return
-      const actualDuration = Number(video.duration)
-      if (!Number.isFinite(actualDuration) || actualDuration <= 0) {
-        settled = true
-        setDurationError(true)
-        return
-      }
-      settled = true
-      clearTimeout(metadataFallback)
-      setDuration(actualDuration)
-      setDurationError(false)
-      const currentStart = Math.max(0, Number(settings?.trimStart) || 0)
-      const currentEnd = Number(settings?.trimEnd)
-      const safeEnd = Math.min(60, actualDuration)
-      if (!Number.isFinite(currentEnd) || currentEnd > safeEnd || currentEnd <= currentStart) {
-        onChange?.({ ...settings, trimStart: Math.min(currentStart, Math.max(0, safeEnd - 15)), trimEnd: safeEnd })
-      }
-    }
-    const metadataFallback = setTimeout(() => {
-      if (!settled) { settled = true; setDurationError(true) }
-    }, 10000)
-    video.preload = 'metadata'
-    video.onloadedmetadata = settleDuration
-    video.ondurationchange = settleDuration
-    video.onerror = () => {
-      if (!settled) { settled = true; clearTimeout(metadataFallback); setDurationError(true) }
-    }
-    video.src = url
-    video.load()
-    return () => {
-      clearTimeout(metadataFallback)
-      video.onloadedmetadata = null
-      video.ondurationchange = null
-      video.onerror = null
-      video.removeAttribute('src')
-      video.load()
-      URL.revokeObjectURL(url)
-    }
-  }, [file, isVideo])
+
 
   const searchAudio = async (event) => {
     event?.preventDefault?.()
@@ -131,29 +85,12 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
     setActiveTool('')
   }
 
-  const start = Math.max(0, Number(selected.trimStart) || 0)
-  const maxEnd = Math.min(60, duration || 60)
-  const minDuration = Math.min(15, duration || 15)
-  const end = Math.min(maxEnd, Math.max(start + minDuration, Number(selected.trimEnd) || maxEnd))
-  const maxStart = Math.max(0, Math.min(maxEnd - minDuration, end - minDuration))
-  const startPercent = duration > 0 ? (start / duration) * 100 : 0
-  const endPercent = duration > 0 ? (end / duration) * 100 : 100
-  const trimValid = !isVideo || (duration > 0 && end - start >= 15 && end - start <= 60 && end <= duration)
-  const setTrimStart = value => {
-    const next = Math.max(0, Math.min(Number(value) || 0, Math.min(maxStart, end - minDuration)))
-    update({ trimStart: next, trimEnd: end })
-  }
-  const setTrimEnd = value => {
-    const next = Math.max(start + minDuration, Math.min(maxEnd, Number(value) || maxEnd))
-    update({ trimStart: start, trimEnd: next })
-  }
-
   if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] pointer-events-auto">
       {activeTool !== '' && <button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-black/55 px-3 py-2 text-xs font-semibold text-white">Đóng công cụ</button>}
     </div>
     {activeTool && activeTool !== 'trim' && <div className="absolute bottom-[max(300px,calc(env(safe-area-inset-bottom)+286px))] left-3 right-3 mx-auto max-h-[38dvh] w-auto max-w-md overflow-y-auto rounded-2xl border border-white/20 bg-black/90 p-3.5 text-white shadow-2xl backdrop-blur-md pointer-events-auto">
-      <div className="mb-3 flex items-center justify-between"><strong>{({music:'Thêm âm thanh · Nhạc mẫu miễn phí',trim:'Cắt video (15–60 giây)',theme:'Chủ đề màu sắc',text:'Chèn chữ',sticker:'Sticker',filter:'Bộ lọc màu',volume:'Chỉnh âm lượng'})[activeTool]}</strong><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/15 px-3 py-1 text-sm">Đóng</button></div>
+      <div className="mb-3 flex items-center justify-between"><strong>{({music:'Thêm âm thanh · Nhạc mẫu miễn phí',theme:'Chủ đề màu sắc',text:'Chèn chữ',sticker:'Sticker',filter:'Bộ lọc màu',volume:'Chỉnh âm lượng'})[activeTool]}</strong><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/15 px-3 py-1 text-sm">Đóng</button></div>
       {activeTool === 'music' && <div className="space-y-3">
         <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-white placeholder:text-white/55" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…"/><button type="button" disabled={loading} onClick={searchAudio} className="rounded-xl bg-white px-3 text-black"><Search size={17}/></button></div>
         <button type="button" onClick={() => update({audioSource:'original',audioTrackId:null,audioTrackTitle:null,audioTrackUrl:null,isMuted:false})} className="rounded-lg border border-white/25 px-3 py-2 text-sm">Dùng âm thanh gốc</button>
@@ -208,7 +145,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
       {activeTool === 'filter' && <div className="flex flex-wrap gap-2">{FILTERS.map(filter=><button key={filter.id} type="button" onClick={()=>update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${(selected.colorFilter||'none')===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div>}
       {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
     </div>}
-    {isVideo && videoRef && <div className="absolute bottom-[max(76px,calc(env(safe-area-inset-bottom)+70px))] left-0 right-0 z-30 pointer-events-none">
+    {isVideo && videoRef && <div className="absolute bottom-[max(132px,calc(env(safe-area-inset-bottom)+126px))] left-0 right-0 z-30 pointer-events-none">
       <VideoTimelineEditor file={file} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} onOpenTool={tool => { if (tool === 'trim') { setActiveTool(''); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
     </div>}
   </div>
