@@ -1,1 +1,1 @@
-export { Discover } from '../../components/DiscoverPanel'
+export { Discover } from './DiscoverPanel'
