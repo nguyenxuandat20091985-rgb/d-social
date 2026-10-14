@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AudioLines, Music2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { AudioLines, Music2, Pause, Play, Type, Volume2, VolumeX } from 'lucide-react'
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const clock = (seconds, tenths = false) => {
@@ -163,8 +163,8 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
   const originalOn = Number(selected.originalVolume ?? 100) > 0
   const toggleOriginal = () => update({ originalVolume: originalOn ? 0 : 100 })
 
-  return <section className="pointer-events-auto mx-2 mb-2 rounded-[20px] border border-white/15 bg-[#101115]/95 p-3 text-white shadow-[0_16px_50px_rgba(0,0,0,.5)] backdrop-blur-xl" aria-label="Timeline dựng video">
-    <div className="mb-2 flex items-center justify-between gap-2">
+  return <section className="pointer-events-auto mx-2 mb-2 rounded-t-[18px] border border-white/15 bg-[#101115]/96 p-2.5 text-white shadow-[0_16px_50px_rgba(0,0,0,.5)] backdrop-blur-xl" aria-label="Timeline dựng video">
+    <div className="mb-1.5 flex items-center justify-between gap-2">
       <button type="button" onClick={onTogglePlayback} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-black shadow" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'}>
         {isPlaying ? <Pause size={17} fill="currentColor"/> : <Play size={17} fill="currentColor" className="ml-0.5"/>}
       </button>
@@ -173,17 +173,17 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
         <div className="mt-0.5 text-[10px] text-white/45">{duration ? `Video gốc ${clock(duration)} · Kéo mép vàng để cắt` : 'Đang tạo dải khung hình…'}</div>
       </div>
       <button type="button" onClick={() => onOpenTool?.('music')} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-sky-300/40 bg-sky-400/15 px-3 text-[11px] font-semibold text-sky-100">
-        <Music2 size={14}/>{selected.audioTrackTitle ? 'Đổi nhạc' : '+ Thêm nhạc'}
+        <Music2 size={14}/>{selected.audioTrackTitle ? 'Đổi nhạc' : '+ Thêm âm thanh'}
       </button>
     </div>
 
-    <div className="mb-1.5 flex items-center gap-2">
+    <div className="mb-1 flex items-center gap-2">
       <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} className={`flex w-[82px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-[10px] font-semibold ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
         {originalOn ? <Volume2 size={16}/> : <VolumeX size={16}/>}<span>Âm thanh gốc</span><span className="text-[9px]">{originalOn ? 'BẬT' : 'TẮT'}</span>
       </button>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-[.12em] text-white/45"><span>VIDEO</span><span>{clock(start)}–{clock(end)}</span></div>
-        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current && !event.target.closest('[role="slider"]')) seekFromPointer(event, 'playhead') }} className="relative h-[56px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
+        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current && !event.target.closest('[role="slider"]')) seekFromPointer(event, 'playhead') }} className="relative h-[48px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
           <div className="absolute inset-0 flex overflow-hidden rounded-md">
             {thumbnails.length ? thumbnails.map((src, index) => <img key={index} src={src} draggable="false" alt="" className="h-full min-w-0 flex-1 object-cover" />) : Array.from({ length: 9 }, (_, index) => <div key={index} className="h-full min-w-0 flex-1 animate-pulse border-r border-white/10 bg-gradient-to-b from-[#30333c] to-[#1a1c21]"/>)}
           </div>
@@ -200,22 +200,29 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
       </div>
     </div>
 
-    <div className="flex items-center gap-2 border-t border-white/10 pt-2">
+    <div className="flex items-center gap-2 border-t border-white/10 pt-1.5">
       <div className="flex w-[82px] shrink-0 items-center justify-center gap-1 text-[10px] font-semibold text-white/55"><AudioLines size={14}/> ÂM THANH</div>
       <button type="button" onClick={() => onOpenTool?.('music')} className="relative flex h-8 min-w-0 flex-1 items-center gap-[2px] overflow-hidden rounded-md border border-sky-300/25 bg-sky-500/10 px-2">
         {selected.audioTrackTitle ? <><div className="absolute inset-0 flex items-center justify-around opacity-60">{waveform.map((height, i) => <span key={i} className="w-[2px] shrink-0 rounded-full bg-sky-300" style={{height: `${height}%`}}/>)}</div><span className="relative z-10 max-w-[85%] truncate rounded bg-[#10232c]/90 px-1.5 py-0.5 text-[10px] font-semibold text-sky-100">{selected.audioTrackTitle}</span></> : <span className="relative z-10 flex items-center gap-1 text-[10px] font-semibold text-sky-200"><Music2 size={13}/> + Thêm nhạc nền</span>}
       </button>
     </div>
 
-    <div className="mt-2 flex items-center justify-between gap-1 border-t border-white/10 pt-2">
+    <div className="mt-1.5 flex items-center gap-2 border-t border-white/10 pt-1.5">
+      <div className="flex w-[82px] shrink-0 items-center justify-center gap-1 text-[10px] font-semibold text-white/55"><Type size={14}/> CHỮ</div>
+      <button type="button" onClick={() => onOpenTool?.('text')} className="flex h-8 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border border-white/15 bg-white/[0.04] px-2 text-left">
+        <Type size={13} className="shrink-0 text-white/55"/>
+        {selected.overlayText ? <span className="truncate text-[10px] text-white/80">{selected.overlayText}</span> : <span className="text-[10px] font-semibold text-white/55">+ Thêm văn bản / Chữ</span>}
+      </button>
+    </div>
+
+    <div className="mt-1.5 flex items-center justify-between gap-1 border-t border-white/10 pt-1.5">
       {[
-        {id:'theme', label:'Chủ đề', glyph:'✦'},
-        {id:'trim', label:'Tạo/Cắt', glyph:'✂'},
-        {id:'music', label:'Âm nhạc', glyph:'♫'},
-        {id:'text', label:'Chữ', glyph:'T'},
-        {id:'sticker', label:'Sticker', glyph:'☺'},
+        {id:'theme', label:'Chỉnh sửa', glyph:'✎'},
+        {id:'music', label:'Âm thanh', glyph:'♫'},
+        {id:'text', label:'Văn bản', glyph:'T'},
+        {id:'sticker', label:'Hiệu ứng', glyph:'✧'},
         {id:'filter', label:'Bộ lọc', glyph:'◐'},
-      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-medium ${tool.id === 'trim' || tool.id === 'music' ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'}`}><span className="grid h-5 place-items-center text-[17px] leading-none">{tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
+      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[10px] font-medium text-white/65 active:bg-white/10"><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
     </div>
   </section>
 }
