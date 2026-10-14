@@ -181,7 +181,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
     </div>
 
     <div className="mb-1 flex items-center gap-2">
-      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} aria-label={originalOn ? 'Tắt tiếng gốc' : 'Bật tiếng gốc'} title={originalOn ? 'Tiếng gốc: bật' : 'Tiếng gốc: tắt'} className={`grid h-[42px] w-8 shrink-0 place-items-center self-start rounded-md border ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
+      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} aria-label={originalOn ? 'Tắt tiếng gốc' : 'Bật tiếng gốc'} title={originalOn ? 'Tiếng gốc: bật' : 'Tiếng gốc: tắt'} className={`grid h-7 w-7 shrink-0 place-items-center self-center rounded-md border ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
         {originalOn ? <Volume2 size={13}/> : <VolumeX size={13}/>}
       </button>
       <div className="min-w-0 flex-1">
