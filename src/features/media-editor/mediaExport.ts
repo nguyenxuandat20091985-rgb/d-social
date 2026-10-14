@@ -150,7 +150,7 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
 
     const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
     const blob = await canvasBlob(canvas, type, .92)
-    const name = file.name.replace(/\\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg')
+    const name = file.name.replace(/\.[^.]+$/, '') + (type === 'image/png' ? '.png' : '.jpg')
     return new File([blob], name, { type, lastModified: Date.now() })
   } finally {
     URL.revokeObjectURL(imageUrl)
