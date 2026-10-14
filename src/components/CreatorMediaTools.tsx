@@ -40,8 +40,13 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
     const settleDuration = () => {
       if (settled) return
       const actualDuration = Number(video.duration)
-      if (!Number.isFinite(actualDuration) || actualDuration <= 0) return
+      if (!Number.isFinite(actualDuration) || actualDuration <= 0) {
+        settled = true
+        setDurationError(true)
+        return
+      }
       settled = true
+      clearTimeout(metadataFallback)
       setDuration(actualDuration)
       setDurationError(false)
       const currentStart = Math.max(0, Number(settings?.trimStart) || 0)
@@ -51,13 +56,19 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
         onChange?.({ ...settings, trimStart: Math.min(currentStart, Math.max(0, safeEnd - 15)), trimEnd: safeEnd })
       }
     }
+    const metadataFallback = setTimeout(() => {
+      if (!settled) { settled = true; setDurationError(true) }
+    }, 10000)
     video.preload = 'metadata'
     video.onloadedmetadata = settleDuration
     video.ondurationchange = settleDuration
-    video.onerror = () => { setDurationError(true) }
+    video.onerror = () => {
+      if (!settled) { settled = true; clearTimeout(metadataFallback); setDurationError(true) }
+    }
     video.src = url
     video.load()
     return () => {
+      clearTimeout(metadataFallback)
       video.onloadedmetadata = null
       video.ondurationchange = null
       video.onerror = null
