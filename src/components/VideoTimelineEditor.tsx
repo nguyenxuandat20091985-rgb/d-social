@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AudioLines, Music2, Pause, Play, Type, Volume2, VolumeX } from 'lucide-react'
+import { AudioLines, Music2, Pause, Play, Type, Volume2, VolumeX, Scissors } from 'lucide-react'
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 const clock = (seconds, tenths = false) => {
@@ -30,6 +30,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [thumbnails, setThumbnails] = useState([])
+  const [trimMode, setTrimMode] = useState(false)
   const trackRef = useRef(null)
   const dragRef = useRef(null)
   const selected = settings || {}
@@ -148,6 +149,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
   }, [duration, end, minClip, onChange, selected, start, videoRef])
 
   const beginDrag = (event, mode) => {
+    if ((mode === 'start' || mode === 'end') && !trimMode) return
     event.preventDefault()
     event.stopPropagation()
     dragRef.current = mode
@@ -190,8 +192,8 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
           <div className="absolute inset-y-0 left-0 rounded-l-md bg-black/55" style={{ width: `${startPct}%` }}/>
           <div className="absolute inset-y-0 right-0 rounded-r-md bg-black/55" style={{ width: `${Math.max(0, 100-endPct)}%` }}/>
           <div className="absolute inset-y-[-3px] rounded-md border-[2px] border-amber-300 shadow-[0_0_0_1px_rgba(0,0,0,.5)]" style={{ left: `${startPct}%`, width: `${Math.max(0, endPct-startPct)}%`, pointerEvents:'none' }}/>
-          <div onPointerDown={event => beginDrag(event, 'start')} role="slider" aria-label="Đầu cắt bắt đầu" aria-valuemin={0} aria-valuemax={Math.max(0,end-minClip)} aria-valuenow={start} tabIndex={0} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); seekFromPointer({clientX: (trackRef.current?.getBoundingClientRect().left || 0) + clamp(start + (event.key === 'ArrowRight' ? .5 : -.5),0,duration) / Math.max(duration,1) * (trackRef.current?.getBoundingClientRect().width || 1), preventDefault(){}, stopPropagation(){} }, 'start') } }} className="absolute inset-y-[-4px] z-20 w-3 cursor-ew-resize rounded-l-md border-2 border-amber-200 bg-amber-300 shadow-[0_1px_8px_#000b] touch-none" style={{ left: `calc(${startPct}% - 2px)` }}/>
-          <div onPointerDown={event => beginDrag(event, 'end')} role="slider" aria-label="Đầu cắt kết thúc" aria-valuemin={Math.min(duration,start+minClip)} aria-valuemax={Math.min(duration,start+60)} aria-valuenow={end} tabIndex={0} className="absolute inset-y-[-4px] z-20 w-3 cursor-ew-resize rounded-r-md border-2 border-amber-200 bg-amber-300 shadow-[0_1px_8px_#000b] touch-none" style={{ left: `calc(${endPct}% - 10px)` }}/>
+          <div onPointerDown={event => beginDrag(event, 'start')} role="slider" aria-label="Đầu cắt bắt đầu" aria-valuemin={0} aria-valuemax={Math.max(0,end-minClip)} aria-valuenow={start} tabIndex={0} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); seekFromPointer({clientX: (trackRef.current?.getBoundingClientRect().left || 0) + clamp(start + (event.key === 'ArrowRight' ? .5 : -.5),0,duration) / Math.max(duration,1) * (trackRef.current?.getBoundingClientRect().width || 1), preventDefault(){}, stopPropagation(){} }, 'start') } }} className={`absolute inset-y-[-4px] z-20 w-3 rounded-l-md border-2 shadow-[0_1px_8px_#000b] touch-none ${trimMode ? 'cursor-ew-resize border-amber-200 bg-amber-300' : 'cursor-default border-white/50 bg-white/45'}`} style={{ left: `calc(${startPct}% - 2px)` }}/>
+          <div onPointerDown={event => beginDrag(event, 'end')} role="slider" aria-label="Đầu cắt kết thúc" aria-valuemin={Math.min(duration,start+minClip)} aria-valuemax={Math.min(duration,start+60)} aria-valuenow={end} tabIndex={0} className={`absolute inset-y-[-4px] z-20 w-3 rounded-r-md border-2 shadow-[0_1px_8px_#000b] touch-none ${trimMode ? 'cursor-ew-resize border-amber-200 bg-amber-300' : 'cursor-default border-white/50 bg-white/45'}`} style={{ left: `calc(${endPct}% - 10px)` }}/>
           <div onPointerDown={event => beginDrag(event, 'playhead')} role="slider" aria-label="Đầu đọc thời gian" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={currentTime} tabIndex={0} className="absolute inset-y-[-9px] z-30 w-5 -translate-x-1/2 cursor-ew-resize touch-none" style={{ left: `${playPct}%` }}>
             <div className="mx-auto h-2.5 w-2.5 rounded-full border border-black/60 bg-white shadow"/>
             <div className="mx-auto h-full w-[2px] bg-white shadow-[0_0_5px_#000]"/>
@@ -217,12 +219,13 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
 
     <div className="mt-1.5 flex items-center justify-between gap-1 border-t border-white/10 pt-1.5">
       {[
+        {id:'trim', label:'Cắt', glyph:'✂'},
         {id:'theme', label:'Chỉnh sửa', glyph:'✎'},
         {id:'music', label:'Âm thanh', glyph:'♫'},
         {id:'text', label:'Văn bản', glyph:'T'},
         {id:'sticker', label:'Hiệu ứng', glyph:'✧'},
         {id:'filter', label:'Bộ lọc', glyph:'◐'},
-      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[10px] font-medium text-white/65 active:bg-white/10"><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
+      ].map(tool => <button key={tool.id} type="button" aria-pressed={tool.id === 'trim' ? trimMode : undefined} onClick={() => tool.id === 'trim' ? setTrimMode(true) : onOpenTool?.(tool.id)} className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[10px] font-medium active:bg-white/10 ${tool.id === 'trim' && trimMode ? 'bg-amber-300/15 text-amber-200' : 'text-white/65'}`}><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.id === 'trim' ? <Scissors size={16}/> : tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
     </div>
   </section>
 }
