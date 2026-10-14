@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react'
 import {
   Heart, MessageCircle, LogOut, Image as ImageIcon, Video,
   MessageSquare, Home, X, Search, Download, Users,
-  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus, ChevronLeft, ChevronRight, Volume2, VolumeX
+  Bell, Plus, Moon, Sun, MoreHorizontal, Bookmark, Flag, Link2, RefreshCw, TrendingUp, Clock3, UsersRound, CirclePlus, ChevronLeft, ChevronRight, Volume2, VolumeX, Play, Pause
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
@@ -149,6 +149,10 @@ function Composer({ userId, onPublished, onClose }) {
   const [creatorMode, setCreatorMode] = useState('picker')
   const [error, setError] = useState('')
   const [creatorSettings, setCreatorSettings] = useState({ audioSource: 'original', originalVolume: 100, musicVolume: 30, colorFilter: 'none', privacy: 'public', rightsConfirmed: false, trimStart: 0, trimEnd: 60, overlayText: '', overlayFont: 'Roboto, Arial, sans-serif', overlayColor: '#ffffff', overlayX: 50, overlayY: 50, sticker: '', taggedUsers: '', location: '' })
+  const fullscreenVideoRef = React.useRef(null)
+  const fullscreenMusicRef = React.useRef(null)
+  const [previewPlaying, setPreviewPlaying] = useState(false)
+  const [preparedMedia, setPreparedMedia] = useState(null)
 
   useEffect(() => {
     try {
@@ -161,6 +165,14 @@ function Composer({ userId, onPublished, onClose }) {
   useEffect(() => {
     if (files.length) creatorToolsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [files.length])
+
+  useEffect(() => {
+    const video = fullscreenVideoRef.current
+    const music = fullscreenMusicRef.current
+    if (video) video.volume = Math.max(0, Math.min(100, Number(creatorSettings.originalVolume ?? 100))) / 100
+    if (music) music.volume = Math.max(0, Math.min(100, Number(creatorSettings.musicVolume ?? 30))) / 100
+    if (music && creatorSettings.audioSource !== 'pixabay') { music.pause(); music.currentTime = 0 }
+  }, [creatorSettings.originalVolume, creatorSettings.musicVolume, creatorSettings.audioSource, creatorSettings.audioTrackUrl])
 
   useEffect(() => {
     const urls = files.map(file => URL.createObjectURL(file))
@@ -189,6 +201,7 @@ function Composer({ userId, onPublished, onClose }) {
       return false
     }
     setError('')
+    setPreparedMedia(null)
     setCreatorStep('edit')
     setFiles(all)
     return true
@@ -214,9 +227,15 @@ function Composer({ userId, onPublished, onClose }) {
       for (let i = 0; i < files.length; i++) {
         const sourceFile = files[i]
         setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
-        const file = await processCreatorMedia(sourceFile, creatorSettings, percent => {
-          if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
-        })
+        const preparedIsCurrent = preparedMedia &&
+          preparedMedia.sourceFiles?.length === files.length &&
+          preparedMedia.sourceFiles.every((source, index) => source === files[index]) &&
+          preparedMedia.settingsKey === JSON.stringify(creatorSettings)
+        const file = preparedIsCurrent
+          ? preparedMedia.files[i]
+          : await processCreatorMedia(sourceFile, creatorSettings, percent => {
+              if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+            })
         setStage(files.length > 1 ? `Đang tải ảnh ${i + 1}/${files.length} lên…` : file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
         const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
         const path = `${userId}/${crypto.randomUUID()}.${ext}`
@@ -240,6 +259,7 @@ function Composer({ userId, onPublished, onClose }) {
 
       setText('')
       setFiles([])
+      setPreparedMedia(null)
       try { localStorage.removeItem(`d_home_draft_${userId}`) } catch {}
       onClose?.()
       // Close immediately after saving; let the feed refresh without blocking the composer.
@@ -254,6 +274,31 @@ function Composer({ userId, onPublished, onClose }) {
         }
       }
       setError(e?.message || 'Không thể đăng bài. Vui lòng thử lại.')
+    } finally {
+      setBusy(false)
+      setStage('')
+    }
+  }
+
+  const prepareMediaForCaption = async () => {
+    if (busy || !files.length) return
+    setBusy(true)
+    setError('')
+    const outputs = []
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const sourceFile = files[i]
+        setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video trước khi nhập caption…' : 'Đang áp dụng chỉnh sửa ảnh…')
+        const output = await processCreatorMedia(sourceFile, creatorSettings, percent => {
+          if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+        })
+        outputs.push(output)
+      }
+      setPreparedMedia({ sourceFiles: files.slice(), settingsKey: JSON.stringify(creatorSettings), files: outputs })
+      setCreatorStep('caption')
+      setCreatorMode('caption')
+    } catch (e) {
+      setError(e?.message || 'Không thể hoàn tất media. Anh có thể thử lại hoặc điều chỉnh đoạn video.')
     } finally {
       setBusy(false)
       setStage('')
@@ -288,12 +333,25 @@ function Composer({ userId, onPublished, onClose }) {
 
   if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {files[0].type.startsWith('video/') ? <video src={previews[0]} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
+      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-cover" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
+        const video = fullscreenVideoRef.current
+        const music = fullscreenMusicRef.current
+        const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
+        const requestedEnd = Number(creatorSettings.trimEnd)
+        const end = Number.isFinite(requestedEnd) && requestedEnd > start ? Math.min(video?.duration || requestedEnd, requestedEnd) : Math.min(video?.duration || 60, 60)
+        if (video && previewPlaying && video.currentTime >= end) {
+          video.currentTime = start
+          if (music) music.currentTime = 0
+        } else if (video && music && previewPlaying && !music.paused) {
+          const expected = Math.max(0, video.currentTime - start)
+          if (Math.abs(music.currentTime - expected) > 0.45) music.currentTime = expected
+        }
+      }} style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} /> : <img src={previews[0]} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}} />}
       {(creatorSettings.overlayText||creatorSettings.sticker) && <div
         className="absolute z-10 max-w-[78%] touch-none select-none text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]"
-        style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: creatorSettings.overlayText ? 'grab' : 'default', pointerEvents: creatorSettings.overlayText ? 'auto' : 'none', touchAction: 'none' }}
+        style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: (creatorSettings.overlayText || creatorSettings.sticker) ? 'grab' : 'default', pointerEvents: (creatorSettings.overlayText || creatorSettings.sticker) ? 'auto' : 'none', touchAction: 'none' }}
         onPointerDown={event => {
-          if (!creatorSettings.overlayText) return
+          if (!creatorSettings.overlayText && !creatorSettings.sticker) return
           const bounds = event.currentTarget.parentElement.getBoundingClientRect()
           textDragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: creatorSettings.overlayX ?? 50, originY: creatorSettings.overlayY ?? 50, width: bounds.width, height: bounds.height }
           event.currentTarget.setPointerCapture(event.pointerId)
@@ -306,14 +364,43 @@ function Composer({ userId, onPublished, onClose }) {
         onPointerUp={() => { textDragRef.current = null }}
         onPointerCancel={() => { textDragRef.current = null }}
       >{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
+      {files[0].type.startsWith('video/') && <button type="button" aria-label={previewPlaying ? 'Tạm dừng xem trước' : 'Phát xem trước'} onClick={async () => {
+        const video = fullscreenVideoRef.current
+        const music = fullscreenMusicRef.current
+        if (!video) return
+        if (previewPlaying) { video.pause(); music?.pause(); setPreviewPlaying(false); return }
+        try {
+          video.muted = false
+          video.volume = Math.max(0, Math.min(100, Number(creatorSettings.originalVolume ?? 100))) / 100
+          const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
+          const requestedEnd = Number(creatorSettings.trimEnd)
+          const end = Number.isFinite(requestedEnd) && requestedEnd > start ? Math.min(video.duration || requestedEnd, requestedEnd) : Math.min(video.duration || 60, 60)
+          if (video.currentTime < start || video.currentTime >= end) video.currentTime = start
+          const shouldPlayMusic = creatorSettings.audioSource === 'pixabay' && !!creatorSettings.audioTrackUrl && !!music
+          if (shouldPlayMusic && music) {
+            music.volume = Math.max(0, Math.min(100, Number(creatorSettings.musicVolume ?? 30))) / 100
+            // Resume the soundtrack at the point corresponding to the current
+            // trimmed video time instead of restarting it after every pause.
+            music.currentTime = Math.max(0, video.currentTime - start)
+          }
+          // Schedule both play requests in the same event turn; never await the
+          // soundtrack first, which can make the video begin noticeably later.
+          await Promise.all([video.play(), ...(shouldPlayMusic && music ? [music.play()] : [])])
+          setPreviewPlaying(true)
+        } catch (playError) {
+          music?.pause()
+          setError('Thiết bị chưa cho phép phát âm thanh. Anh chạm nút phát một lần nữa để thử lại.')
+        }
+      }} className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/65 p-4 text-white shadow-xl backdrop-blur-sm"><span className="sr-only">{previewPlaying ? 'Tạm dừng' : 'Phát'}</span>{previewPlaying ? <Pause size={24}/> : <Play size={24}/>}</button>}
+      {files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && creatorSettings.audioTrackUrl && <audio ref={fullscreenMusicRef} src={creatorSettings.audioTrackUrl} preload="auto" loop />}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
     <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-9 flex-1 rounded-full border border-white/60 bg-white/10 px-2 text-xs font-semibold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
-      <button type="button" disabled={busy} onClick={()=>{ setCreatorStep('caption'); setCreatorMode('caption') }} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">Tiếp →</button>
+      <button type="button" disabled={busy} onClick={prepareMediaForCaption} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">{busy ? (stage || 'Đang xử lý…') : 'Tiếp →'}</button>
     </div>
-    {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
+    {error && <p role="alert" className="absolute bottom-20 left-4 right-4 z-40 rounded-xl border border-white/20 bg-black/85 p-3 text-sm shadow-lg">{error}</p>}
   </div>
 
   return (
@@ -342,7 +429,7 @@ function Composer({ userId, onPublished, onClose }) {
             </div>
           </div>)}
         </div>}
-        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>{ setCreatorStep('edit'); setCreatorMode('fullscreen') }}>Quay lại chỉnh sửa media</button></div>}
+        {files.length > 0 && <div className="mt-3 rounded-xl border p-3 text-sm d-border-c"><div className="font-bold">v2.0 Fullscreen · Media đã chọn</div><button type="button" className="mt-2 text-xs underline" onClick={()=>{ setPreparedMedia(null); setCreatorStep('edit'); setCreatorMode('fullscreen') }}>Quay lại chỉnh sửa media</button></div>}
         {error && <p role="alert" aria-live="polite" className="text-sm mt-2 mb-2 break-words" style={{ color: 'var(--d-danger)' }}>{error}</p>}
         {busy && <div className="home-post-upload-state mt-3 mb-2" role="status" aria-live="polite"><div className="flex items-center gap-2 text-sm font-semibold"><span className="home-post-spinner" aria-hidden="true"/>{stage || 'Đang xử lý…'}</div><div className="home-post-progress mt-2"><span/></div><p className="text-xs d-muted mt-1">Giữ ứng dụng mở trong khi bài viết được tải lên.</p></div>}
         <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t d-border-c">

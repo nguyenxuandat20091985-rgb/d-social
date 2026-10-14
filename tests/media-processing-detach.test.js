@@ -18,7 +18,8 @@ test('24-hour News continues to upload and save stories independently', () => {
   const storyComposer = app.slice(start, end)
 
   assert.doesNotMatch(storyComposer, /MEDIA_PROCESSING_ENABLED|processUploadedMedia|functions\.invoke\(['"]process-media/)
-  assert.match(storyComposer, /supabase\.storage\.from\(['"]social-media['"]\)\.upload\(path, file/)
+  // StoryComposer uploads the processed export (uploadFile), not the original source file.
+  assert.match(storyComposer, /supabase\.storage\.from\(['"]social-media['"]\)\.upload\(path, (?:file|uploadFile)/)
   assert.match(storyComposer, /supabase\.from\(['"]stories['"]\)\.insert\(/)
   assert.match(storyComposer, /Date\.now\(\) \+ 24 \* 60 \* 60 \* 1000/)
 })

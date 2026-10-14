@@ -25,27 +25,57 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
   const [playingId, setPlayingId] = useState('')
   const [activeTool, setActiveTool] = useState('')
   const [duration, setDuration] = useState(0)
+  const [durationError, setDurationError] = useState(false)
   const selected = settings || {}
   const update = patch => onChange?.({ ...selected, ...patch })
   const isVideo = file?.type?.startsWith('video/')
 
   useEffect(() => {
-    if (!file || !isVideo) { setDuration(0); return }
+    setDuration(0)
+    setDurationError(false)
+    if (!file || !isVideo) return
     const url = URL.createObjectURL(file)
     const video = document.createElement('video')
-    video.preload = 'metadata'
-    video.onloadedmetadata = () => {
-      const actualDuration = Number.isFinite(video.duration) ? video.duration : 0
-      setDuration(actualDuration)
-      const currentEnd = Number(settings?.trimEnd || 60)
-      if (actualDuration > 0 && (currentEnd > actualDuration || currentEnd > 60)) {
-        onChange?.({ ...settings, trimEnd: Math.floor(Math.min(60, actualDuration)) })
+    let settled = false
+    const settleDuration = () => {
+      if (settled) return
+      const actualDuration = Number(video.duration)
+      if (!Number.isFinite(actualDuration) || actualDuration <= 0) {
+        settled = true
+        setDurationError(true)
+        return
       }
+      settled = true
+      clearTimeout(metadataFallback)
+      setDuration(actualDuration)
+      setDurationError(false)
+      const currentStart = Math.max(0, Number(settings?.trimStart) || 0)
+      const currentEnd = Number(settings?.trimEnd)
+      const safeEnd = Math.min(60, actualDuration)
+      if (!Number.isFinite(currentEnd) || currentEnd > safeEnd || currentEnd <= currentStart) {
+        onChange?.({ ...settings, trimStart: Math.min(currentStart, Math.max(0, safeEnd - 15)), trimEnd: safeEnd })
+      }
+    }
+    const metadataFallback = setTimeout(() => {
+      if (!settled) { settled = true; setDurationError(true) }
+    }, 10000)
+    video.preload = 'metadata'
+    video.onloadedmetadata = settleDuration
+    video.ondurationchange = settleDuration
+    video.onerror = () => {
+      if (!settled) { settled = true; clearTimeout(metadataFallback); setDurationError(true) }
+    }
+    video.src = url
+    video.load()
+    return () => {
+      clearTimeout(metadataFallback)
+      video.onloadedmetadata = null
+      video.ondurationchange = null
+      video.onerror = null
+      video.removeAttribute('src')
+      video.load()
       URL.revokeObjectURL(url)
     }
-    video.onerror = () => URL.revokeObjectURL(url)
-    video.src = url
-    return () => { video.src = ''; URL.revokeObjectURL(url) }
   }, [file, isVideo])
 
   const searchAudio = async (event) => {
@@ -100,10 +130,22 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
     setActiveTool('')
   }
 
-  const start = Number(selected.trimStart || 0)
-  const maxStart = Math.max(0, duration - 15)
-  const end = Number(selected.trimEnd || Math.min(60, duration || 60))
+  const start = Math.max(0, Number(selected.trimStart) || 0)
+  const maxEnd = Math.min(60, duration || 60)
+  const minDuration = Math.min(15, duration || 15)
+  const end = Math.min(maxEnd, Math.max(start + minDuration, Number(selected.trimEnd) || maxEnd))
+  const maxStart = Math.max(0, Math.min(maxEnd - minDuration, end - minDuration))
+  const startPercent = duration > 0 ? (start / duration) * 100 : 0
+  const endPercent = duration > 0 ? (end / duration) * 100 : 100
   const trimValid = !isVideo || (duration > 0 && end - start >= 15 && end - start <= 60 && end <= duration)
+  const setTrimStart = value => {
+    const next = Math.max(0, Math.min(Number(value) || 0, Math.min(maxStart, end - minDuration)))
+    update({ trimStart: next, trimEnd: end })
+  }
+  const setTrimEnd = value => {
+    const next = Math.max(start + minDuration, Math.min(maxEnd, Number(value) || maxEnd))
+    update({ trimStart: start, trimEnd: next })
+  }
 
   if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
     <div className="absolute top-[max(18px,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 pointer-events-auto">
@@ -143,41 +185,27 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
         <p className="text-[11px] text-white/60">Có sẵn nhạc mẫu miễn phí. Mỗi bài hiển thị tác giả và giấy phép; hãy giữ thông tin ghi công khi giấy phép yêu cầu.</p>
       </div>}
       {activeTool === 'trim' && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs text-white/75">
-              Bắt đầu (giây)
-              <input
-                className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white"
-                type="number"
-                min="0"
-                max={maxStart}
-                value={selected.trimStart ?? 0}
-                onChange={event => update({ trimStart: Math.max(0, Number(event.target.value) || 0) })}
-              />
-            </label>
-            <label className="text-xs text-white/75">
-              Kết thúc (giây)
-              <input
-                className="mt-1 w-full rounded-lg bg-white/10 p-2 text-white"
-                type="number"
-                min="15"
-                max={Math.min(60, duration || 60)}
-                value={selected.trimEnd ?? Math.min(60, duration || 60)}
-                onChange={event => update({ trimEnd: Math.max(0, Number(event.target.value) || 0) })}
-              />
-            </label>
+        <div className="space-y-4">
+          <style>{`
+            .creator-trim-range{position:absolute;inset:0;width:100%;height:36px;margin:0;background:transparent;appearance:none;-webkit-appearance:none;pointer-events:none;touch-action:pan-y}
+            .creator-trim-range::-webkit-slider-runnable-track{height:6px;background:transparent}
+            .creator-trim-range::-moz-range-track{height:6px;background:transparent}
+            .creator-trim-range::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border:3px solid #fff;border-radius:999px;background:#0ea5e9;box-shadow:0 1px 5px #0009;pointer-events:auto;cursor:ew-resize}
+            .creator-trim-range::-moz-range-thumb{width:16px;height:16px;border:3px solid #fff;border-radius:999px;background:#0ea5e9;box-shadow:0 1px 5px #0009;pointer-events:auto;cursor:ew-resize}
+          `}</style>
+          <div className="flex items-center justify-between gap-3 text-xs text-white/75">
+            <span>Kéo hai đầu để chọn đoạn</span>
+            <strong className="rounded-full bg-white/15 px-2.5 py-1 text-white">{Math.round(start)}s – {Math.round(end)}s</strong>
           </div>
-          <p className="text-xs text-white/65">
-            {duration
-              ? `Video dài ${Math.round(duration)} giây · Đoạn chọn ${Math.max(0, end - start)} giây`
-              : 'Đang đọc thời lượng video…'}
-          </p>
-          {!trimValid && (
-            <p className="text-xs text-amber-300">
-              Đoạn video phải dài 15–60 giây và nằm trong video gốc.
-            </p>
-          )}
+          <div className="relative h-9 touch-pan-y" role="group" aria-label="Thanh kéo cắt video">
+            <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/25" />
+            <div className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-sky-400" style={{left: `${startPercent}%`, width: `${Math.max(0, endPercent - startPercent)}%`}} />
+            <input aria-label="Điểm bắt đầu video" className="creator-trim-range" type="range" min="0" max={duration || 60} step="0.1" value={Math.min(start, duration || 60)} onChange={event => setTrimStart(event.target.value)} style={{zIndex: start > (duration - end) / 2 ? 4 : 3}} />
+            <input aria-label="Điểm kết thúc video" className="creator-trim-range" type="range" min={Math.min(duration || 60, start + minDuration)} max={duration || 60} step="0.1" value={Math.min(end, duration || 60)} onChange={event => setTrimEnd(event.target.value)} style={{zIndex: 5}} />
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-white/60"><span>0:00</span><span>{duration ? `${Math.floor(duration / 60)}:${String(Math.floor(duration % 60)).padStart(2,'0')}` : '--:--'}</span></div>
+          <p className="text-xs text-white/70">{duration ? `Video dài ${duration.toFixed(1)} giây · Đã chọn ${(end - start).toFixed(1)} giây` : durationError ? 'Không đọc được thời lượng. Hãy chọn lại video hoặc thử tệp MP4/MOV khác.' : 'Đang tải thông tin thời lượng video…'}</p>
+          {!trimValid && <p className="text-xs text-amber-300">Đoạn chọn cần dài 15–60 giây và nằm trong video gốc.</p>}
         </div>
       )}
       {activeTool === 'text' && <div className="space-y-3">
@@ -215,18 +243,25 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post' }) {
   return <div className="mt-4 rounded-2xl border p-3 space-y-4" style={{ borderColor: 'var(--d-border)', background: 'var(--d-surface-2)' }}>
     <div className="flex items-center gap-2 font-bold"><SlidersHorizontal size={17}/> Công cụ chỉnh sửa</div>
 
-    {isVideo && <section className="space-y-2">
+    {isVideo && <section className="space-y-3">
       <div className="text-sm font-semibold">Cắt video (15–60 giây)</div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="text-xs d-muted">Bắt đầu (giây)
-          <input className="d-input mt-1 w-full" type="number" min="0" max={maxStart} step="1" value={selected.trimStart ?? 0} onChange={e => update({ trimStart: Math.max(0, Number(e.target.value) || 0) })}/>
-        </label>
-        <label className="text-xs d-muted">Kết thúc (giây)
-          <input className="d-input mt-1 w-full" type="number" min="15" max={Math.min(60, duration || 60)} step="1" value={selected.trimEnd ?? Math.min(60, duration || 60)} onChange={e => update({ trimEnd: Math.max(0, Number(e.target.value) || 0) })}/>
-        </label>
+      <style>{`
+        .creator-trim-range-light{position:absolute;inset:0;width:100%;height:36px;margin:0;background:transparent;appearance:none;-webkit-appearance:none;pointer-events:none;touch-action:pan-y}
+        .creator-trim-range-light::-webkit-slider-runnable-track{height:6px;background:transparent}
+        .creator-trim-range-light::-moz-range-track{height:6px;background:transparent}
+        .creator-trim-range-light::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border:3px solid #fff;border-radius:999px;background:var(--d-primary);box-shadow:0 1px 5px #0004;pointer-events:auto;cursor:ew-resize}
+        .creator-trim-range-light::-moz-range-thumb{width:16px;height:16px;border:3px solid #fff;border-radius:999px;background:var(--d-primary);box-shadow:0 1px 5px #0004;pointer-events:auto;cursor:ew-resize}
+      `}</style>
+      <div className="flex items-center justify-between gap-3 text-xs d-muted"><span>Kéo hai đầu thanh để cắt</span><strong>{Math.round(start)}s – {Math.round(end)}s</strong></div>
+      <div className="relative h-9 touch-pan-y" role="group" aria-label="Thanh kéo cắt video">
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full" style={{background:'var(--d-border)'}} />
+        <div className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full" style={{left:`${startPercent}%`,width:`${Math.max(0,endPercent-startPercent)}%`,background:'var(--d-primary)'}} />
+        <input aria-label="Điểm bắt đầu video" className="creator-trim-range-light" type="range" min="0" max={duration || 60} step="0.1" value={Math.min(start,duration || 60)} onChange={e=>setTrimStart(e.target.value)} style={{zIndex: start > (duration-end)/2 ? 4 : 3}} />
+        <input aria-label="Điểm kết thúc video" className="creator-trim-range-light" type="range" min={Math.min(duration || 60,start+minDuration)} max={duration || 60} step="0.1" value={Math.min(end,duration || 60)} onChange={e=>setTrimEnd(e.target.value)} style={{zIndex:5}} />
       </div>
-      <p className="text-xs d-muted">{duration ? `Video gốc dài ${Math.round(duration)} giây. Đoạn chọn: ${Math.max(0, end - start)} giây.` : 'Đang đọc thời lượng video…'} Cắt thực tế cần được xử lý khi xuất media.</p>
-      {!trimValid && <p className="text-xs" style={{ color: 'var(--d-danger)' }}>Chọn đoạn nằm trong video, dài ít nhất 15 giây và không quá 60 giây.</p>}
+      <div className="flex justify-between text-[11px] d-muted"><span>0:00</span><span>{duration ? `${Math.floor(duration/60)}:${String(Math.floor(duration%60)).padStart(2,'0')}` : '--:--'}</span></div>
+      <p className="text-xs d-muted">{duration ? `Video gốc dài ${duration.toFixed(1)} giây · Đã chọn ${(end-start).toFixed(1)} giây.` : durationError ? 'Không đọc được thời lượng. Hãy chọn lại video hoặc thử tệp MP4/MOV khác.' : 'Đang tải thông tin thời lượng video…'}</p>
+      {!trimValid && <p className="text-xs" style={{color:'var(--d-danger)'}}>Chọn đoạn nằm trong video, dài ít nhất 15 giây và không quá 60 giây.</p>}
     </section>}
 
     <section className="space-y-2">

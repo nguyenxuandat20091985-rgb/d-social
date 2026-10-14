@@ -1,4 +1,7 @@
+import { legacySettingsToLayers, normalizeCreatorLayers, type CreatorLayer } from './creatorLayers'
+
 type CreatorSettings = {
+  layers?: CreatorLayer[]
   colorFilter?: string
   overlayText?: string
   overlayFont?: string
@@ -23,32 +26,38 @@ const FILTERS = {
 }
 
 function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, settings: CreatorSettings) {
-  const sticker = String(settings.sticker || '')
-  const text = String(settings.overlayText || '').trim()
-  if (!sticker && !text) return
+  const layers = normalizeCreatorLayers(settings.layers ?? legacySettingsToLayers(settings))
+    .filter(layer => layer.visible)
+  if (!layers.length) return
+
   const scale = canvas.width / 720
   context.textAlign = 'center'
   context.textBaseline = 'middle'
-  const x = canvas.width * Math.max(0.08, Math.min(0.92, Number(settings.overlayX ?? 50) / 100))
-  const y = canvas.height * Math.max(0.08, Math.min(0.92, Number(settings.overlayY ?? 70) / 100))
   context.shadowColor = 'rgba(0,0,0,.85)'
   context.shadowBlur = 7 * scale
   context.shadowOffsetY = 2 * scale
-  context.fillStyle = settings.overlayColor || '#ffffff'
-  if (sticker) {
-    context.font = `${Math.max(24, 54 * scale)}px ${settings.overlayFont || 'system-ui, sans-serif'}`
-    context.fillText(sticker, x, y)
-  }
-  if (text) {
-    const maxWidth = canvas.width * .9
-    let fontSize = Math.max(18, 38 * scale)
-    context.font = `700 ${fontSize}px ${settings.overlayFont || 'system-ui, sans-serif'}`
-    while (context.measureText(text).width > maxWidth && fontSize > 14) {
-      fontSize -= 2
-      context.font = `700 ${fontSize}px ${settings.overlayFont || 'system-ui, sans-serif'}`
+
+  for (const layer of layers) {
+    const x = canvas.width * layer.x / 100
+    const y = canvas.height * layer.y / 100
+    context.fillStyle = layer.color
+    if (layer.kind === 'sticker') {
+      context.font = `${Math.max(24, layer.fontSize * scale)}px ${layer.fontFamily}`
+      context.fillText(layer.value, x, y)
+      continue
     }
-    context.fillText(text, x, y, maxWidth)
+    if (layer.kind !== 'text') continue
+
+    const maxWidth = canvas.width * .9
+    let fontSize = Math.max(18, layer.fontSize * scale)
+    context.font = `700 ${fontSize}px ${layer.fontFamily}`
+    while (context.measureText(layer.value).width > maxWidth && fontSize > 14) {
+      fontSize -= 2
+      context.font = `700 ${fontSize}px ${layer.fontFamily}`
+    }
+    context.fillText(layer.value, x, y, maxWidth)
   }
+
   context.shadowColor = 'transparent'
   context.shadowBlur = 0
   context.shadowOffsetY = 0
@@ -59,7 +68,7 @@ function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: number): P
 }
 
 async function processImage(file: File, settings: CreatorSettings): Promise<File> {
-  const hasEdits = (settings.colorFilter && settings.colorFilter !== 'none') || settings.overlayText || settings.sticker
+  const hasEdits = (settings.colorFilter && settings.colorFilter !== 'none') || normalizeCreatorLayers(settings.layers ?? legacySettingsToLayers(settings)).some(layer => layer.visible)
   if (!hasEdits) return file
   const imageUrl = URL.createObjectURL(file)
   try {
@@ -142,12 +151,18 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
     if (end - start < 15 || end - start > 60 || end > duration || start >= duration) {
       throw new Error('Video phải có đoạn xuất dài từ 15 đến 60 giây và nằm trong thời lượng video gốc.')
     }
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Không thể tua đến đoạn video đã chọn.')), 10000)
-      const onSeek = () => { clearTimeout(timer); resolve() }
-      video.addEventListener('seeked', onSeek, { once: true })
-      video.currentTime = start
-    })
+    if (start > 0.05) {
+      await new Promise<void>((resolve, reject) => {
+        let timer: ReturnType<typeof setTimeout>
+        const onSeek = () => { clearTimeout(timer); resolve() }
+        timer = setTimeout(() => {
+          video.removeEventListener('seeked', onSeek)
+          reject(new Error('Không thể tua đến đoạn video đã chọn.'))
+        }, 10000)
+        video.addEventListener('seeked', onSeek, { once: true })
+        video.currentTime = start
+      })
+    }
 
     const width = Math.min(1280, video.videoWidth || 720)
     const height = Math.max(2, Math.round(width * (video.videoHeight || 1280) / (video.videoWidth || 720)))
@@ -211,24 +226,44 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
       if (video.currentTime < end && !video.ended && activeRecorder.state === 'recording') animationFrame = requestAnimationFrame(draw)
     }
     activeRecorder.start(250)
-    if (music) {
-      music.currentTime = 0
-      await music.play()
-    }
-    await video.play()
+    // Call both play() methods in the same task so the browser schedules their
+    // start together; awaiting music first would visibly delay the video.
+    const playbackStarted = Promise.all([
+      video.play(),
+      ...(music ? [music.play()] : []),
+    ])
+    await playbackStarted
     draw()
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Xuất video quá thời gian chờ.')), Math.max(90000, (end - start) * 8000))
-      const stop = () => { clearTimeout(timer); resolve() }
-      video.addEventListener('timeupdate', () => {
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error('Xuất video quá thời gian chờ.'))
+      }, Math.max(90000, (end - start) * 8000))
+      const cleanup = () => {
+        clearTimeout(timer)
+        video.removeEventListener('timeupdate', onTimeUpdate)
+        video.removeEventListener('error', onVideoError)
+      }
+      const stop = () => {
+        cleanup()
+        if (activeRecorder.state !== 'inactive') activeRecorder.stop()
+        resolve()
+      }
+      const onTimeUpdate = () => {
         if (video.currentTime >= end) {
           video.pause()
           if (music) music.pause()
-          if (activeRecorder.state !== 'inactive') activeRecorder.stop()
           stop()
         }
-      })
-      video.addEventListener('error', () => { clearTimeout(timer); reject(new Error('Video bị lỗi trong khi xuất.')) }, { once: true })
+      }
+      const onVideoError = () => {
+        cleanup()
+        reject(new Error('Video bị lỗi trong khi xuất.'))
+      }
+      video.addEventListener('timeupdate', onTimeUpdate)
+      video.addEventListener('error', onVideoError, { once: true })
+      // Some mobile browsers emit sparse timeupdate events near the end.
+      if (video.currentTime >= end) stop()
     })
     const blob = await recorded
     const type = blob.type.includes('mp4') ? 'video/mp4' : 'video/webm'
