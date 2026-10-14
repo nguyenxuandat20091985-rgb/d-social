@@ -209,7 +209,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
       {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
     </div>}
     {isVideo && videoRef && <div className="absolute bottom-[max(76px,calc(env(safe-area-inset-bottom)+70px))] left-0 right-0 z-30 pointer-events-none">
-      <VideoTimelineEditor file={file} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} onOpenTool={tool => { setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
+      <VideoTimelineEditor file={file} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} onOpenTool={tool => { if (tool === 'trim') { setActiveTool(''); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
     </div>}
   </div>
 
