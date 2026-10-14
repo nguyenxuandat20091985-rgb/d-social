@@ -26,12 +26,13 @@ async function seekTo(video, time) {
   })
 }
 
-export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool }) {
+export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false }) {
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [thumbnails, setThumbnails] = useState([])
   const [trimMode, setTrimMode] = useState(false)
   const trackRef = useRef(null)
+  useEffect(() => { setTrimMode(Boolean(trimModeActive)) }, [trimModeActive])
   const dragRef = useRef(null)
   const selected = settings || {}
   const update = patch => onChange?.({ ...selected, ...patch })
