@@ -216,26 +216,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
   return <div className="mt-4 rounded-2xl border p-3 space-y-4" style={{ borderColor: 'var(--d-border)', background: 'var(--d-surface-2)' }}>
     <div className="flex items-center gap-2 font-bold"><SlidersHorizontal size={17}/> Công cụ chỉnh sửa</div>
 
-    {isVideo && <section className="space-y-3">
-      <div className="text-sm font-semibold">Cắt video (15–60 giây)</div>
-      <style>{`
-        .creator-trim-range-light{position:absolute;inset:0;width:100%;height:36px;margin:0;background:transparent;appearance:none;-webkit-appearance:none;pointer-events:none;touch-action:pan-y}
-        .creator-trim-range-light::-webkit-slider-runnable-track{height:6px;background:transparent}
-        .creator-trim-range-light::-moz-range-track{height:6px;background:transparent}
-        .creator-trim-range-light::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border:3px solid #fff;border-radius:999px;background:var(--d-primary);box-shadow:0 1px 5px #0004;pointer-events:auto;cursor:ew-resize}
-        .creator-trim-range-light::-moz-range-thumb{width:16px;height:16px;border:3px solid #fff;border-radius:999px;background:var(--d-primary);box-shadow:0 1px 5px #0004;pointer-events:auto;cursor:ew-resize}
-      `}</style>
-      <div className="flex items-center justify-between gap-3 text-xs d-muted"><span>Kéo hai đầu thanh để cắt</span><strong>{Math.round(start)}s – {Math.round(end)}s</strong></div>
-      <div className="relative h-9 touch-pan-y" role="group" aria-label="Thanh kéo cắt video">
-        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full" style={{background:'var(--d-border)'}} />
-        <div className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full" style={{left:`${startPercent}%`,width:`${Math.max(0,endPercent-startPercent)}%`,background:'var(--d-primary)'}} />
-        <input aria-label="Điểm bắt đầu video" className="creator-trim-range-light" type="range" min="0" max={duration || 60} step="0.1" value={Math.min(start,duration || 60)} onChange={e=>setTrimStart(e.target.value)} style={{zIndex: start > (duration-end)/2 ? 4 : 3}} />
-        <input aria-label="Điểm kết thúc video" className="creator-trim-range-light" type="range" min={Math.min(duration || 60,start+minDuration)} max={duration || 60} step="0.1" value={Math.min(end,duration || 60)} onChange={e=>setTrimEnd(e.target.value)} style={{zIndex:5}} />
-      </div>
-      <div className="flex justify-between text-[11px] d-muted"><span>0:00</span><span>{duration ? `${Math.floor(duration/60)}:${String(Math.floor(duration%60)).padStart(2,'0')}` : '--:--'}</span></div>
-      <p className="text-xs d-muted">{duration ? `Video gốc dài ${duration.toFixed(1)} giây · Đã chọn ${(end-start).toFixed(1)} giây.` : durationError ? 'Không đọc được thời lượng. Hãy chọn lại video hoặc thử tệp MP4/MOV khác.' : 'Đang tải thông tin thời lượng video…'}</p>
-      {!trimValid && <p className="text-xs" style={{color:'var(--d-danger)'}}>Chọn đoạn nằm trong video, dài ít nhất 15 giây và không quá 60 giây.</p>}
-    </section>}
+    {isVideo && <p className="text-xs d-muted">Dùng dải Timeline trong trình chỉnh sửa toàn màn hình để chọn đoạn video.</p>}
 
     <section className="space-y-2">
       <div className="text-sm font-semibold">Âm thanh</div>
