@@ -26,12 +26,13 @@ async function seekTo(video, time) {
   })
 }
 
-export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool }) {
+export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false }) {
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
   const [thumbnails, setThumbnails] = useState([])
   const [trimMode, setTrimMode] = useState(false)
   const trackRef = useRef(null)
+  useEffect(() => { setTrimMode(Boolean(trimModeActive)) }, [trimModeActive])
   const dragRef = useRef(null)
   const selected = settings || {}
   const update = patch => onChange?.({ ...selected, ...patch })
@@ -174,18 +175,18 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
         <div className="font-mono text-[12px] font-semibold tracking-wide">{clock(Math.max(0, currentTime - start), true)} <span className="text-white/45">/ {clock(clipDuration)}</span></div>
         <div className="mt-0.5 text-[10px] text-white/45">{duration ? `Video gốc ${clock(duration)} · Kéo mép vàng để cắt` : 'Đang tạo dải khung hình…'}</div>
       </div>
-      <button type="button" onClick={() => onOpenTool?.('music')} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-sky-300/40 bg-sky-400/15 px-3 text-[11px] font-semibold text-sky-100">
+      <button type="button" onClick={() => onOpenTool?.('music')} className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-sky-300/35 bg-sky-400/10 px-2.5 text-[10px] font-semibold text-sky-100">
         <Music2 size={14}/>{selected.audioTrackTitle ? 'Đổi nhạc' : '+ Thêm âm thanh'}
       </button>
     </div>
 
     <div className="mb-1 flex items-center gap-2">
-      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} className={`flex w-[82px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-[10px] font-semibold ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
-        {originalOn ? <Volume2 size={16}/> : <VolumeX size={16}/>}<span>Âm thanh gốc</span><span className="text-[9px]">{originalOn ? 'BẬT' : 'TẮT'}</span>
+      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} className={`flex w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border px-0.5 py-1 text-[8px] leading-tight font-semibold ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
+        {originalOn ? <Volume2 size={12}/> : <VolumeX size={12}/>}<span>Tiếng gốc</span><span className="text-[8px]">{originalOn ? 'BẬT' : 'TẮT'}</span>
       </button>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-[.12em] text-white/45"><span>VIDEO</span><span>{clock(start)}–{clock(end)}</span></div>
-        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current && !event.target.closest('[role="slider"]')) seekFromPointer(event, 'playhead') }} className="relative h-[48px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
+        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current && !event.target.closest('[role="slider"]')) seekFromPointer(event, 'playhead') }} className="relative h-[42px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
           <div className="absolute inset-0 flex overflow-hidden rounded-md">
             {thumbnails.length ? thumbnails.map((src, index) => <img key={index} src={src} draggable="false" alt="" className="h-full min-w-0 flex-1 object-cover" />) : Array.from({ length: 9 }, (_, index) => <div key={index} className="h-full min-w-0 flex-1 animate-pulse border-r border-white/10 bg-gradient-to-b from-[#30333c] to-[#1a1c21]"/>)}
           </div>
@@ -209,7 +210,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
       </button>
     </div>
 
-    <div className="mt-1.5 flex items-center gap-2 border-t border-white/10 pt-1.5">
+    <div className="mt-1 flex items-center gap-2 border-t border-white/10 pt-1">
       <div className="flex w-[82px] shrink-0 items-center justify-center gap-1 text-[10px] font-semibold text-white/55"><Type size={14}/> CHỮ</div>
       <button type="button" onClick={() => onOpenTool?.('text')} className="flex h-8 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border border-white/15 bg-white/[0.04] px-2 text-left">
         <Type size={13} className="shrink-0 text-white/55"/>
@@ -217,15 +218,20 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
       </button>
     </div>
 
-    <div className="mt-1.5 flex items-center justify-between gap-1 border-t border-white/10 pt-1.5">
+    <div className="mt-1 flex items-center gap-1 overflow-x-auto border-t border-white/10 pt-1.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {[
-        {id:'trim', label:'Cắt', glyph:'✂'},
         {id:'theme', label:'Chỉnh sửa', glyph:'✎'},
         {id:'music', label:'Âm thanh', glyph:'♫'},
         {id:'text', label:'Văn bản', glyph:'T'},
-        {id:'sticker', label:'Hiệu ứng', glyph:'✧'},
+        {id:'sticker', label:'Nhãn dán', glyph:'☺'},
+        {id:'overlay', label:'Lớp phủ', glyph:'▧'},
+        {id:'effects', label:'Hiệu ứng', glyph:'✧'},
         {id:'filter', label:'Bộ lọc', glyph:'◐'},
-      ].map(tool => <button key={tool.id} type="button" aria-pressed={tool.id === 'trim' ? trimMode : undefined} onClick={() => tool.id === 'trim' ? setTrimMode(true) : onOpenTool?.(tool.id)} className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[10px] font-medium active:bg-white/10 ${tool.id === 'trim' && trimMode ? 'bg-amber-300/15 text-amber-200' : 'text-white/65'}`}><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.id === 'trim' ? <Scissors size={16}/> : tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
+        {id:'adjust', label:'Tùy chỉnh', glyph:'☷'},
+        {id:'ratio', label:'Tỷ lệ', glyph:'▣'},
+        {id:'background', label:'Nền', glyph:'▤'},
+        {id:'avatar', label:'Ảnh đại diện AI', glyph:'✦'},
+      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className="flex w-[62px] shrink-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-medium text-white/65 active:bg-white/10"><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.glyph}</span><span className="w-full truncate text-center">{tool.label}</span></button>)}
     </div>
   </section>
 }

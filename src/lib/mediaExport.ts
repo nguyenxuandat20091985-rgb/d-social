@@ -15,6 +15,15 @@ type CreatorSettings = {
   musicVolume?: number
   audioSource?: string
   audioTrackUrl?: string
+  brightness?: number
+  contrast?: number
+  saturation?: number
+  hue?: number
+  rotation?: number
+  aspectRatio?: string
+  cropMode?: string
+  backgroundColor?: string
+  playbackSpeed?: number
 }
 
 const FILTERS = {
@@ -23,6 +32,17 @@ const FILTERS = {
   mono: 'grayscale(1)',
   vivid: 'saturate(1.45) contrast(1.05)',
   cool: 'saturate(.9) hue-rotate(12deg)',
+}
+
+function filterForSettings(settings: CreatorSettings): string {
+  const preset = FILTERS[settings.colorFilter as keyof typeof FILTERS]
+  return [
+    preset && preset !== 'none' ? preset : '',
+    `brightness(${(100 + Number(settings.brightness ?? 0)) / 100})`,
+    `contrast(${Number(settings.contrast ?? 100) / 100})`,
+    `saturate(${Number(settings.saturation ?? 100) / 100})`,
+    `hue-rotate(${Number(settings.hue ?? 0)}deg)`,
+  ].filter(Boolean).join(' ')
 }
 
 function drawOverlay(context: CanvasRenderingContext2D, canvas: HTMLCanvasElement, settings: CreatorSettings) {
@@ -83,7 +103,7 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
     canvas.height = image.naturalHeight
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Thiết bị không hỗ trợ kết xuất ảnh.')
-    context.filter = FILTERS[settings.colorFilter as keyof typeof FILTERS] || 'none'
+    context.filter = filterForSettings(settings)
     context.drawImage(image, 0, 0)
     context.filter = 'none'
     drawOverlay(context, canvas, settings)
@@ -145,6 +165,7 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
   try {
     await waitForEvent(video, 'loadedmetadata', 'error')
     const duration = Number(video.duration)
+    video.playbackRate = Math.max(0.25, Math.min(4, Number(settings.playbackSpeed ?? 1)))
     const start = Math.max(0, Number(settings.trimStart) || 0)
     const requestedEnd = Number(settings.trimEnd)
     const end = Math.min(duration, Number.isFinite(requestedEnd) && requestedEnd > 0 ? requestedEnd : Math.min(60, duration))
@@ -164,8 +185,13 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
       })
     }
 
-    const width = Math.min(1280, video.videoWidth || 720)
-    const height = Math.max(2, Math.round(width * (video.videoHeight || 1280) / (video.videoWidth || 720)))
+    const sourceWidth = video.videoWidth || 720
+    const sourceHeight = video.videoHeight || 1280
+    const ratioMap: Record<string, number> = { '9:16': 9 / 16, '16:9': 16 / 9, '1:1': 1, '4:5': 4 / 5 }
+    const outputRatio = ratioMap[settings.aspectRatio || '9:16'] || sourceWidth / sourceHeight
+    const longestSide = 1280
+    const width = outputRatio >= 1 ? longestSide : Math.round(longestSide * outputRatio)
+    const height = outputRatio >= 1 ? Math.round(longestSide / outputRatio) : longestSide
     const canvas = document.createElement('canvas')
     canvas.width = width - (width % 2)
     canvas.height = height - (height % 2)
@@ -216,8 +242,22 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
     })
     const draw = () => {
       if (video.readyState >= 2) {
-        context.filter = FILTERS[settings.colorFilter as keyof typeof FILTERS] || 'none'
-        context.drawImage(video, 0, 0, canvas.width, canvas.height)
+        context.fillStyle = settings.backgroundColor || '#000000'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+        context.save()
+        context.translate(canvas.width / 2, canvas.height / 2)
+        const rotation = Number(settings.rotation || 0) * Math.PI / 180
+        context.rotate(rotation)
+        const srcW = video.videoWidth || 720
+        const srcH = video.videoHeight || 1280
+        const rotatedW = Math.abs(srcW * Math.cos(rotation)) + Math.abs(srcH * Math.sin(rotation))
+        const rotatedH = Math.abs(srcW * Math.sin(rotation)) + Math.abs(srcH * Math.cos(rotation))
+        const scale = settings.cropMode === 'cover'
+          ? Math.max(canvas.width / rotatedW, canvas.height / rotatedH)
+          : Math.min(canvas.width / rotatedW, canvas.height / rotatedH)
+        context.filter = filterForSettings(settings)
+        context.drawImage(video, -(srcW * scale) / 2, -(srcH * scale) / 2, srcW * scale, srcH * scale)
+        context.restore()
         context.filter = 'none'
         drawOverlay(context, canvas, settings)
         const progress = Math.min(100, Math.round(((video.currentTime - start) / (end - start)) * 100))
