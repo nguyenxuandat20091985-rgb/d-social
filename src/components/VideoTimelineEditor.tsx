@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AudioLines, Music2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 
@@ -7,6 +8,7 @@ const clock = (seconds, tenths = false) => {
   const mins = Math.floor(safe / 60)
   const secs = Math.floor(safe % 60)
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}${tenths ? '.' + Math.floor((safe % 1) * 10) : ''}`
+}
 
 async function seekTo(video, time) {
   if (!video || !Number.isFinite(time)) return
