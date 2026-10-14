@@ -560,8 +560,14 @@ function StoryComposer({ userId, onClose, onPublished }) {
 
 
   if (file) return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
-    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-      {file.type.startsWith('video/') ? <video src={previewUrl} autoPlay muted playsInline loop className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
+    <div className="absolute inset-x-0 top-0 h-[47dvh] flex items-center justify-center overflow-hidden bg-black">
+      {file.type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previewUrl} autoPlay muted playsInline loop onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/> : <img src={previewUrl} alt="Xem trước media" className="h-full w-full object-contain" style={{filter:({warm:'saturate(1.15) sepia(.18)',mono:'grayscale(1)',vivid:'saturate(1.45) contrast(1.05)',cool:'saturate(.9) hue-rotate(12deg)'})[creatorSettings.colorFilter]||'none'}}/>}
+      {file.type.startsWith('video/') && <button type="button" aria-label={previewPlaying ? 'Tạm dừng xem trước' : 'Phát xem trước'} onClick={() => {
+        const video = fullscreenVideoRef.current
+        if (!video) return
+        if (video.paused) video.play().then(() => setPreviewPlaying(true)).catch(() => setError('Chạm lại để phát video.'))
+        else { video.pause(); setPreviewPlaying(false) }
+      }} className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/40 bg-black/65 p-4 text-white shadow-xl backdrop-blur-sm">{previewPlaying ? <Pause size={24}/> : <Play size={24}/>}</button>}
       {(creatorSettings.overlayText||creatorSettings.sticker) && <div
         className="absolute z-10 max-w-[78%] touch-none select-none text-center text-3xl font-black drop-shadow-[0_2px_8px_rgba(0,0,0,.95)]"
         style={{ left: (creatorSettings.overlayX ?? 50) + '%', top: (creatorSettings.overlayY ?? 50) + '%', transform: 'translate(-50%, -50%)', color: creatorSettings.overlayColor || '#ffffff', fontFamily: creatorSettings.overlayFont || 'Roboto, Arial, sans-serif', cursor: creatorSettings.overlayText ? 'grab' : 'default', pointerEvents: creatorSettings.overlayText ? 'auto' : 'none', touchAction: 'none' }}
