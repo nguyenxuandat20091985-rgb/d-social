@@ -1,2 +1,2 @@
-export { ProfilePage } from '../../components/ProfilePage'
-export { PublicProfilePage } from '../../components/PublicProfilePage'
+export { ProfilePage } from './ProfilePage'
+export { PublicProfilePage } from './PublicProfilePage'
