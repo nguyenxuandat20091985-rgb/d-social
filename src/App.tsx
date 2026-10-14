@@ -9,17 +9,16 @@ import { supabase } from './lib/supabase'
 import { moderateText } from './lib/moderation'
 import { postRateLimit, commentRateLimit } from './lib/ratelimit'
 import { AuthScreen } from './components/AuthScreen'
-import { ProfilePage } from './components/ProfilePage'
-import { Chat } from './components/ChatPanel'
-import { Discover } from './components/DiscoverPanel'
-import { Notifications } from './components/NotificationsPanel'
-import { PublicProfilePage } from './components/PublicProfilePage'
+import { ProfilePage, PublicProfilePage } from './features/profile'
+import { Chat } from './features/chat'
+import { Discover } from './features/explore'
+import { Notifications } from './features/notifications'
 import { ShareMenu } from './components/ShareMenu'
 import { LOGO_SRC } from './lib/brand'
-import { ShortVideoFeed } from './components/ShortVideoFeed'
-import { CreatorMediaTools } from './components/CreatorMediaTools'
+import { ShortVideoFeed } from './features/home'
+import { CreatorMediaTools } from './features/media-editor'
 import { MusicReplaceDialog } from './components/MusicReplaceDialog'
-import { processCreatorMedia } from './lib/mediaExport'
+import { processCreatorMedia } from './features/media-editor'
 
 const MAX_IMAGE = 8 * 1024 * 1024
 const MAX_VIDEO = 30 * 1024 * 1024
@@ -333,9 +332,10 @@ function Composer({ userId, onPublished, onClose }) {
 
   if (files.length > 0 && creatorMode === 'fullscreen' && creatorStep === 'edit') return <div className="fixed inset-0 z-[100] overflow-hidden bg-black text-white" style={{height:'100dvh',width:'100vw',paddingTop:'env(safe-area-inset-top)',paddingBottom:'env(safe-area-inset-bottom)'}}>
     <div className="absolute inset-x-0 top-0 h-[55dvh] flex items-center justify-center overflow-hidden" style={{backgroundColor:creatorSettings.backgroundColor || "#000000"}}>
-      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-contain" onPlay={() => setPreviewPlaying(true)} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
+      {files[0].type.startsWith('video/') ? <video ref={fullscreenVideoRef} src={previews[0]} muted playsInline className="h-full w-full object-contain" onLoadedMetadata={() => { if (fullscreenVideoRef.current) fullscreenVideoRef.current.playbackRate = 1.0 }} onRateChange={() => { const video = fullscreenVideoRef.current; if (video && video.playbackRate !== 1) video.playbackRate = 1.0 }} onPlay={() => { if (fullscreenVideoRef.current) fullscreenVideoRef.current.playbackRate = 1.0; setPreviewPlaying(true) }} onPause={() => setPreviewPlaying(false)} onTimeUpdate={() => {
         const video = fullscreenVideoRef.current
         const music = fullscreenMusicRef.current
+        if (video && video.playbackRate !== 1) video.playbackRate = 1.0
         const start = Math.max(0, Number(creatorSettings.trimStart) || 0)
         const requestedEnd = Number(creatorSettings.trimEnd)
         const end = Number.isFinite(requestedEnd) && requestedEnd > start ? Math.min(video?.duration || requestedEnd, requestedEnd) : Math.min(video?.duration || 60, 60)
@@ -368,6 +368,8 @@ function Composer({ userId, onPublished, onClose }) {
         const video = fullscreenVideoRef.current
         const music = fullscreenMusicRef.current
         if (!video) return
+        video.playbackRate = 1.0
+        if (music) music.playbackRate = 1.0
         if (previewPlaying) { video.pause(); music?.pause(); setPreviewPlaying(false); return }
         try {
           video.muted = false

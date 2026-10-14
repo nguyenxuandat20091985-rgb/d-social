@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const layers = await readFile(new URL('../src/lib/creatorLayers.ts', import.meta.url), 'utf8')
-const exporter = await readFile(new URL('../src/lib/mediaExport.ts', import.meta.url), 'utf8')
+const exporter = await readFile(new URL('../src/features/media-editor/mediaExport.ts', import.meta.url), 'utf8')
 
 test('creator layer contract supports stable IDs, visibility, normalized positions and z-order', () => {
   assert.match(layers, /export type CreatorLayer =/)
