@@ -176,8 +176,7 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
         {selected.audioTrackTitle && <p className="text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
         <p className="text-[11px] text-white/60">Có sẵn nhạc mẫu miễn phí. Mỗi bài hiển thị tác giả và giấy phép; hãy giữ thông tin ghi công khi giấy phép yêu cầu.</p>
       </div>}
-      {activeTool === 'trim' && <div className="rounded-xl bg-white/5 p-3 text-xs text-white/75">Kéo hai mép màu vàng trên dải khung hình để chọn đoạn video. Kéo đầu đọc màu trắng để tua đến khung hình cần xem.</div>}
-      )}
+
       {activeTool === 'text' && <div className="space-y-3">
         <input className="w-full rounded-xl bg-white/10 px-3 py-2.5 text-white placeholder:text-white/50" maxLength={120} value={selected.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="Nhập chữ hiển thị trên media"/>
         <div className="grid grid-cols-2 gap-2">
