@@ -173,7 +173,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
       </button>
       <div className="min-w-0 flex-1">
         <div className="font-mono text-[12px] font-semibold tracking-wide">{clock(Math.max(0, currentTime - start), true)} <span className="text-white/45">/ {clock(clipDuration)}</span></div>
-        <div className="mt-0.5 text-[10px] text-white/45">{duration ? `Video gốc ${clock(duration)} · Kéo mép vàng để cắt` : 'Đang tạo dải khung hình…'}</div>
+        <div className="mt-0.5 text-[10px] text-white/45">{duration ? `Video gốc ${clock(duration)}` : 'Đang tạo dải khung hình…'}</div>
       </div>
       <button type="button" onClick={() => onOpenTool?.('music')} className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-sky-300/35 bg-sky-400/10 px-2.5 text-[10px] font-semibold text-sky-100">
         <Music2 size={14}/>{selected.audioTrackTitle ? 'Đổi nhạc' : '+ Thêm âm thanh'}
@@ -181,8 +181,8 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
     </div>
 
     <div className="mb-1 flex items-center gap-2">
-      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} className={`flex w-[58px] shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border px-0.5 py-1 text-[8px] leading-tight font-semibold ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
-        {originalOn ? <Volume2 size={12}/> : <VolumeX size={12}/>}<span>Tiếng gốc</span><span className="text-[8px]">{originalOn ? 'BẬT' : 'TẮT'}</span>
+      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} aria-label={originalOn ? 'Tắt tiếng gốc' : 'Bật tiếng gốc'} title={originalOn ? 'Tiếng gốc: bật' : 'Tiếng gốc: tắt'} className={`grid h-[42px] w-8 shrink-0 place-items-center self-start rounded-md border ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
+        {originalOn ? <Volume2 size={15}/> : <VolumeX size={15}/>}
       </button>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-[.12em] text-white/45"><span>VIDEO</span><span>{clock(start)}–{clock(end)}</span></div>
@@ -227,10 +227,10 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
         {id:'overlay', label:'Lớp phủ', glyph:'▧'},
         {id:'effects', label:'Hiệu ứng', glyph:'✧'},
         {id:'filter', label:'Bộ lọc', glyph:'◐'},
-        {id:'adjust', label:'Tùy chỉnh', glyph:'☷'},
+        {id:'adjust', label:'Tùy chỉnh AI', glyph:'☷'},
         {id:'ratio', label:'Tỷ lệ', glyph:'▣'},
         {id:'background', label:'Nền', glyph:'▤'},
-        {id:'avatar', label:'Ảnh đại diện AI', glyph:'✦'},
+        {id:'avatar', label:'Chỉnh sửa AI', glyph:'✦'},
       ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className="flex w-[62px] shrink-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-medium text-white/65 active:bg-white/10"><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.glyph}</span><span className="w-full truncate text-center">{tool.label}</span></button>)}
     </div>
   </section>
