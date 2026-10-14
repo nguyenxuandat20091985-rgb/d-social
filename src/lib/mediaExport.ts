@@ -165,7 +165,7 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
   try {
     await waitForEvent(video, 'loadedmetadata', 'error')
     const duration = Number(video.duration)
-    video.playbackRate = Math.max(0.25, Math.min(4, Number(settings.playbackSpeed ?? 1)))
+    video.playbackRate = 1.0
     const start = Math.max(0, Number(settings.trimStart) || 0)
     const requestedEnd = Number(settings.trimEnd)
     const end = Math.min(duration, Number.isFinite(requestedEnd) && requestedEnd > 0 ? requestedEnd : Math.min(60, duration))
