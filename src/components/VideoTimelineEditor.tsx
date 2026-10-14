@@ -215,7 +215,7 @@ export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlay
         {id:'text', label:'Chữ', glyph:'T'},
         {id:'sticker', label:'Sticker', glyph:'☺'},
         {id:'filter', label:'Bộ lọc', glyph:'◐'},
-      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id === 'theme' ? 'filter' : tool.id)} className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-medium ${tool.id === 'trim' || tool.id === 'music' ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'}`}><span className="grid h-5 place-items-center text-[17px] leading-none">{tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
+      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-medium ${tool.id === 'trim' || tool.id === 'music' ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'}`}><span className="grid h-5 place-items-center text-[17px] leading-none">{tool.glyph}</span><span className="truncate">{tool.label}</span></button>)}
     </div>
   </section>
 }
