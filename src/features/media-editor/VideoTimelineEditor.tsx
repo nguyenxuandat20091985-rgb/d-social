@@ -37,7 +37,7 @@ const FILTERS = [
   { id: 'vivid', label: 'Rực rỡ', css: 'saturate(1.45) contrast(1.05)' },
   { id: 'cool', label: 'Lạnh', css: 'saturate(.9) hue-rotate(12deg)' },
 ]
-const filterCss = id => (FILTERS.find(x => x.id === id) || FILTERS[0]).css
+const filterCss = id => { const css = (FILTERS.find(x => x.id === id) || FILTERS[0]).css; return css === 'none' ? '' : css }
 
 export function MediaPicker({ onFiles, disabled = false }) {
   const input = useRef(null)
