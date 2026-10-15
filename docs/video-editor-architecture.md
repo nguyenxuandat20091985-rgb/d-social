@@ -27,7 +27,7 @@ The editor should preserve D-Social's React 18 + Vite + TypeScript + Tailwind st
 
 ## Current branch change
 
-The current change removes the explicit one-video limit in the picker and append handler, so a selection can contain multiple images and multiple videos. The existing exporter iterates timeline clips, but this is not proof of correct output on every device. Background audio mixing, robust undo/redo, full multi-track compositing, transitions, and Android export regression coverage remain separate work.
+The current change removes the explicit one-video limit in the picker and append handler, so a selection can contain multiple images and multiple videos. The exporter now creates a Web Audio mix bus, routes each source video's audio through the original-volume gain, routes uploaded background music through its own gain, and adds the mixed audio track to the MediaRecorder stream. This implementation still needs browser/device regression tests; do not treat the feature as production-verified until mixed-media exports are checked on Android Chrome. Robust undo/redo, full multi-track compositing, transitions, voiceover recording, fades, and Android export regression coverage remain separate work.
 
 ## Acceptance checklist before production
 
@@ -40,3 +40,31 @@ The current change removes the explicit one-video limit in the picker and append
 - [ ] Test on Android Chrome with short and large files; handle memory pressure.
 - [ ] Confirm output MIME/extension match the actual encoded format.
 - [ ] Run typecheck, build, and automated tests before merging.
+
+
+## CapCut-like implementation sequence
+
+### Phase A — media/timeline and audio export foundation
+- [x] Multi-select image and video files in one picker; append later imports without replacing existing clips.
+- [x] Timeline clip selection, basic reorder/delete/split/trim, image duration, and text overlay.
+- [x] Export engine routes source-video audio and uploaded background music into a mixed MediaRecorder audio track with independent gain settings.
+- [ ] Verify exported audio is audible and synchronized for image-only, video-only, and mixed image/video projects on Android Chrome.
+- [ ] Add deterministic unit tests for timeline duration/trim/split math and browser export smoke tests.
+
+### Phase B — editor interaction
+- [ ] Timeline zoom/fit, drag-and-drop clip reorder, snapping, ripple delete, duplicate clip, and undo/redo.
+- [ ] Separate video, image, text, music, and voiceover tracks with track mute/lock/visibility.
+- [ ] Keyboard-accessible controls and touch-target regression tests.
+
+### Phase C — visual editing
+- [ ] Per-clip crop/position/scale/rotation and fit/fill controls.
+- [ ] Multiple text/sticker overlays with independent start/end times.
+- [ ] Filters, transitions, speed controls, and keyframe-based animation.
+
+### Phase D — persistence and delivery
+- [ ] Save/load project metadata and timeline to IndexedDB; keep large blobs out of localStorage.
+- [ ] Export quality/frame-rate controls, progress/cancel, codec capability checks, and correct MIME/extension mapping.
+- [ ] Verify composer and Story publishing integration without changing unrelated feed/chat behavior.
+
+## License and reuse decision
+The licenses were checked in the upstream repositories: [FairArena/fairarena-video](https://github.com/FairArena/fairarena-video/blob/main/LICENSE) and [ys941/reelstudio](https://github.com/ys941/reelstudio/blob/main/LICENSE) each expose an MIT license. They are references for architecture and interaction patterns in this phase; no upstream source files have been vendored wholesale. [Ektie/react-video-timeline-editor](https://github.com/Ektie/react-video-timeline-editor) remains excluded from direct reuse until its AGPL-3.0 implications are explicitly reviewed.
