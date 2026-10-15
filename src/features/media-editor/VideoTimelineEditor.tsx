@@ -18,7 +18,7 @@ export function MediaPicker({ onFiles, disabled = false }) {
     const picked = Array.from(e.currentTarget.files || [])
     const images = picked.filter(f => f.type.startsWith('image/'))
     const videos = picked.filter(f => f.type.startsWith('video/'))
-    onFiles?.([...images, ...videos.slice(0, 1)])
+    onFiles?.([...images, ...videos])
     e.currentTarget.value = ''
   }}/><button type="button" disabled={disabled} onClick={() => input.current?.click()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 text-xs font-semibold disabled:opacity-40"><ImagePlus size={15}/>Chọn ảnh hoặc video</button></>
 }
@@ -117,7 +117,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   useEffect(()=>{const v=videoRef?.current;if(!v||!active||active.kind!=='video')return;const t=clamp(playhead-activeStart+active.in,active.in,active.out||active.sourceDuration||0);if(Number.isFinite(t)&&Math.abs(v.currentTime-t)>.035){try{v.currentTime=t}catch{}}},[playhead,active?.id,activeStart,active?.in,active?.out,videoRef])
   const seek=t=>setPlayhead(clamp(t,0,total))
   const changeClips=next=>{setExportedFile(null);setClips(next);const c=next.find(x=>x.id===activeId);if(c)update({trimStart:c.in,trimEnd:c.out,timelineClips:next})}
-  const addFiles=picked=>{setExportedFile(null);const imgs=picked.filter(f=>f.type.startsWith('image/')),vids=picked.filter(f=>f.type.startsWith('video/'));const haveVideo=clips.some(c=>c.kind==='video');const accepted=[...imgs,...(haveVideo?[]:vids.slice(0,1))].map(makeClip);if(!accepted.length){setError('Chỉ hỗ trợ ảnh và tối đa một video trong phiên này.');return}setClips(prev=>[...prev,...accepted]);setError('')}
+  const addFiles=picked=>{setExportedFile(null);const accepted=picked.filter(f=>f.type.startsWith('image/')||f.type.startsWith('video/')).map(makeClip);if(!accepted.length){setError('Hãy chọn ảnh hoặc video hợp lệ.');return}setClips(prev=>[...prev,...accepted]);setError('')}
   const split=()=>{setExportedFile(null);if(!active||active.kind!=='video'){setError('Chọn một video để tách.');return}const local=active.in+playhead-activeStart;if(local<=active.in+.15||local>=active.out-.15){setError('Đưa playhead vào giữa clip rồi chọn Tách.');return}const a={...active,id:makeClip(active.file).id,out:local},b={...active,id:makeClip(active.file).id,in:local};setClips(prev=>[...prev.slice(0,activeIndex),a,b,...prev.slice(activeIndex+1)]);setActiveId(b.id);setError('')}
   const remove=()=>{setExportedFile(null);if(!active)return;const next=clips.filter(c=>c.id!==active.id);setClips(next);setActiveId(next[0]?.id||null);setPlayhead(0)}
   const move=delta=>{setExportedFile(null);const i=clips.findIndex(c=>c.id===activeId),j=i+delta;if(i<0||j<0||j>=clips.length)return;const next=clips.slice();[next[i],next[j]]=[next[j],next[i]];setClips(next)}
