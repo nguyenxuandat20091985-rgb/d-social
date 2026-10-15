@@ -141,8 +141,8 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
     context.fillRect(0, 0, canvas.width, canvas.height)
     context.save()
     context.translate(canvas.width / 2, canvas.height / 2)
-    context.rotate(rotation)
     context.translate(canvas.width * Number(settings.panX ?? 0) / 100, canvas.height * Number(settings.panY ?? 0) / 100)
+    context.rotate(rotation)
     const zoom = Math.max(1, Math.min(3, Number(settings.zoom ?? 1)))
     const scale = (settings.cropMode === 'cover'
       ? Math.max(canvas.width / rotatedWidth, canvas.height / rotatedHeight)
@@ -292,9 +292,9 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
         context.fillRect(0, 0, canvas.width, canvas.height)
         context.save()
         context.translate(canvas.width / 2, canvas.height / 2)
+        context.translate(canvas.width * Number(settings.panX ?? 0) / 100, canvas.height * Number(settings.panY ?? 0) / 100)
         const rotation = Number(settings.rotation || 0) * Math.PI / 180
         context.rotate(rotation)
-        context.translate(canvas.width * Number(settings.panX ?? 0) / 100, canvas.height * Number(settings.panY ?? 0) / 100)
         const srcW = video.videoWidth || 720
         const srcH = video.videoHeight || 1280
         const rotatedW = Math.abs(srcW * Math.cos(rotation)) + Math.abs(srcH * Math.sin(rotation))
