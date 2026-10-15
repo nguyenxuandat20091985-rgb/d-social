@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { VideoTimelineEditor } from './VideoTimelineEditor'
 import { Music2, Search, Play, Pause, SlidersHorizontal, ShieldCheck, MapPin, AtSign, Type, Sticker, Scissors, Palette, Volume2 } from 'lucide-react'
 
@@ -30,6 +30,77 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
   const selected = settings || {}
   const update = patch => onChange?.({ ...selected, ...patch })
   const isVideo = file?.type?.startsWith('video/')
+  const zoomPointersRef = useRef(new Map())
+  const zoomGestureRef = useRef(null)
+  const clampZoom = value => Math.max(1, Math.min(3, Number(value) || 1))
+  const finishZoomPointer = event => {
+    const pointers = zoomPointersRef.current
+    pointers.delete(event.pointerId)
+    const remaining = [...pointers.values()]
+    if (remaining.length === 1) {
+      const point = remaining[0]
+      const bounds = event.currentTarget.getBoundingClientRect()
+      zoomGestureRef.current = {
+        mode: 'pan',
+        startX: point.x,
+        startY: point.y,
+        basePanX: Number(selected.panX ?? 0),
+        basePanY: Number(selected.panY ?? 0),
+        width: bounds.width || 1,
+        height: bounds.height || 1,
+      }
+    } else if (!remaining.length) {
+      zoomGestureRef.current = null
+    }
+  }
+  const handleZoomPointerDown = event => {
+    event.preventDefault()
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    const pointers = zoomPointersRef.current
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    const points = [...pointers.values()]
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (points.length >= 2) {
+      const [a, b] = points
+      zoomGestureRef.current = {
+        mode: 'pinch',
+        startDistance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
+        startZoom: clampZoom(selected.zoom ?? 1),
+      }
+    } else {
+      zoomGestureRef.current = {
+        mode: 'pan',
+        startX: event.clientX,
+        startY: event.clientY,
+        basePanX: Number(selected.panX ?? 0),
+        basePanY: Number(selected.panY ?? 0),
+        width: bounds.width || 1,
+        height: bounds.height || 1,
+      }
+    }
+  }
+  const handleZoomPointerMove = event => {
+    const pointers = zoomPointersRef.current
+    if (!pointers.has(event.pointerId)) return
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    const points = [...pointers.values()]
+    const gesture = zoomGestureRef.current
+    if (!gesture) return
+    if (points.length >= 2 && gesture.mode === 'pinch') {
+      const [a, b] = points
+      const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))
+      update({ zoom: Math.round(clampZoom(gesture.startZoom * distance / gesture.startDistance) * 10) / 10 })
+      return
+    }
+    if (points.length === 1 && gesture.mode === 'pan') {
+      const point = points[0]
+      const zoom = clampZoom(selected.zoom ?? 1)
+      const maxPan = Math.min(50, Math.max(0, (zoom - 1) * 25))
+      const panX = Math.max(-maxPan, Math.min(maxPan, gesture.basePanX + (point.x - gesture.startX) / gesture.width * 100))
+      const panY = Math.max(-maxPan, Math.min(maxPan, gesture.basePanY + (point.y - gesture.startY) / gesture.height * 100))
+      update({ panX: Math.round(panX), panY: Math.round(panY) })
+    }
+  }
 
 
 
@@ -89,7 +160,22 @@ export function CreatorMediaTools({ file, settings, onChange, mode = 'post', vid
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] pointer-events-auto">
       {activeTool !== '' && activeTool !== 'trim' && <button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-black/55 px-3 py-2 text-xs font-semibold text-white">Đóng công cụ</button>}
     </div>
-    {activeTool && activeTool !== 'trim' && <div className="absolute bottom-[calc(max(88px,env(safe-area-inset-bottom)+82px)+225px)] left-3 right-3 mx-auto max-h-[min(42dvh,calc(100dvh-180px))] w-auto max-w-md overflow-y-auto rounded-t-3xl rounded-b-2xl border border-white/20 bg-black/90 p-3.5 text-white shadow-2xl backdrop-blur-md pointer-events-auto">
+    {activeTool === 'adjust' && <div
+      aria-label="Kéo một ngón để di chuyển khung hình; chụm hoặc tách hai ngón để phóng to, thu nhỏ"
+      className="absolute left-0 top-0 z-10 h-[55dvh] w-full touch-none pointer-events-auto"
+      style={{ touchAction: 'none' }}
+      onPointerDown={handleZoomPointerDown}
+      onPointerMove={handleZoomPointerMove}
+      onPointerUp={finishZoomPointer}
+      onPointerCancel={finishZoomPointer}
+      onLostPointerCapture={finishZoomPointer}
+      onContextMenu={event => event.preventDefault()}
+    >
+      <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-black/65 px-3 py-1.5 text-[11px] font-medium text-white/90 shadow">
+        Kéo để di chuyển · Chụm 2 ngón để zoom
+      </span>
+    </div>}
+    {activeTool && activeTool !== 'trim' && <div className="absolute z-20 bottom-[calc(max(88px,env(safe-area-inset-bottom)+82px)+225px)] left-3 right-3 mx-auto max-h-[min(42dvh,calc(100dvh-180px))] w-auto max-w-md overflow-y-auto rounded-t-3xl rounded-b-2xl border border-white/20 bg-black/90 p-3.5 text-white shadow-2xl backdrop-blur-md pointer-events-auto">
       <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-center justify-between gap-3 border-b border-white/10 bg-black/95 px-1 pb-3 pt-1"><div><div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/30"/><strong>{({music:'Âm thanh',theme:'Chỉnh sửa',text:'Văn bản',sticker:'Nhãn dán',overlay:'Lớp phủ',effects:'Hiệu ứng',filter:'Bộ lọc',adjust:'Tùy chỉnh AI',ratio:'Tỷ lệ khung hình',background:'Nền video',avatar:'Chỉnh sửa AI',volume:'Chỉnh âm lượng'})[activeTool]}</strong></div><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/15 px-3 py-1 text-sm">Đóng</button></div>
       {activeTool === 'music' && <div className="space-y-3">
         <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-white placeholder:text-white/55" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…"/><button type="button" disabled={loading} onClick={searchAudio} className="rounded-xl bg-white px-3 text-black"><Search size={17}/></button></div>

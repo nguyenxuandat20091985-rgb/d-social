@@ -101,6 +101,9 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
     Number(settings.saturation ?? 100) !== 100 ||
     Number(settings.hue ?? 0) !== 0 ||
     Number(settings.rotation ?? 0) !== 0 ||
+    Number(settings.zoom ?? 1) !== 1 ||
+    Number(settings.panX ?? 0) !== 0 ||
+    Number(settings.panY ?? 0) !== 0 ||
     Boolean(settings.aspectRatio) ||
     Boolean(settings.cropMode) ||
     Boolean(settings.backgroundColor)
