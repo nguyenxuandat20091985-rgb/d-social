@@ -57,6 +57,7 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
   const sourceUrl = useMemo(() => file ? URL.createObjectURL(file) : '', [file])
   useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl) }, [sourceUrl])
   const drag = useRef(false)
+  const [localPlaying, setLocalPlaying] = useState(false)
   const [position, setPosition] = useState({ x: Number(settings.overlayX ?? 50), y: Number(settings.overlayY ?? 50) })
   useEffect(() => setPosition({ x: Number(settings.overlayX ?? 50), y: Number(settings.overlayY ?? 50) }), [settings.overlayX, settings.overlayY])
   const moveText = e => {
@@ -75,10 +76,10 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
   }
   return <div className="relative flex h-full w-full items-center justify-center">
     <div className={'relative ' + ratioClass + ' h-full max-h-full max-w-full overflow-hidden rounded-[18px] border border-white/10 shadow-2xl'} style={{ aspectRatio: ratio.replace(':', ' / '), background: settings.backgroundColor || '#000', maxWidth: '100%' }}>
-      {file && file.type && file.type.startsWith('video/') ? <video key={sourceUrl} ref={videoRef} src={sourceUrl} playsInline preload="auto" className="h-full w-full" style={visualStyle} /> : sourceUrl ? <img src={sourceUrl} alt="Xem trước video" className="h-full w-full" style={visualStyle} /> : <div className="grid h-full place-items-center text-sm text-white/45">Thêm video hoặc ảnh để bắt đầu</div>}
+      {file && file.type && file.type.startsWith('video/') ? <video key={sourceUrl} ref={videoRef} src={sourceUrl} playsInline preload="auto" onPlay={() => setLocalPlaying(true)} onPause={() => setLocalPlaying(false)} className="h-full w-full" style={visualStyle} /> : sourceUrl ? <img src={sourceUrl} alt="Xem trước video" className="h-full w-full" style={visualStyle} /> : <div className="grid h-full place-items-center text-sm text-white/45">Thêm video hoặc ảnh để bắt đầu</div>}
       {settings.sticker && <div className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 text-4xl drop-shadow-lg">{settings.sticker}</div>}
       {settings.overlayText && <div onPointerDown={e => { drag.current = true; e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId) }} onPointerMove={moveText} onPointerUp={() => { drag.current = false }} onPointerCancel={() => { drag.current = false }} className="absolute max-w-[90%] cursor-move select-none rounded px-2 py-1 text-center font-bold drop-shadow-lg touch-none" style={{ left: position.x + '%', top: position.y + '%', transform: 'translate(-50%,-50%)', color: settings.overlayColor || '#ffffff', fontSize: clamp(settings.overlayFontSize || 28, 12, 72) + 'px', fontFamily: settings.overlayFont || 'Arial,sans-serif', textShadow: '0 2px 5px #000' }}>{settings.overlayText}</div>}
-      <button type="button" onClick={onTogglePlayback} className="absolute bottom-3 left-3 grid h-10 w-10 place-items-center rounded-full bg-black/65 text-white backdrop-blur" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'}>{isPlaying ? <Pause size={19} /> : <Play size={19} fill="currentColor" />}</button>
+      <button type="button" onClick={() => { const v = videoRef && videoRef.current; if (v && file && file.type && file.type.startsWith('video/')) { if (v.paused) v.play().catch(() => {}); else v.pause() } else if (onTogglePlayback) onTogglePlayback() }} className="absolute bottom-3 left-3 grid h-10 w-10 place-items-center rounded-full bg-black/65 text-white backdrop-blur" aria-label={localPlaying ? 'Tạm dừng' : 'Phát'}>{localPlaying ? <Pause size={19} /> : <Play size={19} fill="currentColor" />}</button>
       <div className="absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white/80 backdrop-blur">Xem trước</div>
     </div>
   </div>
