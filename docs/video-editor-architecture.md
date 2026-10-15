@@ -21,7 +21,7 @@ The editor should preserve D-Social's React 18 + Vite + TypeScript + Tailwind st
 5. **Preview renderer** — deterministic timeline time mapping; preview the active clip/track; crop/fit; text/overlay layers; transforms; transitions; synchronized audio.
 6. **Audio engine** — source audio, independent music/voiceover tracks, gain, mute, fades, and a mixed export stream.
 7. **Export engine** — browser capability detection; export progress/cancel; audio/video muxing; output format and quality selection; clear failure messages; test small files before high-resolution exports. Avoid promising MP4 if the current browser encoder only supports WebM.
-8. **Draft persistence** — IndexedDB for large local media/drafts, optional Supabase project metadata, never store large media blobs in ordinary localStorage.
+8. **Draft persistence** — IndexedDB for large local media/drafts, optional Supabase project metadata, never store large media blobs in ordinary localStorage. The editor now saves/restores the latest local project (clip order, File/Blob references, edit settings, active clip, and playhead) in IndexedDB on the same browser/device.
 9. **D-Social integration** — pass exported File/Blob to the existing composer/publish flow; preserve current permissions and post/story validation.
 10. **QA and accessibility** — unit tests for timeline math; import/export tests for image-only, video-only, mixed media, multiple videos, audio, and long projects; Android Chrome tests; memory/object-URL cleanup.
 
@@ -63,7 +63,7 @@ The current change removes the explicit one-video limit in the picker and append
 - [ ] Transitions, speed controls, and keyframe-based animation.
 
 ### Phase D — persistence and delivery
-- [ ] Save/load project metadata and timeline to IndexedDB; keep large blobs out of localStorage.
+- [x] Save/load the latest local project and its media File/Blob objects, clip order, edit settings, active clip, and playhead in IndexedDB; keep large blobs out of localStorage. Local browser/device only; this is not cloud sync.
 - [x] Export resolution/frame-rate/bitrate controls, browser format selection, and MIME/extension mapping for the browser's actual encoder.
 - [ ] Export progress/cancel, capability regression tests, and Android verification.
 - [ ] Verify composer and Story publishing integration without changing unrelated feed/chat behavior.
