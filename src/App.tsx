@@ -320,7 +320,7 @@ function Composer({ userId, onPublished, onClose }) {
     if (busy || (!editedFile && !files[0])) return
     if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
     if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng media và âm thanh trước khi đăng tin.')
-    if (files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn nhạc Pixabay hoặc dùng âm thanh gốc.')
+    if ((editedFile || files[0]).type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn nhạc Pixabay hoặc dùng âm thanh gốc.')
     setBusy(true); setError(''); let uploadedPath = null
     try {
       const sourceFile = editedFile || files[0]
@@ -332,7 +332,7 @@ function Composer({ userId, onPublished, onClose }) {
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
       const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-      const { error: insertError } = await supabase.from('stories').insert({ user_id:userId, media_url, media_type:sourceFile.type.startsWith('video/')?'video':'image', caption:null, expires_at:new Date(Date.now()+24*60*60*1000).toISOString(), creator_settings:creatorSettings, privacy:creatorSettings.privacy||'public', audio_url:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackUrl||null):null, audio_title:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackTitle||null):null, is_muted:false, copyright_audio_status:'unknown' })
+      const { error: insertError } = await supabase.from('stories').insert({ user_id:userId, media_url, media_type:sourceFile.type.startsWith('video/')?'video':'image', duration_sec:editedFile?.duration_sec ?? null, caption:null, expires_at:new Date(Date.now()+24*60*60*1000).toISOString(), creator_settings:creatorSettings, privacy:creatorSettings.privacy||'public', audio_url:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackUrl||null):null, audio_title:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackTitle||null):null, is_muted:false, copyright_audio_status:'unknown' })
       if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
       onClose?.(); Promise.resolve().then(()=>onPublished?.()).catch(err=>console.error('Không làm mới Tin 24 giờ:',err))
     } catch (e) { if(uploadedPath) try { await supabase.storage.from('social-media').remove([uploadedPath]) } catch {} setError(e?.message||'Không đăng được tin.') }
@@ -542,6 +542,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
         user_id: userId, media_url, media_type: sourceFile.type.startsWith('video/') ? 'video' : 'image',
+        duration_sec: editedFile?.duration_sec ?? null,
         caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         creator_settings: creatorSettings, privacy: creatorSettings.privacy || 'public',
         audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
