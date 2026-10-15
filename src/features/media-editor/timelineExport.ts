@@ -8,5 +8,151 @@ function draw(ctx,src,w,h,mode,settings={}){const sw=src.videoWidth||src.natural
 function drawSticker(ctx,settings,w,h){const sticker=String(settings?.sticker||'');if(!sticker)return;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.font=Math.round(w*.075)+'px sans-serif';ctx.shadowColor='rgba(0,0,0,.5)';ctx.shadowBlur=w*.01;ctx.fillText(sticker,w*.5,h*.38);ctx.restore()}
 function drawText(ctx,settings,w,h){const text=String(settings?.overlayText||'');if(!text)return;const size=clamp(settings.overlayFontSize||48,16,120)*w/1080;ctx.save();ctx.font='700 '+size+'px '+(settings.overlayFont||'Arial,sans-serif');ctx.textAlign='center';ctx.textBaseline='middle';const x=w*clamp(settings.overlayX??50,2,98)/100,y=h*clamp(settings.overlayY??50,4,96)/100;ctx.lineWidth=Math.max(2,size*.12);ctx.strokeStyle='rgba(0,0,0,.75)';ctx.fillStyle=settings.overlayColor||'#fff';ctx.strokeText(text,x,y,w*.9);ctx.fillText(text,x,y,w*.9);ctx.restore()}
 async function fallbackSingle(clip,settings){if(!clip?.file||!HTMLMediaElement.prototype.captureStream)throw new Error('Trình duyệt không hỗ trợ xuất dự phòng video gốc.');const v=document.createElement('video'),url=URL.createObjectURL(clip.file);let stream,rec;try{v.src=url;v.preload='auto';v.playsInline=true;await wait(v,'loadedmetadata');const start=clamp(clip.in,0,v.duration),end=clamp(Number(clip.out)||v.duration,start+.05,v.duration);await seekTo(v,start);stream=v.captureStream();const mt=mime();rec=new MediaRecorder(stream,mt?{mimeType:mt}:undefined);const chunks=[];const recorded=new Promise((resolve,reject)=>{rec.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};rec.onerror=()=>reject(new Error('Ghi video dự phòng thất bại.'));rec.onstop=()=>chunks.length?resolve(new Blob(chunks,{type:rec.mimeType||mt||'video/webm'})):reject(new Error('Video dự phòng rỗng.'))});v.volume=clamp(settings.originalVolume??100,0,100)/100;rec.start(200);await v.play();await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{clean();reject(new Error('Xuất dự phòng quá thời gian.'))},Math.max(15000,(end-start+3)*1500));const clean=()=>{clearTimeout(timer);v.removeEventListener('timeupdate',tick);v.removeEventListener('error',fail)};const tick=()=>{if(v.currentTime>=end){v.pause();clean();resolve()}};const fail=()=>{clean();reject(new Error('Video gốc lỗi khi xuất.'))};v.addEventListener('timeupdate',tick);v.addEventListener('error',fail,{once:true})});if(rec.state!=='inactive')rec.stop();return await recorded}finally{if(rec&&rec.state!=='inactive'){try{rec.stop()}catch{}}stream?.getTracks().forEach(t=>t.stop());v.pause();v.removeAttribute('src');v.load();URL.revokeObjectURL(url)}}
-export async function exportToBlob(clips,settings={},options={}){if(!Array.isArray(clips)||!clips.length)throw new Error('Hãy chọn ảnh hoặc video trước khi xuất.');const total=clips.reduce((s,c)=>s+len(c),0);if(options.storyMode&&total>60)throw new Error('Tin 24 giờ chỉ được dài tối đa 60 giây. Hãy rút ngắn clip hoặc chỉnh tổng thời lượng còn 60 giây trở xuống rồi xuất lại.');if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream)throw new Error('Trình duyệt chưa hỗ trợ xuất video. Hãy thử Chrome Android mới nhất.');const ratio=settings.aspectRatio||'9:16',[w,h]=ratio==='16:9'?[1920,1080]:ratio==='1:1'?[1080,1080]:ratio==='4:5'?[1080,1350]:[1080,1920];const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{alpha:false});if(!ctx)throw new Error('Không khởi tạo được canvas.');const stream=canvas.captureStream(30),mt=mime(),chunks=[];let rec;try{rec=new MediaRecorder(stream,mt?{mimeType:mt,videoBitsPerSecond:5000000}:{videoBitsPerSecond:5000000})}catch{stream.getTracks().forEach(t=>t.stop());if(clips.length===1&&(clips[0].kind==='video'||clips[0].file?.type?.startsWith('video/')))return fallbackSingle(clips[0],settings);throw new Error('Thiết bị không hỗ trợ định dạng xuất video.')}const recorded=new Promise((resolve,reject)=>{rec.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};rec.onerror=()=>reject(new Error('MediaRecorder gặp lỗi.'));rec.onstop=()=>chunks.length?resolve(new Blob(chunks,{type:rec.mimeType||mt||'video/webm'})):reject(new Error('Video xuất ra rỗng.'))});let activeUrl='',activeVideo=null,raf=0;try{rec.start(250);for(const c of clips){const duration=len(c),start=Math.max(0,Number(c.in)||0);if(c.kind==='image'||c.file?.type?.startsWith('image/')){activeUrl=URL.createObjectURL(c.file);const img=new Image();img.src=activeUrl;if(img.decode){try{await img.decode()}catch{throw new Error('Không giải mã được ảnh trong slideshow. Hãy thử chọn lại ảnh JPG hoặc PNG.')}}else{const loaded=wait(img,'load');if(!img.complete)await loaded;}const began=performance.now();while(performance.now()-began<duration*1000){draw(ctx,img,w,h,settings.cropMode==='cover'?'cover':'contain',settings);drawText(ctx,settings,w,h);drawSticker(ctx,settings,w,h);await new Promise(resolve=>{raf=requestAnimationFrame(resolve)})}URL.revokeObjectURL(activeUrl);activeUrl='';continue}if(!c.file)throw new Error('Thiếu tệp video của một clip.');activeUrl=URL.createObjectURL(c.file);const v=document.createElement('video');activeVideo=v;v.src=activeUrl;v.muted=true;v.playsInline=true;v.preload='auto';await wait(v,'loadedmetadata');const end=clamp(Number(c.out)||v.duration,start+.05,v.duration);await seekTo(v,clamp(start,0,v.duration));const began=performance.now();await v.play();while(v.currentTime<end&&performance.now()-began<(end-start+2)*1000){draw(ctx,v,w,h,settings.cropMode==='cover'?'cover':'contain',settings);drawText(ctx,settings,w,h);drawSticker(ctx,settings,w,h);await new Promise(resolve=>{raf=requestAnimationFrame(resolve)})}v.pause();v.removeAttribute('src');v.load();activeVideo=null;URL.revokeObjectURL(activeUrl);activeUrl=''}await new Promise(resolve=>setTimeout(resolve,150));if(rec.state!=='inactive')rec.stop();return await recorded}catch(err){if(rec.state!=='inactive'){try{rec.stop()}catch{}}if(clips.length===1&&(clips[0].kind==='video'||clips[0].file?.type?.startsWith('video/'))){try{return await fallbackSingle(clips[0],settings)}catch(fallbackError){throw new Error((err?.message||'Xuất canvas thất bại.')+' Dự phòng cũng thất bại: '+(fallbackError?.message||'Lỗi không xác định.'))}}throw err}finally{cancelAnimationFrame(raf);if(activeVideo){activeVideo.pause();activeVideo.removeAttribute('src');activeVideo.load()}if(activeUrl)URL.revokeObjectURL(activeUrl);stream.getTracks().forEach(t=>t.stop())}}
+export async function exportToBlob(clips, settings = {}, options = {}) {
+  if (!Array.isArray(clips) || !clips.length) throw new Error('Hãy chọn ảnh hoặc video trước khi xuất.')
+  const total = clips.reduce((s, c) => s + len(c), 0)
+  if (options.storyMode && total > 60) throw new Error('Tin 24 giờ chỉ được dài tối đa 60 giây. Hãy rút ngắn clip hoặc chỉnh tổng thời lượng còn 60 giây trở xuống rồi xuất lại.')
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) throw new Error('Trình duyệt chưa hỗ trợ xuất video. Hãy thử Chrome Android mới nhất.')
+  const ratio = settings.aspectRatio || '9:16'
+  const [w, h] = ratio === '16:9' ? [1920, 1080] : ratio === '1:1' ? [1080, 1080] : ratio === '4:5' ? [1080, 1350] : [1080, 1920]
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d', { alpha: false })
+  if (!ctx) throw new Error('Không khởi tạo được canvas.')
+  const canvasStream = canvas.captureStream(30)
+  const AudioCtx = window.AudioContext || window.webkitAudioContext
+  let audioContext = null, audioDestination = null, backgroundAudio = null, backgroundSourceUrl = ''
+  let recordStream = canvasStream
+  if (AudioCtx) {
+    try {
+      audioContext = new AudioCtx()
+      audioDestination = audioContext.createMediaStreamDestination()
+      recordStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioDestination.stream.getAudioTracks()])
+      const musicUrl = settings.audioTrackUrl || (settings.audioTrackFile ? URL.createObjectURL(settings.audioTrackFile) : '')
+      if (musicUrl) {
+        backgroundSourceUrl = settings.audioTrackUrl ? '' : musicUrl
+        backgroundAudio = new Audio()
+        backgroundAudio.crossOrigin = 'anonymous'
+        backgroundAudio.loop = true
+        backgroundAudio.preload = 'auto'
+        backgroundAudio.src = musicUrl
+        const musicSource = audioContext.createMediaElementSource(backgroundAudio)
+        const musicGain = audioContext.createGain()
+        musicGain.gain.value = clamp(settings.musicVolume ?? 30, 0, 100) / 100
+        musicSource.connect(musicGain)
+        musicGain.connect(audioDestination)
+      }
+    } catch {
+      if (backgroundSourceUrl) URL.revokeObjectURL(backgroundSourceUrl)
+      backgroundSourceUrl = ''
+      backgroundAudio = null
+      try { audioContext && audioContext.close() } catch {}
+      audioContext = null
+      audioDestination = null
+      recordStream = canvasStream
+    }
+  }
+  const mt = mime(), chunks = []
+  let rec
+  try {
+    rec = new MediaRecorder(recordStream, mt ? { mimeType: mt, videoBitsPerSecond: 5000000 } : { videoBitsPerSecond: 5000000 })
+  } catch {
+    recordStream.getTracks().forEach(t => t.stop())
+    if (recordStream !== canvasStream) canvasStream.getTracks().forEach(t => t.stop())
+    try { audioContext && audioContext.close() } catch {}
+    if (clips.length === 1 && (clips[0].kind === 'video' || clips[0].file?.type?.startsWith('video/'))) return fallbackSingle(clips[0], settings)
+    throw new Error('Thiết bị không hỗ trợ định dạng xuất video.')
+  }
+  const recorded = new Promise((resolve, reject) => {
+    rec.ondataavailable = e => { if (e.data?.size) chunks.push(e.data) }
+    rec.onerror = () => reject(new Error('MediaRecorder gặp lỗi.'))
+    rec.onstop = () => chunks.length ? resolve(new Blob(chunks, { type: rec.mimeType || mt || 'video/webm' })) : reject(new Error('Video xuất ra rỗng.'))
+  })
+  let activeUrl = '', activeVideo = null, raf = 0
+  try {
+    if (audioContext) await audioContext.resume()
+    if (backgroundAudio) {
+      try { await backgroundAudio.play() } catch { throw new Error('Không phát được nhạc nền. Hãy chọn lại tệp âm thanh rồi xuất lại.') }
+    }
+    rec.start(250)
+    for (const c of clips) {
+      const duration = len(c), start = Math.max(0, Number(c.in) || 0)
+      if (c.kind === 'image' || c.file?.type?.startsWith('image/')) {
+        activeUrl = URL.createObjectURL(c.file)
+        const img = new Image()
+        img.src = activeUrl
+        if (img.decode) {
+          try { await img.decode() } catch { throw new Error('Không giải mã được ảnh trong slideshow. Hãy thử chọn lại ảnh JPG hoặc PNG.') }
+        } else {
+          const loaded = wait(img, 'load')
+          if (!img.complete) await loaded
+        }
+        const began = performance.now()
+        while (performance.now() - began < duration * 1000) {
+          draw(ctx, img, w, h, settings.cropMode === 'cover' ? 'cover' : 'contain', settings)
+          drawText(ctx, settings, w, h)
+          drawSticker(ctx, settings, w, h)
+          await new Promise(resolve => { raf = requestAnimationFrame(resolve) })
+        }
+        URL.revokeObjectURL(activeUrl)
+        activeUrl = ''
+        continue
+      }
+      if (!c.file) throw new Error('Thiếu tệp video của một clip.')
+      activeUrl = URL.createObjectURL(c.file)
+      const v = document.createElement('video')
+      activeVideo = v
+      v.src = activeUrl
+      v.muted = !audioContext
+      v.playsInline = true
+      v.preload = 'auto'
+      await wait(v, 'loadedmetadata')
+      if (audioContext && audioDestination) {
+        try {
+          const source = audioContext.createMediaElementSource(v)
+          const gain = audioContext.createGain()
+          gain.gain.value = clamp(settings.originalVolume ?? 100, 0, 100) / 100
+          source.connect(gain)
+          gain.connect(audioDestination)
+        } catch {}
+      }
+      const end = clamp(Number(c.out) || v.duration, start + .05, v.duration)
+      await seekTo(v, clamp(start, 0, v.duration))
+      const began = performance.now()
+      await v.play()
+      while (v.currentTime < end && performance.now() - began < (end - start + 2) * 1000) {
+        draw(ctx, v, w, h, settings.cropMode === 'cover' ? 'cover' : 'contain', settings)
+        drawText(ctx, settings, w, h)
+        drawSticker(ctx, settings, w, h)
+        await new Promise(resolve => { raf = requestAnimationFrame(resolve) })
+      }
+      v.pause()
+      v.removeAttribute('src')
+      v.load()
+      activeVideo = null
+      URL.revokeObjectURL(activeUrl)
+      activeUrl = ''
+    }
+    await new Promise(resolve => setTimeout(resolve, 150))
+    if (rec.state !== 'inactive') rec.stop()
+    return await recorded
+  } catch (err) {
+    if (rec.state !== 'inactive') { try { rec.stop() } catch {} }
+    if (clips.length === 1 && (clips[0].kind === 'video' || clips[0].file?.type?.startsWith('video/'))) {
+      try { return await fallbackSingle(clips[0], settings) } catch (fallbackError) {
+        throw new Error((err?.message || 'Xuất canvas thất bại.') + ' Dự phòng cũng thất bại: ' + (fallbackError?.message || 'Lỗi không xác định.'))
+      }
+    }
+    throw err
+  } finally {
+    cancelAnimationFrame(raf)
+    if (activeVideo) { activeVideo.pause(); activeVideo.removeAttribute('src'); activeVideo.load() }
+    if (backgroundAudio) { backgroundAudio.pause(); backgroundAudio.removeAttribute('src'); backgroundAudio.load() }
+    if (backgroundSourceUrl) URL.revokeObjectURL(backgroundSourceUrl)
+    recordStream.getTracks().forEach(t => t.stop())
+    if (recordStream !== canvasStream) canvasStream.getTracks().forEach(t => t.stop())
+    try { audioContext && await audioContext.close() } catch {}
+  }
+}
 export function blobToVideoFile(blob,name='d-social-edited-video',durationSec=null){const type=blob.type?.includes('mp4')?'video/mp4':'video/webm',ext=type==='video/mp4'?'mp4':'webm';const file=new File([blob],name+'.'+ext,{type,lastModified:Date.now()});file.duration_sec=Number.isFinite(Number(durationSec))?Math.round(Number(durationSec)):null;return file}
