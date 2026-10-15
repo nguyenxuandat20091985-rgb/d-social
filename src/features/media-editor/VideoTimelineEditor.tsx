@@ -4,7 +4,7 @@ import {
   ArrowLeft, AudioLines, Check, ChevronDown, ChevronUp, CircleHelp, Clapperboard,
   Copy, Crop, Download, Film, ImagePlus, Layers, Music2, Pause, Play, Plus, RotateCcw,
   Scissors, SlidersHorizontal, Sparkles, Sticker, Trash2, Type, Undo2, Redo2, Volume2, WandSparkles,
-  X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound
+  X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound, Save, FolderOpen
 } from 'lucide-react'
 import { exportToBlob, blobToVideoFile } from './timelineExport'
 
@@ -16,6 +16,43 @@ const fmt = (seconds, tenths = false) => {
 }
 const makeClip = file => ({ id: String(Date.now()) + '-' + Math.random().toString(36).slice(2), file, kind: file && file.type && file.type.startsWith('image/') ? 'image' : 'video', sourceDuration: file && file.type && file.type.startsWith('image/') ? 3 : 0, in: 0, out: file && file.type && file.type.startsWith('image/') ? 3 : 0 })
 const clipLen = c => Math.max(0.1, (Number(c.out) || Number(c.sourceDuration) || 3) - (Number(c.in) || 0))
+
+const PROJECT_DB = 'd-social-video-editor'
+const PROJECT_STORE = 'projects'
+function openProjectDb() {
+  return new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) { reject(new Error('Trình duyệt không hỗ trợ lưu bản dựng cục bộ.')); return }
+    const request = indexedDB.open(PROJECT_DB, 1)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(PROJECT_STORE)) db.createObjectStore(PROJECT_STORE, { keyPath: 'id' })
+    }
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(new Error('Không mở được kho lưu bản dựng trên thiết bị.'))
+  })
+}
+async function storeProject(project) {
+  const db = await openProjectDb()
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PROJECT_STORE, 'readwrite')
+      tx.objectStore(PROJECT_STORE).put(project)
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(new Error('Không lưu được bản dựng. Có thể thiết bị đã hết dung lượng.'))
+      tx.onabort = () => reject(new Error('Lưu bản dựng đã bị hủy.'))
+    })
+  } finally { db.close() }
+}
+async function readProject() {
+  const db = await openProjectDb()
+  try {
+    return await new Promise((resolve, reject) => {
+      const request = db.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).get('latest')
+      request.onsuccess = () => resolve(request.result || null)
+      request.onerror = () => reject(new Error('Không đọc được bản dựng đã lưu.'))
+    })
+  } finally { db.close() }
+}
 
 const TOOL_ITEMS = [
   { id: 'trim', label: 'Chỉnh sửa', icon: Scissors },
@@ -173,6 +210,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportedFile, setExportedFile] = useState(null)
+  const [projectBusy, setProjectBusy] = useState(false)
   const undoStack = useRef([]), redoStack = useRef([])
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
   const [showMore, setShowMore] = useState(false)
@@ -291,6 +329,49 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     if (i < 0 || j < 0 || j >= clips.length) return
     const next = clips.slice(); [next[i], next[j]] = [next[j], next[i]]; recordClips(next)
   }
+  const saveProject = async () => {
+    if (projectBusy) return
+    setProjectBusy(true); setError('')
+    try {
+      await storeProject({
+        id: 'latest',
+        version: 1,
+        savedAt: new Date().toISOString(),
+        clips: clips.map(c => ({ ...c })),
+        settings: { ...selected },
+        playhead,
+        activeId,
+      })
+      setError('Đã lưu bản dựng trên thiết bị này.')
+    } catch (e) {
+      setError(e && e.message ? e.message : 'Không lưu được bản dựng.')
+    } finally { setProjectBusy(false) }
+  }
+  const loadProject = async () => {
+    if (projectBusy) return
+    setProjectBusy(true); setError('')
+    try {
+      const project = await readProject()
+      if (!project || !Array.isArray(project.clips)) {
+        setError('Chưa có bản dựng nào được lưu trên thiết bị này.')
+        return
+      }
+      if (!project.clips.every(c => c && c.file instanceof Blob)) {
+        setError('Bản dựng lưu không đầy đủ hoặc tệp media không còn khả dụng.')
+        return
+      }
+      setClips(project.clips)
+      setActiveId(project.clips.some(c => c.id === project.activeId) ? project.activeId : (project.clips[0]?.id || null))
+      setPlayhead(clamp(project.playhead || 0, 0, project.clips.reduce((sum, c) => sum + clipLen(c), 0)))
+      undoStack.current = []; redoStack.current = []
+      setExportedFile(null)
+      if (project.settings && onChange) onChange(project.settings)
+      setError('Đã mở bản dựng đã lưu.')
+    } catch (e) {
+      setError(e && e.message ? e.message : 'Không mở được bản dựng.')
+    } finally { setProjectBusy(false) }
+  }
+
   const exportAction = async ({ forStory = false } = {}) => {
     if (!clips.length) { setError('Hãy chọn ảnh hoặc video.'); return null }
     if ((forStory || storyMode) && total > 60) { setError('Tin 24 giờ chỉ được dài tối đa 60 giây. Hãy cắt timeline rồi thử lại.'); return null }
@@ -332,7 +413,9 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
       <button type="button" onClick={() => onCloseEditor ? onCloseEditor() : setActiveTool('')} aria-label="Đóng trình chỉnh sửa" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-white/10"><ArrowLeft size={21} /></button>
       <div className="min-w-0 flex-1"><div className="text-sm font-bold tracking-wide">D-Social Studio</div><div className="text-[10px] text-white/45">Trình chỉnh sửa video</div></div>
       <div className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[10px] font-semibold text-white/70">{totalLabel}</div>
-      <button type="button" disabled={exporting || !clips.length} onClick={() => exportAction()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-cyan-300 px-4 text-xs font-extrabold text-black disabled:opacity-40"><Check size={15} /> {exporting ? 'Đang xuất' : 'Xuất'}</button>
+      <button type="button" disabled={projectBusy || exporting} onClick={saveProject} title="Lưu bản dựng trên thiết bị" aria-label="Lưu bản dựng" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.07] text-white disabled:opacity-40"><Save size={16} /></button>
+      <button type="button" disabled={projectBusy || exporting} onClick={loadProject} title="Mở bản dựng đã lưu trên thiết bị" aria-label="Mở bản dựng đã lưu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.07] text-white disabled:opacity-40"><FolderOpen size={16} /></button>
+      <button type="button" disabled={exporting || !clips.length} onClick={() => exportAction()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-cyan-300 px-3 text-xs font-extrabold text-black disabled:opacity-40"><Check size={15} /> {exporting ? 'Đang xuất' : 'Xuất'}</button>
     </header>
 
     <div className="flex min-h-0 flex-1 flex-col">
