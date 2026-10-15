@@ -27,7 +27,7 @@ The editor should preserve D-Social's React 18 + Vite + TypeScript + Tailwind st
 
 ## Current branch change
 
-The current change removes the explicit one-video limit in the picker and append handler, so a selection can contain multiple images and multiple videos. The exporter now creates a Web Audio mix bus, routes each source video's audio through the original-volume gain, routes uploaded background music through its own gain, and adds the mixed audio track to the MediaRecorder stream. This implementation still needs browser/device regression tests; do not treat the feature as production-verified until mixed-media exports are checked on Android Chrome. Robust undo/redo, full multi-track compositing, transitions, voiceover recording, fades, and Android export regression coverage remain separate work.
+The current change removes the explicit one-video limit in the picker and append handler, so a selection can contain multiple images and multiple videos. The exporter now creates a Web Audio mix bus, routes each source video's audio through the original-volume gain, routes uploaded background music through its own gain, supports music fade-in/fade-out, and adds the mixed audio track to the MediaRecorder stream. The UI also exposes resolution, frame rate, bitrate, and browser-capability-aware WebM/MP4 selection, plus horizontal mirror. These changes still need browser/device regression tests; do not treat them as production-verified until exports are checked on Android Chrome.
 
 ## Acceptance checklist before production
 
@@ -58,14 +58,36 @@ The current change removes the explicit one-video limit in the picker and append
 - [ ] Keyboard-accessible controls and touch-target regression tests.
 
 ### Phase C — visual editing
-- [x] Basic global crop/position/scale/rotation, fit/fill, filter, color-adjustment, background, and sticker controls; current canvas export renders these settings.
+- [x] Basic global crop/position/scale/rotation/mirror, fit/fill, filter, color-adjustment, background, and sticker controls; current canvas export renders these settings.
 - [ ] Per-clip transforms and multiple text/sticker overlays with independent start/end times.
 - [ ] Transitions, speed controls, and keyframe-based animation.
 
 ### Phase D — persistence and delivery
 - [ ] Save/load project metadata and timeline to IndexedDB; keep large blobs out of localStorage.
-- [ ] Export quality/frame-rate controls, progress/cancel, codec capability checks, and correct MIME/extension mapping.
+- [x] Export resolution/frame-rate/bitrate controls, browser format selection, and MIME/extension mapping for the browser's actual encoder.
+- [ ] Export progress/cancel, capability regression tests, and Android verification.
 - [ ] Verify composer and Story publishing integration without changing unrelated feed/chat behavior.
 
 ## License and reuse decision
 The licenses were checked in the upstream repositories: [FairArena/fairarena-video](https://github.com/FairArena/fairarena-video/blob/main/LICENSE) and [ys941/reelstudio](https://github.com/ys941/reelstudio/blob/main/LICENSE) each expose an MIT license. They are references for architecture and interaction patterns in this phase; no upstream source files have been vendored wholesale. [Ektie/react-video-timeline-editor](https://github.com/Ektie/react-video-timeline-editor) remains excluded from direct reuse until its AGPL-3.0 implications are explicitly reviewed.
+
+
+## Audit of the requested nine CapCut-like function layers
+
+Status reflects the current feature branch, not the production `main` branch.
+
+| Layer | Current status | Remaining gaps |
+|---|---|---|
+| 1. Media library and assets | **Partial** — import multiple images/videos, add background audio, and use local files | No searchable stock library, licensed music/SFX catalogue, templates, cloud asset browser, or collection management |
+| 2. Timeline and multi-track | **Partial** — ordered clip sequence, trim/split/delete/reorder/duplicate, image duration, undo/redo | Not a true independent multi-track compositor; no overlay/video/audio/subtitle track hierarchy, freeze frame, speed curve, optical flow, snapping, ripple editing, or timeline zoom/fit |
+| 3. Visual/media editing | **Basic** — crop fit/fill, zoom/pan, rotation, horizontal mirror, background and color adjustments | No chroma key, automatic background removal, masks, stabilization, denoise, sharpening, or lens correction |
+| 4. Effects and filters | **Basic** — a few rendered color presets | No transition library, motion/lens/distortion effects, body/face AI effects, or timed per-clip effects |
+| 5. Text and captions | **Basic** — one global text overlay with editable style/position | No multiple independently timed text layers, subtitle tracks, auto-caption speech recognition, text templates, or integrated text-to-speech/voice changer |
+| 6. Audio | **Partial** — imported background music, original/music volume, export mix bus, music fade-in/fade-out | No stock SFX/BGM browser, independent voiceover tracks/recording, beat detection, noise reduction, voice effects, or per-clip audio automation |
+| 7. Keyframes and animation | **Not implemented** beyond static transforms | No position/scale/rotation/opacity keyframes, animation presets, or motion tracking |
+| 8. AI tools | **Not implemented** in the editor; unavailable tools are labelled instead of simulated | No text-to-video, AI enhancement/upscaling, auto-reframe/highlights, background removal, or face/body AI tools |
+| 9. Export and sharing | **Partial** — resolution, FPS, bitrate and browser-supported format choice; existing composer/Story callbacks | GIF export unavailable; MP4 depends on browser encoder support; no verified 2K/4K Android exports, cancel/progress UI, direct TikTok/YouTube/Facebook/Instagram integrations, or device QA |
+
+### Acceptance rule
+
+Do not mark a capability complete because a button exists. It counts as implemented only when it changes the project state, is rendered in preview/export where relevant, has a clear unsupported/error state, and passes automated plus Android device testing. AI, cloud stock assets, platform sharing, and codec-dependent formats require a real service/API or capability check; they must not be represented by fake controls.
