@@ -24,6 +24,9 @@ type CreatorSettings = {
   cropMode?: string
   backgroundColor?: string
   playbackSpeed?: number
+  zoom?: number
+  panX?: number
+  panY?: number
 }
 
 const FILTERS = {
@@ -139,9 +142,11 @@ async function processImage(file: File, settings: CreatorSettings): Promise<File
     context.save()
     context.translate(canvas.width / 2, canvas.height / 2)
     context.rotate(rotation)
-    const scale = settings.cropMode === 'cover'
+    context.translate(canvas.width * Number(settings.panX ?? 0) / 100, canvas.height * Number(settings.panY ?? 0) / 100)
+    const zoom = Math.max(1, Math.min(3, Number(settings.zoom ?? 1)))
+    const scale = (settings.cropMode === 'cover'
       ? Math.max(canvas.width / rotatedWidth, canvas.height / rotatedHeight)
-      : Math.min(canvas.width / rotatedWidth, canvas.height / rotatedHeight)
+      : Math.min(canvas.width / rotatedWidth, canvas.height / rotatedHeight)) * zoom
     context.filter = filterForSettings(settings)
     context.drawImage(image, -sourceWidth * scale / 2, -sourceHeight * scale / 2, sourceWidth * scale, sourceHeight * scale)
     context.restore()
@@ -289,13 +294,15 @@ async function processVideo(file: File, settings: CreatorSettings, onProgress?: 
         context.translate(canvas.width / 2, canvas.height / 2)
         const rotation = Number(settings.rotation || 0) * Math.PI / 180
         context.rotate(rotation)
+        context.translate(canvas.width * Number(settings.panX ?? 0) / 100, canvas.height * Number(settings.panY ?? 0) / 100)
         const srcW = video.videoWidth || 720
         const srcH = video.videoHeight || 1280
         const rotatedW = Math.abs(srcW * Math.cos(rotation)) + Math.abs(srcH * Math.sin(rotation))
         const rotatedH = Math.abs(srcW * Math.sin(rotation)) + Math.abs(srcH * Math.cos(rotation))
-        const scale = settings.cropMode === 'cover'
+        const zoom = Math.max(1, Math.min(3, Number(settings.zoom ?? 1)))
+        const scale = (settings.cropMode === 'cover'
           ? Math.max(canvas.width / rotatedW, canvas.height / rotatedH)
-          : Math.min(canvas.width / rotatedW, canvas.height / rotatedH)
+          : Math.min(canvas.width / rotatedW, canvas.height / rotatedH)) * zoom
         context.filter = filterForSettings(settings)
         context.drawImage(video, -(srcW * scale) / 2, -(srcH * scale) / 2, srcW * scale, srcH * scale)
         context.restore()
