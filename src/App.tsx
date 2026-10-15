@@ -279,6 +279,15 @@ function Composer({ userId, onPublished, onClose }) {
     }
   }
 
+  const continueWithEditedMedia = async outputFile => {
+    if (!outputFile) return
+    setError('')
+    setPreparedMedia({ sourceFiles: [outputFile], settingsKey: JSON.stringify(creatorSettings), files: [outputFile] })
+    setFiles([outputFile])
+    setCreatorStep('caption')
+    setCreatorMode('caption')
+  }
+
   const prepareMediaForCaption = async () => {
     if (busy || !files.length) return
     setBusy(true)
@@ -307,15 +316,15 @@ function Composer({ userId, onPublished, onClose }) {
   const formatSize = size => size >= 1024 * 1024 ? (size / (1024 * 1024)).toFixed(1) + ' MB' : Math.max(1, Math.round(size / 1024)) + ' KB'
 
 
-  const publishAsStory = async () => {
-    if (busy || !files[0]) return
+  const publishAsStory = async (editedFile = null) => {
+    if (busy || (!editedFile && !files[0])) return
     if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
     if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng media và âm thanh trước khi đăng tin.')
-    if (files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn nhạc Pixabay hoặc dùng âm thanh gốc.')
+    if ((editedFile || files[0]).type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn nhạc Pixabay hoặc dùng âm thanh gốc.')
     setBusy(true); setError(''); let uploadedPath = null
     try {
-      const sourceFile = files[0]
-      const uploadFile = await processCreatorMedia(sourceFile, creatorSettings, percent => setStage('Đang kết xuất video: ' + percent + '%…'))
+      const sourceFile = editedFile || files[0]
+      const uploadFile = editedFile || await processCreatorMedia(sourceFile, creatorSettings, percent => setStage('Đang kết xuất video: ' + percent + '%…'))
       setStage('Đang tải media lên…')
       const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = userId + '/stories/' + crypto.randomUUID() + '.' + ext
@@ -323,7 +332,7 @@ function Composer({ userId, onPublished, onClose }) {
       if (up.error) throw new Error('Không tải được tin: ' + up.error.message)
       uploadedPath = path
       const media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
-      const { error: insertError } = await supabase.from('stories').insert({ user_id:userId, media_url, media_type:sourceFile.type.startsWith('video/')?'video':'image', caption:null, expires_at:new Date(Date.now()+24*60*60*1000).toISOString(), creator_settings:creatorSettings, privacy:creatorSettings.privacy||'public', audio_url:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackUrl||null):null, audio_title:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackTitle||null):null, is_muted:false, copyright_audio_status:'unknown' })
+      const { error: insertError } = await supabase.from('stories').insert({ user_id:userId, media_url, media_type:sourceFile.type.startsWith('video/')?'video':'image', duration_sec:editedFile?.duration_sec ?? null, caption:null, expires_at:new Date(Date.now()+24*60*60*1000).toISOString(), creator_settings:creatorSettings, privacy:creatorSettings.privacy||'public', audio_url:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackUrl||null):null, audio_title:creatorSettings.audioSource==='pixabay'?(creatorSettings.audioTrackTitle||null):null, is_muted:false, copyright_audio_status:'unknown' })
       if (insertError) throw new Error('Không lưu được tin: ' + insertError.message)
       onClose?.(); Promise.resolve().then(()=>onPublished?.()).catch(err=>console.error('Không làm mới Tin 24 giờ:',err))
     } catch (e) { if(uploadedPath) try { await supabase.storage.from('social-media').remove([uploadedPath]) } catch {} setError(e?.message||'Không đăng được tin.') }
@@ -398,7 +407,7 @@ function Composer({ userId, onPublished, onClose }) {
       {files[0].type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && creatorSettings.audioTrackUrl && <audio ref={fullscreenMusicRef} src={creatorSettings.audioTrackUrl} preload="auto" loop />}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>{ setFiles([]); setCreatorMode('picker'); setCreatorStep('edit') }} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
-    <CreatorMediaTools file={files.length===1?files[0]:null} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
+    <CreatorMediaTools file={files[0]||null} files={files} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" onPublishStory={publishAsStory} onContinuePost={continueWithEditedMedia} videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
     <div className="absolute bottom-0 left-0 right-0 z-30 flex items-center gap-3 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       <button type="button" disabled={busy} onClick={publishAsStory} className="min-h-9 flex-1 rounded-full border border-white/60 bg-white/10 px-2 text-xs font-semibold text-white disabled:opacity-50">{busy?(stage||'Đang đăng…'):'Đăng tin 24h'}</button>
       <button type="button" disabled={busy} onClick={prepareMediaForCaption} className="min-h-9 flex-1 rounded-full bg-white px-3 text-xs font-bold text-black disabled:opacity-50">{busy ? (stage || 'Đang xử lý…') : 'Tiếp →'}</button>
@@ -505,24 +514,25 @@ function StoryComposer({ userId, onClose, onPublished }) {
     setFile(next)
   }
 
-  const publish = async () => {
+  const publish = async (editedFile = null) => {
     if (busy) return
     if (!supabase || !userId) return setError('Anh cần đăng nhập để đăng tin.')
-    if (!file) return setError('Chọn một ảnh hoặc video để đăng tin.')
+    if (!editedFile && !file) return setError('Chọn một ảnh hoặc video để đăng tin.')
     const mod = moderateText(caption)
     if (!mod.allowed) return setError(mod.reason)
     if (!creatorSettings.rightsConfirmed) return setError('Anh cần xác nhận quyền sử dụng ảnh/video và âm thanh trước khi đăng tin.')
-    if (file.type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn một bản nhạc Pixabay hoặc chuyển về âm thanh gốc.')
+    const sourceFile = editedFile || file
+    if (sourceFile.type.startsWith('video/') && creatorSettings.audioSource === 'pixabay' && !creatorSettings.audioTrackUrl) return setError('Anh hãy chọn một bản nhạc Pixabay hoặc chuyển về âm thanh gốc.')
     setBusy(true)
     setError('')
-    setStage(file.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
+    setStage(sourceFile.type.startsWith('video/') ? 'Đang tải video lên…' : 'Đang tải ảnh lên…')
     let uploadedPath = null
     try {
-      setStage(file.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
-      const uploadFile = await processCreatorMedia(file, creatorSettings, percent => {
-        if (file.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
+      setStage(sourceFile.type.startsWith('video/') ? 'Đang kết xuất video đã chỉnh sửa…' : 'Đang xử lý ảnh…')
+      const uploadFile = editedFile || await processCreatorMedia(sourceFile, creatorSettings, percent => {
+        if (sourceFile.type.startsWith('video/')) setStage(`Đang kết xuất video: ${percent}%…`)
       })
-      setStage(file.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
+      setStage(sourceFile.type.startsWith('video/') ? 'Đang tải video đã xử lý lên…' : 'Đang tải ảnh đã xử lý lên…')
       const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'bin'
       const path = `${userId}/stories/${crypto.randomUUID()}.${ext}`
       const up = await supabase.storage.from('social-media').upload(path, uploadFile, { contentType: uploadFile.type, upsert: false })
@@ -531,7 +541,8 @@ function StoryComposer({ userId, onClose, onPublished }) {
       let media_url = supabase.storage.from('social-media').getPublicUrl(path).data.publicUrl
       setStage('Đang lưu tin…')
       const { error: insertError } = await supabase.from('stories').insert({
-        user_id: userId, media_url, media_type: file.type.startsWith('video/') ? 'video' : 'image',
+        user_id: userId, media_url, media_type: sourceFile.type.startsWith('video/') ? 'video' : 'image',
+        duration_sec: editedFile?.duration_sec ?? null,
         caption: caption.trim() || null, expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         creator_settings: creatorSettings, privacy: creatorSettings.privacy || 'public',
         audio_url: creatorSettings.audioSource === 'pixabay' ? (creatorSettings.audioTrackUrl || null) : null,
@@ -590,7 +601,7 @@ function StoryComposer({ userId, onClose, onPublished }) {
       >{creatorSettings.sticker} {creatorSettings.overlayText}</div>}
     </div>
     <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] z-30 flex items-center gap-3"><button type="button" onClick={()=>setFile(null)} className="rounded-full bg-black/55 p-3" aria-label="Quay lại chọn media"><X size={20}/></button></div>
-    <CreatorMediaTools file={file} settings={creatorSettings} onChange={setCreatorSettings} mode="fullscreen" videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
+    <CreatorMediaTools file={file} files={files} storyMode settings={creatorSettings} onChange={setCreatorSettings} onPublishStory={publish} mode="fullscreen" videoRef={fullscreenVideoRef} isPlaying={previewPlaying} onTogglePlayback={() => document.querySelector('[aria-label="Phát xem trước"], [aria-label="Tạm dừng xem trước"]')?.click()} />
     <div className="absolute bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-4 pt-12 pb-[max(18px,env(safe-area-inset-bottom))]">
       {error && <p role="alert" className="mb-2 rounded-xl bg-red-700/90 p-3 text-sm">{error}</p>}
       <div className="mb-3 flex gap-2"><input value={caption} onChange={e=>setCaption(e.target.value)} maxLength={300} placeholder="Caption cho tin (không bắt buộc)" className="min-w-0 flex-1 rounded-xl bg-white/15 px-3 py-3 text-sm placeholder:text-white/60" disabled={busy}/><label className="rounded-xl bg-white/15 px-3 py-3 text-xs font-bold">Đổi<input hidden type="file" accept="image/*,video/*" disabled={busy} onChange={e=>{chooseFile(e.target.files);e.target.value=''}}/></label></div>
