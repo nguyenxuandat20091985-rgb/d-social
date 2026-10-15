@@ -46,7 +46,7 @@ The current change removes the explicit one-video limit in the picker and append
 
 ### Phase A — media/timeline and audio export foundation
 - [x] Multi-select image and video files in one picker; append later imports without replacing existing clips.
-- [x] Timeline clip selection, basic reorder/delete/split/trim, image duration, and text overlay.
+- [x] Timeline clip selection, basic reorder/delete/split/trim, image duration, text overlay, duplicate clip, and splitting image clips.
 - [x] Export engine routes source-video audio and uploaded background music into a mixed MediaRecorder audio track with independent gain settings.
 - [ ] Verify exported audio is audible and synchronized for image-only, video-only, and mixed image/video projects on Android Chrome.
 - [ ] Add deterministic unit tests for timeline duration/trim/split math and browser export smoke tests.
