@@ -278,10 +278,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
 
   const activeToolData = TOOL_ITEMS.find(x => x.id === activeTool)
   const totalLabel = fmt(total)
-  const toolClick = id => {
-    if (id === 'music') onOpenTool && onOpenTool('music')
-    setActiveTool(current => current === id ? '' : id)
-  }
+  const toolClick = id => setActiveTool(current => current === id ? '' : id)
   const actionButton = 'flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-xs font-bold disabled:opacity-40'
   const rangeClass = 'w-full accent-cyan-300'
   return <section className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#08090d] text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -330,7 +327,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         </div>
         <div className="grid grid-cols-2 gap-2 px-3 pb-2 pt-1.5">
           <button type="button" disabled={exporting || !clips.length || total > 60 && storyMode} onClick={() => exportAction({ forStory: false })} className={actionButton + ' border border-white/15 bg-white/[0.04]'}><Download size={15} /> {exporting ? 'Đang xuất…' : 'Xuất video'}</button>
-          <button type="button" disabled={exporting || !clips.length || total > 60} onClick={publishStory} className={actionButton + ' bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : storyMode ? 'Đăng tin 24h' : 'Tiếp → Đăng bài'}</button>
+          <button type="button" disabled={exporting || !clips.length || (storyMode && total > 60)} onClick={() => storyMode ? publishStory() : continuePost()} className={actionButton + ' bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : storyMode ? 'Đăng tin 24h' : 'Tiếp → Đăng bài'}</button>
         </div>
       </nav>
     </div>
