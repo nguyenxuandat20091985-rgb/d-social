@@ -1,237 +1,126 @@
 // @ts-nocheck
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AudioLines, Music2, Pause, Play, Type, Volume2, VolumeX, Scissors } from 'lucide-react'
+import { AudioLines, Music2, Pause, Play, Type, Scissors, Trash2, ChevronUp, ChevronDown, ImagePlus, Plus } from 'lucide-react'
 
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
-const clock = (seconds, tenths = false) => {
-  const safe = Math.max(0, Number(seconds) || 0)
-  const mins = Math.floor(safe / 60)
-  const secs = Math.floor(safe % 60)
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}${tenths ? '.' + Math.floor((safe % 1) * 10) : ''}`
+const clamp = (n, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(n)) ? Number(n) : min))
+const fmt = (seconds, tenths = false) => {
+  const s = Math.max(0, Number(seconds) || 0)
+  const mm = Math.floor(s / 60), ss = Math.floor(s % 60)
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}${tenths ? '.' + Math.floor((s % 1) * 10) : ''}`
+}
+const makeClip = file => ({ id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, file, kind: file?.type?.startsWith('image/') ? 'image' : 'video', sourceDuration: file?.type?.startsWith('image/') ? 3 : 0, in: 0, out: file?.type?.startsWith('image/') ? 3 : 0 })
+const clipLen = c => Math.max(0.1, (Number(c.out) || Number(c.sourceDuration) || 3) - (Number(c.in) || 0))
+
+export function MediaPicker({ onFiles, disabled = false }) {
+  const input = useRef(null)
+  return <><input ref={input} hidden type="file" accept="image/*,video/*" multiple disabled={disabled} onChange={e => {
+    const picked = Array.from(e.currentTarget.files || [])
+    const images = picked.filter(f => f.type.startsWith('image/'))
+    const videos = picked.filter(f => f.type.startsWith('video/'))
+    onFiles?.([...images, ...videos.slice(0, 1)])
+    e.currentTarget.value = ''
+  }}/><button type="button" disabled={disabled} onClick={() => input.current?.click()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 text-xs font-semibold disabled:opacity-40"><ImagePlus size={15}/>Chọn ảnh hoặc video</button></>
 }
 
-async function seekTo(video, time) {
-  if (!video || !Number.isFinite(time)) return
-  if (Math.abs(video.currentTime - time) < 0.04) return
-  await new Promise(resolve => {
-    let timer
-    const done = () => {
-      clearTimeout(timer)
-      video.removeEventListener('seeked', done)
-      resolve()
-    }
-    video.addEventListener('seeked', done, { once: true })
-    timer = setTimeout(done, 1200)
-    try { video.currentTime = time } catch { done() }
-  })
+export function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings = {}, onSettingsChange }) {
+  const sourceUrl = useMemo(() => file ? URL.createObjectURL(file) : '', [file])
+  useEffect(() => () => { if (sourceUrl) URL.revokeObjectURL(sourceUrl) }, [sourceUrl])
+  const drag = useRef(false)
+  const [position, setPosition] = useState({ x: Number(settings.overlayX ?? 50), y: Number(settings.overlayY ?? 50) })
+  useEffect(() => setPosition({ x: Number(settings.overlayX ?? 50), y: Number(settings.overlayY ?? 50) }), [settings.overlayX, settings.overlayY])
+  const moveText = e => {
+    if (!drag.current) return
+    const r = e.currentTarget.getBoundingClientRect()
+    const next = { x: clamp((e.clientX-r.left)/r.width*100, 2, 98), y: clamp((e.clientY-r.top)/r.height*100, 4, 96) }
+    setPosition(next); onSettingsChange?.({ overlayX: next.x, overlayY: next.y })
+  }
+  return <div className="relative mx-auto flex aspect-[9/16] max-h-[34vh] w-full max-w-[250px] items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-black">
+    {file?.type?.startsWith('video/') ? <video key={sourceUrl} ref={videoRef} src={sourceUrl} playsInline preload="auto" className="h-full w-full object-contain" /> : sourceUrl ? <img src={sourceUrl} alt="Xem trước slideshow" className="h-full w-full object-contain"/> : <span className="text-xs text-white/45">Chọn media để bắt đầu</span>}
+    {settings.overlayText && <div onPointerDown={e=>{drag.current=true;e.currentTarget.setPointerCapture?.(e.pointerId)}} onPointerMove={moveText} onPointerUp={()=>{drag.current=false}} onPointerCancel={()=>{drag.current=false}} className="absolute max-w-[90%] cursor-move select-none rounded bg-black/20 px-2 py-1 text-center font-bold drop-shadow-lg touch-none" style={{left:`${position.x}%`,top:`${position.y}%`,transform:'translate(-50%,-50%)',color:settings.overlayColor||'#ffffff',fontSize:`${clamp(settings.overlayFontSize||28,12,72)}px`}}>{settings.overlayText}</div>}
+    <button type="button" onClick={onTogglePlayback} className="absolute bottom-2 left-2 grid h-9 w-9 place-items-center rounded-full bg-black/60" aria-label={isPlaying?'Tạm dừng':'Phát'}>{isPlaying?<Pause size={17}/>:<Play size={17}/>}</button>
+  </div>
 }
 
-export function VideoTimelineEditor({ file, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false }) {
-  const [duration, setDuration] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [thumbnails, setThumbnails] = useState([])
-  const [trimMode, setTrimMode] = useState(false)
-  const trackRef = useRef(null)
-  useEffect(() => { setTrimMode(Boolean(trimModeActive)) }, [trimModeActive])
-  const dragRef = useRef(null)
-  const selected = settings || {}
-  const update = patch => onChange?.({ ...selected, ...patch })
-  const start = clamp(Number(selected.trimStart) || 0, 0, Math.max(0, duration))
-  const end = clamp(Number(selected.trimEnd) || Math.min(60, duration || 60), start, Math.min(60, duration || 60))
-  const minClip = Math.min(15, duration || 15)
-  const startPct = duration > 0 ? start / duration * 100 : 0
-  const endPct = duration > 0 ? end / duration * 100 : 100
-  const playPct = duration > 0 ? clamp(currentTime / duration * 100, 0, 100) : 0
-  const clipDuration = Math.max(0, end - start)
+export function AudioTrack({ settings = {}, onChange, onOpenTool }) {
+  const input = useRef(null), update = patch => onChange?.({...settings,...patch})
+  return <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.03] p-2">
+    <div className="flex items-center gap-2"><Music2 size={15}/><span className="min-w-0 flex-1 truncate text-xs font-semibold">{settings.audioTrackTitle||'Nhạc nền chưa chọn'}</span><input ref={input} hidden type="file" accept="audio/*" onChange={e=>{const f=e.currentTarget.files?.[0];if(f)update({audioTrackTitle:f.name,audioTrackFile:f,audioTrackUrl:URL.createObjectURL(f),audioSource:'upload'});e.currentTarget.value=''}}/><button type="button" onClick={()=>input.current?.click()} className="shrink-0 rounded bg-white/10 px-2 py-1.5 text-[11px]">Tải nhạc</button><button type="button" onClick={()=>onOpenTool?.('music')} className="shrink-0 rounded bg-white/10 px-2 py-1.5 text-[11px]">Thư viện</button></div>
+    <label className="flex items-center gap-2 text-[11px] text-white/70">Âm lượng gốc<input aria-label="Âm lượng video gốc" className="min-w-0 flex-1 accent-cyan-400" type="range" min="0" max="100" value={settings.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/><span className="w-8 text-right">{settings.originalVolume??100}%</span></label>
+    <label className="flex items-center gap-2 text-[11px] text-white/70">Âm lượng nhạc<input aria-label="Âm lượng nhạc nền" className="min-w-0 flex-1 accent-cyan-400" type="range" min="0" max="100" value={settings.musicVolume??70} onChange={e=>update({musicVolume:Number(e.target.value)})}/><span className="w-8 text-right">{settings.musicVolume??70}%</span></label>
+  </div>
+}
 
-  useEffect(() => {
-    const video = videoRef?.current
-    if (!video || !file?.type?.startsWith('video/')) return
-    const sync = () => {
-      if (Number.isFinite(video.duration) && video.duration > 0) setDuration(video.duration)
-      setCurrentTime(Number(video.currentTime) || 0)
-    }
-    video.addEventListener('loadedmetadata', sync)
-    video.addEventListener('durationchange', sync)
-    video.addEventListener('timeupdate', sync)
-    video.addEventListener('seeked', sync)
-    sync()
-    return () => {
-      video.removeEventListener('loadedmetadata', sync)
-      video.removeEventListener('durationchange', sync)
-      video.removeEventListener('timeupdate', sync)
-      video.removeEventListener('seeked', sync)
-    }
-  }, [file, videoRef])
+export function TextOverlayEditor({ settings = {}, onChange }) {
+  const update = patch => onChange?.({...settings,...patch})
+  return <div className="grid grid-cols-[1fr_auto_auto] gap-2"><input value={settings.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="+ Thêm văn bản" className="min-w-0 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40"/><input aria-label="Màu chữ" type="color" value={settings.overlayColor||'#ffffff'} onChange={e=>update({overlayColor:e.target.value})} className="h-10 w-10 rounded bg-transparent"/><select aria-label="Cỡ chữ" value={settings.overlayFontSize||28} onChange={e=>update({overlayFontSize:Number(e.target.value)})} className="max-w-[88px] rounded-lg bg-[#24262d] px-2 text-xs text-white"><option value="18">18 px</option><option value="24">24 px</option><option value="28">28 px</option><option value="36">36 px</option><option value="48">48 px</option></select></div>
+}
 
-  useEffect(() => {
-    if (!file || !file.type.startsWith('video/')) { setThumbnails([]); return }
-    let cancelled = false
-    const url = URL.createObjectURL(file)
-    const source = document.createElement('video')
-    source.preload = 'metadata'
-    source.muted = true
-    source.playsInline = true
-    source.src = url
-    const frames = []
-    const makeFrames = async () => {
-      try {
-        await new Promise((resolve, reject) => {
-          source.onloadedmetadata = resolve
-          source.onerror = () => reject(new Error('metadata'))
-          source.load()
-        })
-        const total = Number(source.duration)
-        if (!Number.isFinite(total) || total <= 0) throw new Error('duration')
-        if (!cancelled) setDuration(total)
-        const canvas = document.createElement('canvas')
-        canvas.width = 96
-        canvas.height = 144
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        const count = 9
-        for (let i = 0; i < count; i += 1) {
-          if (cancelled) return
-          const target = Math.min(Math.max(0, total - 0.08), total * (i / count) + Math.min(0.08, total / 100))
-          await new Promise(resolve => {
-            let timer
-            const done = () => {
-              clearTimeout(timer)
-              source.removeEventListener('seeked', done)
-              resolve()
-            }
-            source.addEventListener('seeked', done, { once: true })
-            timer = setTimeout(done, 900)
-            try { source.currentTime = target } catch { done() }
-          })
-          if (cancelled) return
-          try {
-            const ratio = Math.max(canvas.width / (source.videoWidth || 1), canvas.height / (source.videoHeight || 1))
-            const w = canvas.width / ratio
-            const h = canvas.height / ratio
-            ctx.fillStyle = '#101114'
-            ctx.fillRect(0, 0, canvas.width, canvas.height)
-            ctx.drawImage(source, ((source.videoWidth || w) - w) / 2, ((source.videoHeight || h) - h) / 2, w, h, 0, 0, canvas.width, canvas.height)
-            frames.push(canvas.toDataURL('image/jpeg', 0.58))
-            if (!cancelled) setThumbnails([...frames])
-          } catch { /* A frame may not be exportable on every mobile browser. */ }
-        }
-      } catch {
-        if (!cancelled) setThumbnails([])
-      } finally {
-        source.pause()
-        source.removeAttribute('src')
-        source.load()
-        URL.revokeObjectURL(url)
-      }
-    }
-    makeFrames()
-    return () => { cancelled = true; source.onloadedmetadata = null; source.onerror = null; source.pause(); source.removeAttribute('src'); source.load(); URL.revokeObjectURL(url) }
-  }, [file])
+export function Toolbar({ onOpenTool, onSplit, onDelete, onMoveUp, onMoveDown, onExport, exporting }) {
+  const items=[{id:'split',label:'Tách',icon:<Scissors size={18}/>,action:onSplit},{id:'music',label:'Âm thanh',icon:<Music2 size={18}/>},{id:'text',label:'Văn bản',icon:<Type size={18}/>},{id:'effects',label:'Hiệu ứng',icon:<Plus size={18}/>},{id:'up',label:'Lên',icon:<ChevronUp size={18}/>,action:onMoveUp},{id:'down',label:'Xuống',icon:<ChevronDown size={18}/>,action:onMoveDown},{id:'delete',label:'Xóa',icon:<Trash2 size={18}/>,action:onDelete}]
+  return <div className="flex shrink-0 snap-x snap-mandatory gap-1 overflow-x-auto border-t border-white/10 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{items.map(it=><button key={it.id} type="button" onClick={it.action||(()=>onOpenTool?.(it.id))} className="flex w-[68px] shrink-0 snap-start flex-col items-center gap-1 rounded-lg px-2 py-2 text-[11px] text-white/75 active:bg-white/10">{it.icon}<span className="whitespace-nowrap">{it.label}</span></button>)}<button type="button" disabled={exporting} onClick={onExport} className="ml-auto flex shrink-0 items-center rounded-lg bg-cyan-400 px-3 py-2 text-xs font-bold text-black disabled:opacity-50">{exporting?'Đang xuất…':'Xuất'}</button></div>
+}
 
-  const seekFromPointer = useCallback((event, mode) => {
-    const bounds = trackRef.current?.getBoundingClientRect()
-    if (!bounds || !duration) return
-    const percent = clamp((event.clientX - bounds.left) / bounds.width, 0, 1)
-    const time = percent * duration
-    if (mode === 'start') {
-      const next = clamp(time, 0, Math.max(0, end - minClip))
-      update({ trimStart: next, trimEnd: end })
-    } else if (mode === 'end') {
-      const next = clamp(time, start + minClip, Math.min(duration, start + 60))
-      update({ trimStart: start, trimEnd: next })
-    } else {
-      const video = videoRef?.current
-      if (video) {
-        try { video.currentTime = time } catch {}
-        setCurrentTime(time)
-      }
-    }
-  }, [duration, end, minClip, onChange, selected, start, videoRef])
-
-  const beginDrag = (event, mode) => {
-    if ((mode === 'start' || mode === 'end') && !trimMode) return
-    event.preventDefault()
-    event.stopPropagation()
-    dragRef.current = mode
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-    seekFromPointer(event, mode)
+export function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, storyMode = false }) {
+  const rail=useRef(null), drag=useRef(null)
+  const urls=useMemo(()=>new Map(clips.filter(c=>c.kind==='video').map(c=>[c.id,URL.createObjectURL(c.file)])),[clips.map(c=>c.id).join('|')])
+  useEffect(()=>()=>urls.forEach(url=>URL.revokeObjectURL(url)),[urls])
+  const active=clips.find(c=>c.id===activeId)||clips[0], total=clips.reduce((s,c)=>s+clipLen(c),0)
+  const idx=clips.findIndex(c=>c.id===active?.id), activeStart=clips.slice(0,Math.max(0,idx)).reduce((s,c)=>s+clipLen(c),0)
+  const startDrag=(e,mode)=>{e.preventDefault();e.stopPropagation();drag.current=mode;e.currentTarget.setPointerCapture?.(e.pointerId)}
+  const pointerMove=e=>{
+    if(!drag.current||!rail.current)return
+    const r=rail.current.getBoundingClientRect(), t=clamp((e.clientX-r.left)/r.width,0,1)*total
+    if(drag.current==='playhead'){onSeek(t);return}
+    if(!active)return
+    const local=clamp(t-activeStart,0,active.sourceDuration||active.out||3), next=clips.slice(), i=next.findIndex(c=>c.id===active.id)
+    if(drag.current==='in')next[i]={...active,in:clamp(local,0,Math.max(0,active.out-.25))}
+    if(drag.current==='out')next[i]={...active,out:clamp(local,active.in+.25,active.sourceDuration||3)}
+    onChangeClips(next)
   }
-  const moveDrag = event => {
-    if (dragRef.current) seekFromPointer(event, dragRef.current)
-  }
-  const endDrag = () => { dragRef.current = null }
+  return <div className="space-y-2"><div className="flex items-center justify-between gap-2 text-[11px]"><span className="font-mono">{fmt(playhead,true)} / {fmt(total)}</span><span className="text-white/45">Nguồn: {fmt(clips.reduce((m,c)=>Math.max(m,c.sourceDuration||0),0))}</span></div>
+    <div ref={rail} onPointerMove={pointerMove} onPointerUp={()=>drag.current=null} onPointerCancel={()=>drag.current=null} onClick={e=>{if(drag.current)return;const r=rail.current.getBoundingClientRect();onSeek(clamp((e.clientX-r.left)/r.width,0,1)*total)}} className="relative flex h-[76px] touch-none select-none overflow-visible rounded-md bg-[#252730]">
+      {clips.map((c,i)=>{const d=clipLen(c);return <button key={c.id} type="button" onClick={e=>{e.stopPropagation();onSelect(c.id);onSeek(clips.slice(0,i).reduce((s,x)=>s+clipLen(x),0))}} className={`relative min-w-0 overflow-hidden border-r border-black/50 text-left ${c.id===activeId?'ring-2 ring-inset ring-amber-300':''}`} style={{width:`${d/Math.max(total,.1)*100}%`}}>{c.kind==='image'?<div className="flex h-full items-center justify-center bg-[#343744] text-[10px] text-white/75"><ImagePlus size={15}/></div>:<video muted playsInline preload="metadata" src={urls.get(c.id)} className="h-full w-full object-cover opacity-75"/>}<span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-[9px]">{i+1} · {fmt(d)}</span></button>})}
+      {active&&<><div onPointerDown={e=>startDrag(e,'in')} role="slider" aria-label="Trim start" aria-valuenow={active.in} tabIndex={0} className="absolute inset-y-0 z-20 w-3 cursor-ew-resize rounded-l border-2 border-amber-200 bg-amber-300 touch-none" style={{left:`${activeStart/Math.max(total,.1)*100}%`}}/><div onPointerDown={e=>startDrag(e,'out')} role="slider" aria-label="Trim end" aria-valuenow={active.out} tabIndex={0} className="absolute inset-y-0 z-20 w-3 cursor-ew-resize rounded-r border-2 border-amber-200 bg-amber-300 touch-none" style={{left:`${(activeStart+clipLen(active))/Math.max(total,.1)*100}%`}}/></>}
+      <div onPointerDown={e=>startDrag(e,'playhead')} role="slider" aria-label="Playhead" aria-valuemin={0} aria-valuemax={total} aria-valuenow={clamp(playhead,0,total)} tabIndex={0} className="absolute inset-y-[-3px] z-30 w-4 -translate-x-1/2 cursor-ew-resize touch-none" style={{left:`${clamp(playhead/Math.max(total,.1),0,1)*100}%`}}><div className="mx-auto h-full w-[2px] bg-white shadow-[0_0_4px_black]"/></div>
+    </div>{storyMode&&total>60&&<p role="alert" className="text-xs text-amber-200">Story dài {fmt(total)}. Hãy cắt xuống tối đa 01:00 trước khi xuất.</p>}</div>
+}
 
-  const waveform = useMemo(() => Array.from({ length: 72 }, (_, i) => 18 + ((i * 29 + (selected.audioTrackTitle || 'D-Social').length * 17 + (i % 9) * 13) % 78)), [selected.audioTrackTitle])
-  const originalOn = Number(selected.originalVolume ?? 100) > 0
-  const toggleOriginal = () => update({ originalVolume: originalOn ? 0 : 100 })
-
-  return <section className="pointer-events-auto mx-2 mb-2 rounded-t-[18px] border border-white/15 bg-[#101115]/96 p-2.5 text-white shadow-[0_16px_50px_rgba(0,0,0,.5)] backdrop-blur-xl" aria-label="Timeline dựng video">
-    <div className="mb-1.5 flex items-center justify-between gap-2">
-      <button type="button" onClick={onTogglePlayback} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-black shadow" aria-label={isPlaying ? 'Tạm dừng' : 'Phát'}>
-        {isPlaying ? <Pause size={17} fill="currentColor"/> : <Play size={17} fill="currentColor" className="ml-0.5"/>}
-      </button>
-      <div className="min-w-0 flex-1">
-        <div className="font-mono text-[12px] font-semibold tracking-wide">{clock(Math.max(0, currentTime - start), true)} <span className="text-white/45">/ {clock(clipDuration)}</span></div>
-        <div className="mt-0.5 text-[10px] text-white/45">{duration ? `Video gốc ${clock(duration)}` : 'Đang tạo dải khung hình…'}</div>
-      </div>
-      <button type="button" onClick={() => onOpenTool?.('music')} className="flex h-7 shrink-0 items-center gap-1 rounded-full border border-sky-300/35 bg-sky-400/10 px-2.5 text-[10px] font-semibold text-sky-100">
-        <Music2 size={14}/>{selected.audioTrackTitle ? 'Đổi nhạc' : '+ Thêm âm thanh'}
-      </button>
-    </div>
-
-    <div className="mb-1 flex items-center gap-2">
-      <button type="button" onClick={toggleOriginal} aria-pressed={originalOn} aria-label={originalOn ? 'Tắt tiếng gốc' : 'Bật tiếng gốc'} title={originalOn ? 'Tiếng gốc: bật' : 'Tiếng gốc: tắt'} className={`grid h-7 w-7 shrink-0 place-items-center self-center rounded-md border ${originalOn ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-100' : 'border-white/10 bg-white/5 text-white/45'}`}>
-        {originalOn ? <Volume2 size={13}/> : <VolumeX size={13}/>}
-      </button>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center justify-between text-[9px] uppercase tracking-[.12em] text-white/45"><span>VIDEO</span><span>{clock(start)}–{clock(end)}</span></div>
-        <div ref={trackRef} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onClick={event => { if (!dragRef.current && !event.target.closest('[role="slider"]')) seekFromPointer(event, 'playhead') }} className="relative h-[42px] select-none overflow-visible rounded-md bg-[#24262d] touch-pan-y">
-          <div className="absolute inset-0 flex overflow-hidden rounded-md">
-            {thumbnails.length ? thumbnails.map((src, index) => <img key={index} src={src} draggable="false" alt="" className="h-full min-w-0 flex-1 object-cover" />) : Array.from({ length: 9 }, (_, index) => <div key={index} className="h-full min-w-0 flex-1 animate-pulse border-r border-white/10 bg-gradient-to-b from-[#30333c] to-[#1a1c21]"/>)}
-          </div>
-          <div className="absolute inset-y-0 left-0 rounded-l-md bg-black/55" style={{ width: `${startPct}%` }}/>
-          <div className="absolute inset-y-0 right-0 rounded-r-md bg-black/55" style={{ width: `${Math.max(0, 100-endPct)}%` }}/>
-          <div className="absolute inset-y-[-3px] rounded-md border-[2px] border-amber-300 shadow-[0_0_0_1px_rgba(0,0,0,.5)]" style={{ left: `${startPct}%`, width: `${Math.max(0, endPct-startPct)}%`, pointerEvents:'none' }}/>
-          <div onPointerDown={event => beginDrag(event, 'start')} role="slider" aria-label="Đầu cắt bắt đầu" aria-valuemin={0} aria-valuemax={Math.max(0,end-minClip)} aria-valuenow={start} tabIndex={0} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); seekFromPointer({clientX: (trackRef.current?.getBoundingClientRect().left || 0) + clamp(start + (event.key === 'ArrowRight' ? .5 : -.5),0,duration) / Math.max(duration,1) * (trackRef.current?.getBoundingClientRect().width || 1), preventDefault(){}, stopPropagation(){} }, 'start') } }} className={`absolute inset-y-[-4px] z-20 w-3 rounded-l-md border-2 shadow-[0_1px_8px_#000b] touch-none ${trimMode ? 'cursor-ew-resize border-amber-200 bg-amber-300' : 'cursor-default border-white/50 bg-white/45'}`} style={{ left: `calc(${startPct}% - 2px)` }}/>
-          <div onPointerDown={event => beginDrag(event, 'end')} role="slider" aria-label="Đầu cắt kết thúc" aria-valuemin={Math.min(duration,start+minClip)} aria-valuemax={Math.min(duration,start+60)} aria-valuenow={end} tabIndex={0} className={`absolute inset-y-[-4px] z-20 w-3 rounded-r-md border-2 shadow-[0_1px_8px_#000b] touch-none ${trimMode ? 'cursor-ew-resize border-amber-200 bg-amber-300' : 'cursor-default border-white/50 bg-white/45'}`} style={{ left: `calc(${endPct}% - 10px)` }}/>
-          <div onPointerDown={event => beginDrag(event, 'playhead')} role="slider" aria-label="Đầu đọc thời gian" aria-valuemin={0} aria-valuemax={duration} aria-valuenow={currentTime} tabIndex={0} className="absolute inset-y-[-9px] z-30 w-5 -translate-x-1/2 cursor-ew-resize touch-none" style={{ left: `${playPct}%` }}>
-            <div className="mx-auto h-2.5 w-2.5 rounded-full border border-black/60 bg-white shadow"/>
-            <div className="mx-auto h-full w-[2px] bg-white shadow-[0_0_5px_#000]"/>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div className="flex items-center gap-2 border-t border-white/10 pt-1.5">
-      <div className="flex w-[82px] shrink-0 items-center justify-center gap-1 text-[10px] font-semibold text-white/55"><AudioLines size={14}/> ÂM THANH</div>
-      <button type="button" onClick={() => onOpenTool?.('music')} className="relative flex h-8 min-w-0 flex-1 items-center gap-[2px] overflow-hidden rounded-md border border-sky-300/25 bg-sky-500/10 px-2">
-        {selected.audioTrackTitle ? <><div className="absolute inset-0 flex items-center justify-around opacity-60">{waveform.map((height, i) => <span key={i} className="w-[2px] shrink-0 rounded-full bg-sky-300" style={{height: `${height}%`}}/>)}</div><span className="relative z-10 max-w-[85%] truncate rounded bg-[#10232c]/90 px-1.5 py-0.5 text-[10px] font-semibold text-sky-100">{selected.audioTrackTitle}</span></> : <span className="relative z-10 flex items-center gap-1 text-[10px] font-semibold text-sky-200"><Music2 size={13}/> + Thêm nhạc nền</span>}
-      </button>
-    </div>
-
-    <div className="mt-1 flex items-center gap-2 border-t border-white/10 pt-1">
-      <div className="flex w-[82px] shrink-0 items-center justify-center gap-1 text-[10px] font-semibold text-white/55"><Type size={14}/> CHỮ</div>
-      <button type="button" onClick={() => onOpenTool?.('text')} className="flex h-8 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border border-white/15 bg-white/[0.04] px-2 text-left">
-        <Type size={13} className="shrink-0 text-white/55"/>
-        {selected.overlayText ? <span className="truncate text-[10px] text-white/80">{selected.overlayText}</span> : <span className="text-[10px] font-semibold text-white/55">+ Thêm văn bản / Chữ</span>}
-      </button>
-    </div>
-
-    <div className="mt-1 flex items-center gap-1 overflow-x-auto border-t border-white/10 pt-1.5 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {[
-        {id:'theme', label:'Chỉnh sửa', glyph:'✎'},
-        {id:'music', label:'Âm thanh', glyph:'♫'},
-        {id:'text', label:'Văn bản', glyph:'T'},
-        {id:'sticker', label:'Nhãn dán', glyph:'☺'},
-        {id:'overlay', label:'Lớp phủ', glyph:'▧'},
-        {id:'effects', label:'Hiệu ứng', glyph:'✧'},
-        {id:'filter', label:'Bộ lọc', glyph:'◐'},
-        {id:'adjust', label:'Tùy chỉnh AI', glyph:'☷'},
-        {id:'ratio', label:'Tỷ lệ', glyph:'▣'},
-        {id:'background', label:'Nền', glyph:'▤'},
-        {id:'avatar', label:'Chỉnh sửa AI', glyph:'✦'},
-      ].map(tool => <button key={tool.id} type="button" onClick={() => onOpenTool?.(tool.id)} className="flex w-[62px] shrink-0 flex-col items-center gap-0.5 rounded-md px-1 py-1 text-[9px] font-medium text-white/65 active:bg-white/10"><span className="grid h-5 place-items-center text-[16px] leading-none">{tool.glyph}</span><span className="w-full truncate text-center">{tool.label}</span></button>)}
-    </div>
+export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false, onExport }) {
+  const initialFiles=(filesProp?.length?filesProp:file?[file]:[]).filter(f=>f?.type?.startsWith('image/')||f?.type?.startsWith('video/'))
+  const [clips,setClips]=useState(()=>initialFiles.map(makeClip)),[activeId,setActiveId]=useState(null),[playhead,setPlayhead]=useState(0),[error,setError]=useState(''),[exporting,setExporting]=useState(false)
+  const selected=settings||{},active=clips.find(c=>c.id===activeId)||clips[0]
+  const total=clips.reduce((s,c)=>s+clipLen(c),0), activeIndex=clips.findIndex(c=>c.id===active?.id),activeStart=clips.slice(0,Math.max(0,activeIndex)).reduce((s,c)=>s+clipLen(c),0)
+  const update=patch=>onChange?.({...selected,...patch})
+  useEffect(()=>{if(!activeId&&clips[0])setActiveId(clips[0].id)},[clips,activeId])
+  useEffect(()=>{
+    let cancelled=false
+    clips.filter(c=>c.kind==='video'&&!c.sourceDuration).forEach(c=>{const url=URL.createObjectURL(c.file),v=document.createElement('video');v.preload='metadata';v.src=url;v.onloadedmetadata=()=>{const d=Number(v.duration);if(!cancelled&&Number.isFinite(d)&&d>0)setClips(prev=>prev.map(x=>x.id===c.id?{...x,sourceDuration:d,out:d}:x));URL.revokeObjectURL(url)};v.onerror=()=>URL.revokeObjectURL(url)})
+    return()=>{cancelled=true}
+  },[clips.map(c=>c.id+':'+c.sourceDuration).join('|')])
+  useEffect(()=>{
+    const v=videoRef?.current
+    if(!v||!active||active.kind!=='video')return
+    const sync=()=>{if(Number.isFinite(v.duration)&&v.duration>0)setClips(prev=>prev.map(c=>c.id===active.id?{...c,sourceDuration:v.duration,out:c.out>0?Math.min(c.out,v.duration):v.duration}:c));const t=clamp(activeStart+v.currentTime-active.in,0,total);setPlayhead(t)}
+    v.addEventListener('loadedmetadata',sync);v.addEventListener('durationchange',sync);v.addEventListener('timeupdate',sync);v.addEventListener('seeked',sync);sync()
+    return()=>{v.removeEventListener('loadedmetadata',sync);v.removeEventListener('durationchange',sync);v.removeEventListener('timeupdate',sync);v.removeEventListener('seeked',sync)}
+  },[active?.id,videoRef,activeStart,total])
+  useEffect(()=>{const v=videoRef?.current;if(!v||!active||active.kind!=='video')return;const t=clamp(playhead-activeStart+active.in,active.in,active.out||active.sourceDuration||0);if(Number.isFinite(t)&&Math.abs(v.currentTime-t)>.035){try{v.currentTime=t}catch{}}},[playhead,active?.id,activeStart,active?.in,active?.out,videoRef])
+  const seek=t=>setPlayhead(clamp(t,0,total))
+  const changeClips=next=>{setClips(next);const c=next.find(x=>x.id===activeId);if(c)update({trimStart:c.in,trimEnd:c.out,timelineClips:next})}
+  const addFiles=picked=>{const imgs=picked.filter(f=>f.type.startsWith('image/')),vids=picked.filter(f=>f.type.startsWith('video/'));const haveVideo=clips.some(c=>c.kind==='video');const accepted=[...imgs,...(haveVideo?[]:vids.slice(0,1))].map(makeClip);if(!accepted.length){setError('Chỉ hỗ trợ ảnh và tối đa một video trong phiên này.');return}setClips(prev=>[...prev,...accepted]);setError('')}
+  const split=()=>{if(!active||active.kind!=='video'){setError('Chọn một video để tách.');return}const local=active.in+playhead-activeStart;if(local<=active.in+.15||local>=active.out-.15){setError('Đưa playhead vào giữa clip rồi chọn Tách.');return}const a={...active,id:makeClip(active.file).id,out:local},b={...active,id:makeClip(active.file).id,in:local};setClips(prev=>[...prev.slice(0,activeIndex),a,b,...prev.slice(activeIndex+1)]);setActiveId(b.id);setError('')}
+  const remove=()=>{if(!active)return;const next=clips.filter(c=>c.id!==active.id);setClips(next);setActiveId(next[0]?.id||null);setPlayhead(0)}
+  const move=delta=>{const i=clips.findIndex(c=>c.id===activeId),j=i+delta;if(i<0||j<0||j>=clips.length)return;const next=clips.slice();[next[i],next[j]]=[next[j],next[i]];setClips(next)}
+  const exportAction=async()=>{if(!clips.length){setError('Hãy chọn ảnh hoặc video.');return}if(total>60){setError('Story tối đa 60 giây. Hãy trim timeline xuống tối đa 60 giây.');return}setExporting(true);setError('');try{if(!onExport){update({timelineClips:clips,storyDuration:total,exportRequested:true});setError('Timeline đã lưu. Cần nối callback exportToBlob và upload hiện có trước khi đăng.')}else await onExport({clips,settings:selected,duration:total})}catch(e){setError(e?.message||'Xuất video thất bại.')}finally{setExporting(false)}}
+  return <section className="pointer-events-auto mx-2 mb-2 max-h-[74vh] space-y-3 overflow-y-auto rounded-t-[18px] border border-white/15 bg-[#101115]/[.98] p-3 text-white shadow-xl">
+    <div className="flex items-center justify-between gap-2"><div className="min-w-0"><div className="text-sm font-bold">D-Social Studio</div><div className="text-[11px] text-white/50">Video gốc {fmt(active?.sourceDuration||0)} · Timeline {fmt(total)}</div></div><MediaPicker onFiles={addFiles}/></div>
+    <PreviewPlayer file={active?.file||file} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} settings={selected} onSettingsChange={update}/>
+    <Timeline clips={clips} activeId={active?.id} onSelect={id=>{setActiveId(id);setError('')}} onChangeClips={changeClips} playhead={playhead} onSeek={seek} storyMode/>
+    <div className="flex items-center justify-between gap-2 text-[11px] text-white/60"><span className="min-w-0 truncate">{active?.file?.name||'Chưa chọn media'}</span>{active&&<label className="flex shrink-0 items-center gap-1">Ảnh <select disabled={active.kind!=='image'} value={clipLen(active)} onChange={e=>{const d=Number(e.target.value);changeClips(clips.map(c=>c.id===active.id?{...c,out:c.in+d,sourceDuration:c.in+d}:c))}} className="rounded bg-white/10 px-1.5 py-1"><option value="2">2s</option><option value="3">3s</option><option value="4">4s</option><option value="5">5s</option><option value="6">6s</option><option value="8">8s</option></select></label>}</div>
+    <AudioTrack settings={selected} onChange={update} onOpenTool={onOpenTool}/><TextOverlayEditor settings={selected} onChange={update}/>
+    <Toolbar onOpenTool={onOpenTool} onSplit={split} onDelete={remove} onMoveUp={()=>move(-1)} onMoveDown={()=>move(1)} onExport={exportAction} exporting={exporting}/>
+    {error&&<p role="alert" className="break-words rounded-lg border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-100">{error}</p>}
+    <div className="grid grid-cols-2 gap-2"><button type="button" disabled={exporting||!clips.length||total>60} onClick={exportAction} className="rounded-lg bg-cyan-400 px-3 py-3 text-sm font-bold text-black disabled:opacity-40">{exporting?'Đang xuất…':'Xuất video'}</button><button type="button" onClick={()=>onOpenTool?.('publish')} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold">Tiếp →</button></div>
+    <p className="text-[10px] leading-4 text-white/40">Timeline dùng thời lượng đầy đủ của nguồn; giới hạn 60 giây áp dụng cho Story. Việc đăng cần dùng luồng export/upload của Composer.</p>
   </section>
 }
