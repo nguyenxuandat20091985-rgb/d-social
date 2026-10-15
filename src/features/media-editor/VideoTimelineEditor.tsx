@@ -1,5 +1,6 @@
 // @ts-nocheck
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { exportToBlob, blobToVideoFile } from './timelineExport'
 import { AudioLines, Music2, Pause, Play, Type, Scissors, Trash2, ChevronUp, ChevronDown, ImagePlus, Plus } from 'lucide-react'
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(n)) ? Number(n) : min))
@@ -85,9 +86,9 @@ export function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, o
     </div>{storyMode&&total>60&&<p role="alert" className="text-xs text-amber-200">Story dài {fmt(total)}. Hãy cắt xuống tối đa 01:00 trước khi xuất.</p>}</div>
 }
 
-export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false, storyMode = false, onExport }) {
+export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false, storyMode = false, onExport, onPublishStory, onContinuePost }) {
   const initialFiles=(filesProp?.length?filesProp:file?[file]:[]).filter(f=>f?.type?.startsWith('image/')||f?.type?.startsWith('video/'))
-  const [clips,setClips]=useState(()=>initialFiles.map(makeClip)),[activeId,setActiveId]=useState(null),[playhead,setPlayhead]=useState(0),[error,setError]=useState(''),[exporting,setExporting]=useState(false)
+  const [clips,setClips]=useState(()=>initialFiles.map(makeClip)),[activeId,setActiveId]=useState(null),[playhead,setPlayhead]=useState(0),[error,setError]=useState(''),[exporting,setExporting]=useState(false),[exportedFile,setExportedFile]=useState(null)
   const selected=settings||{},active=clips.find(c=>c.id===activeId)||clips[0]
   const total=clips.reduce((s,c)=>s+clipLen(c),0), activeIndex=clips.findIndex(c=>c.id===active?.id),activeStart=clips.slice(0,Math.max(0,activeIndex)).reduce((s,c)=>s+clipLen(c),0)
   const update=patch=>onChange?.({...selected,...patch})
@@ -111,7 +112,22 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const split=()=>{if(!active||active.kind!=='video'){setError('Chọn một video để tách.');return}const local=active.in+playhead-activeStart;if(local<=active.in+.15||local>=active.out-.15){setError('Đưa playhead vào giữa clip rồi chọn Tách.');return}const a={...active,id:makeClip(active.file).id,out:local},b={...active,id:makeClip(active.file).id,in:local};setClips(prev=>[...prev.slice(0,activeIndex),a,b,...prev.slice(activeIndex+1)]);setActiveId(b.id);setError('')}
   const remove=()=>{if(!active)return;const next=clips.filter(c=>c.id!==active.id);setClips(next);setActiveId(next[0]?.id||null);setPlayhead(0)}
   const move=delta=>{const i=clips.findIndex(c=>c.id===activeId),j=i+delta;if(i<0||j<0||j>=clips.length)return;const next=clips.slice();[next[i],next[j]]=[next[j],next[i]];setClips(next)}
-  const exportAction=async()=>{if(!clips.length){setError('Hãy chọn ảnh hoặc video.');return}if(storyMode&&total>60){setError('Story tối đa 60 giây. Hãy trim timeline xuống tối đa 60 giây.');return}setExporting(true);setError('');try{if(!onExport){update({timelineClips:clips,storyDuration:total,exportRequested:true});setError('Timeline đã lưu. Cần nối callback exportToBlob và upload hiện có trước khi đăng.')}else await onExport({clips,settings:selected,duration:total})}catch(e){setError(e?.message||'Xuất video thất bại.')}finally{setExporting(false)}}
+  const exportAction=async({forStory=false}={})=>{
+    if(!clips.length){setError('Hãy chọn ảnh hoặc video.');return null}
+    if((forStory||storyMode)&&total>60){setError('Tin 24 giờ chỉ được dài tối đa 60 giây. Hãy trim timeline rồi thử lại.');return null}
+    setExporting(true);setError('')
+    try{
+      const blob=await exportToBlob(clips,selected,{storyMode:forStory||storyMode})
+      const output=blobToVideoFile(blob, 'd-social-edited')
+      setExportedFile(output)
+      if(onExport) await onExport({blob,file:output,clips,settings:selected,duration:total})
+      return output
+    }catch(e){setError(e?.message||'Xuất video thất bại. Hãy thử lại bằng Chrome Android mới nhất.');return null}
+    finally{setExporting(false)}
+  }
+  const ensureExported=async forStory=>exportedFile||await exportAction({forStory})
+  const publishStory=async()=>{if(exporting)return;const output=await ensureExported(true);if(!output)return;if(!onPublishStory){setError('Chưa kết nối luồng đăng Story trong Composer.');return}setExporting(true);setError('');try{await onPublishStory(output)}catch(e){setError(e?.message||'Không đăng được tin.')}finally{setExporting(false)}}
+  const continuePost=async()=>{if(exporting)return;const output=await ensureExported(false);if(!output)return;if(!onContinuePost){onOpenTool?.('publish');return}try{await onContinuePost(output)}catch(e){setError(e?.message||'Không thể chuyển sang bước đăng bài.')}}
   return <section className="pointer-events-auto mx-2 mb-2 max-h-[74vh] space-y-3 overflow-y-auto rounded-t-[18px] border border-white/15 bg-[#101115]/[.98] p-3 text-white shadow-xl">
     <div className="flex items-center justify-between gap-2"><div className="min-w-0"><div className="text-sm font-bold">D-Social Studio</div><div className="text-[11px] text-white/50">Video gốc {fmt(active?.sourceDuration||0)} · Timeline {fmt(total)}</div></div><MediaPicker onFiles={addFiles}/></div>
     <PreviewPlayer file={active?.file||file} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} settings={selected} onSettingsChange={update}/>
@@ -120,7 +136,8 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     <AudioTrack settings={selected} onChange={update} onOpenTool={onOpenTool}/><TextOverlayEditor settings={selected} onChange={update}/>
     <Toolbar onOpenTool={onOpenTool} onSplit={split} onDelete={remove} onMoveUp={()=>move(-1)} onMoveDown={()=>move(1)} onExport={exportAction} exporting={exporting}/>
     {error&&<p role="alert" className="break-words rounded-lg border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-100">{error}</p>}
-    <div className="grid grid-cols-2 gap-2"><button type="button" disabled={exporting||!clips.length||(storyMode&&total>60)} onClick={exportAction} className="rounded-lg bg-cyan-400 px-3 py-3 text-sm font-bold text-black disabled:opacity-40">{exporting?'Đang xuất…':'Xuất video'}</button><button type="button" onClick={()=>onOpenTool?.('publish')} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold">Tiếp →</button></div>
-    <p className="text-[10px] leading-4 text-white/40">Timeline dùng thời lượng đầy đủ của nguồn; giới hạn 60 giây áp dụng cho Story. Việc đăng cần dùng luồng export/upload của Composer.</p>
+    {exportedFile&&<p className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-2 text-xs text-emerald-100">Đã xuất video ({(exportedFile.size/1024/1024).toFixed(1)} MB). Anh có thể xuất lại sau khi chỉnh sửa.</p>}
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><button type="button" disabled={exporting||!clips.length||(storyMode&&total>60)} onClick={()=>exportAction()} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold disabled:opacity-40">{exporting?'Đang xuất…':'Xuất video'}</button><button type="button" disabled={exporting||!clips.length||total>60} onClick={publishStory} className="rounded-lg bg-cyan-400 px-3 py-3 text-sm font-bold text-black disabled:opacity-40">{exporting?'Đang xử lý…':'Đăng tin 24h'}</button><button type="button" disabled={exporting||!clips.length} onClick={continuePost} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold disabled:opacity-40">{exporting?'Đang xử lý…':'Tiếp → / Đăng bài viết'}</button></div>
+    <p className="text-[10px] leading-4 text-white/40">Video được kết xuất thành WebM/MP4 trong trình duyệt. Âm thanh nền hiện chưa được trộn vào tệp kết xuất.</p>
   </section>
 }
