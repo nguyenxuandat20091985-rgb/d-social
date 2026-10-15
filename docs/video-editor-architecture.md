@@ -46,6 +46,7 @@ The current change removes the explicit one-video limit in the picker and append
 
 ### Phase A — media/timeline and audio export foundation
 - [x] Multi-select image and video files in one picker; append later imports without replacing existing clips.
+- [x] Full-screen mobile-first editing workspace with tool sheets for trim, music, text, stickers, filters, adjustment, aspect ratio, and background.
 - [x] Timeline clip selection, basic reorder/delete/split/trim, image duration, text overlay, duplicate clip, and splitting image clips.
 - [x] Export engine routes source-video audio and uploaded background music into a mixed MediaRecorder audio track with independent gain settings.
 - [ ] Verify exported audio is audible and synchronized for image-only, video-only, and mixed image/video projects on Android Chrome.
@@ -57,9 +58,9 @@ The current change removes the explicit one-video limit in the picker and append
 - [ ] Keyboard-accessible controls and touch-target regression tests.
 
 ### Phase C — visual editing
-- [ ] Per-clip crop/position/scale/rotation and fit/fill controls.
-- [ ] Multiple text/sticker overlays with independent start/end times.
-- [ ] Filters, transitions, speed controls, and keyframe-based animation.
+- [x] Basic global crop/position/scale/rotation, fit/fill, filter, color-adjustment, background, and sticker controls; current canvas export renders these settings.
+- [ ] Per-clip transforms and multiple text/sticker overlays with independent start/end times.
+- [ ] Transitions, speed controls, and keyframe-based animation.
 
 ### Phase D — persistence and delivery
 - [ ] Save/load project metadata and timeline to IndexedDB; keep large blobs out of localStorage.
