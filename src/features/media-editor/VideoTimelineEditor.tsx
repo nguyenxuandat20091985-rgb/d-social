@@ -139,8 +139,11 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
             </div>
           </div>
         })}
-        <div className="pointer-events-none absolute bottom-0 top-0 z-20" style={{ left: 'calc(54px + 8px + (100% - 62px) * ' + (clamp(playhead / Math.max(total, .1), 0, 1)) + ')' }}><div className="h-full w-[2px] bg-white shadow-[0_0_6px_rgba(255,255,255,.65)]" /><div className="absolute -top-1 -left-[3px] h-2 w-2 rounded-sm bg-white" /></div>
-        {active && <div className="pointer-events-none absolute top-0 z-10 hidden h-[48px] sm:block" style={{ left: 'calc(62px + (100% - 62px) * ' + pct(activeStart) / 100 + ')', width: 'calc((100% - 62px) * ' + (clipLen(active) / Math.max(total, .1)) + ')' }} />}
+        <div className="pointer-events-none absolute bottom-0 left-[62px] right-0 top-0 z-20">
+          <div className="absolute bottom-0 top-0 w-[2px] bg-white shadow-[0_0_6px_rgba(255,255,255,.65)]" style={{ left: (clamp(playhead / Math.max(total, .1), 0, 1) * 100) + '%' }}>
+            <div className="absolute -left-[3px] -top-1 h-2 w-2 rounded-sm bg-white" />
+          </div>
+        </div>
       </div>
       {active && <div className="mt-2 flex items-center gap-2">
         <span className="w-[54px] shrink-0 text-[9px] text-white/40">CẮT</span>
