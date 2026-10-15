@@ -212,7 +212,15 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     const t = clamp(playhead - activeStart + active.in, active.in, active.out || active.sourceDuration || 0)
     if (Number.isFinite(t) && Math.abs(v.currentTime - t) > .035) { try { v.currentTime = t } catch {} }
   }, [playhead, active && active.id, activeStart, active && active.in, active && active.out, videoRef])
-  const seek = t => setPlayhead(clamp(t, 0, total))
+  const seek = t => {
+    const next = clamp(t, 0, total)
+    setPlayhead(next)
+    let elapsed = 0
+    for (const clip of clips) {
+      if (next <= elapsed + clipLen(clip) + 0.001) { setActiveId(clip.id); break }
+      elapsed += clipLen(clip)
+    }
+  }
   const changeClips = next => {
     setExportedFile(null); setClips(next)
     const c = next.find(x => x.id === activeId)
@@ -328,9 +336,10 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         <div className="flex gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {TOOL_ITEMS.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => toolClick(item.id)} aria-pressed={activeTool === item.id} className={'flex min-w-[66px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] ' + (activeTool === item.id ? 'bg-cyan-300/15 text-cyan-200' : 'text-white/65 hover:bg-white/[0.05]')}><Icon size={19} /><span className="whitespace-nowrap">{item.label}</span></button> })}
         </div>
-        <div className="grid grid-cols-2 gap-2 px-3 pb-2 pt-1.5">
-          <button type="button" disabled={exporting || !clips.length || total > 60 && storyMode} onClick={() => exportAction({ forStory: false })} className={actionButton + ' border border-white/15 bg-white/[0.04]'}><Download size={15} /> {exporting ? 'Đang xuất…' : 'Xuất video'}</button>
-          <button type="button" disabled={exporting || !clips.length || (storyMode && total > 60)} onClick={() => storyMode ? publishStory() : continuePost()} className={actionButton + ' bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : storyMode ? 'Đăng tin 24h' : 'Tiếp → Đăng bài'}</button>
+        <div className={'grid gap-2 px-3 pb-2 pt-1.5 ' + (storyMode ? 'grid-cols-2' : 'grid-cols-3')}>
+          <button type="button" disabled={exporting || !clips.length || (storyMode && total > 60)} onClick={() => exportAction({ forStory: false })} className={actionButton + ' border border-white/15 bg-white/[0.04]'}><Download size={15} /> {exporting ? 'Đang xuất…' : 'Xuất video'}</button>
+          <button type="button" disabled={exporting || !clips.length || total > 60} onClick={publishStory} className={actionButton + ' border border-cyan-300/40 bg-cyan-300/10 text-cyan-100'}>{exporting ? 'Đang xử lý…' : 'Đăng tin 24h'}</button>
+          {!storyMode && <button type="button" disabled={exporting || !clips.length} onClick={continuePost} className={actionButton + ' bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : 'Tiếp → Đăng bài'}</button>}
         </div>
       </nav>
     </div>
