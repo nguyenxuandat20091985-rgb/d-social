@@ -118,7 +118,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     setExporting(true);setError('')
     try{
       const blob=await exportToBlob(clips,selected,{storyMode:forStory||storyMode})
-      const output=blobToVideoFile(blob, 'd-social-edited')
+      const output=blobToVideoFile(blob, 'd-social-edited', total)
       setExportedFile(output)
       if(onExport) await onExport({blob,file:output,clips,settings:selected,duration:total})
       return output
