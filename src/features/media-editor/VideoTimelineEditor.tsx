@@ -86,6 +86,7 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
 
 function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, settings, storyMode }) {
   const rail = useRef(null)
+  const trackRef = useRef(null)
   const drag = useRef(null)
   const urls = useMemo(() => new Map(clips.map(c => [c.id, URL.createObjectURL(c.file)])), [clips.map(c => c.id).join('|')])
   useEffect(() => () => urls.forEach(url => URL.revokeObjectURL(url)), [urls])
@@ -97,7 +98,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
   const startDrag = (e, mode) => { e.preventDefault(); e.stopPropagation(); drag.current = mode; e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId) }
   const pointerMove = e => {
     if (!drag.current || !rail.current) return
-    const r = rail.current.getBoundingClientRect()
+    const r = (trackRef.current || rail.current).getBoundingClientRect()
     const t = clamp((e.clientX - r.left) / r.width, 0, 1) * total
     if (drag.current === 'playhead') { onSeek(t); return }
     if (!active) return
@@ -109,7 +110,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
   }
   const trackClick = e => {
     if (drag.current || !rail.current) return
-    const r = rail.current.getBoundingClientRect()
+    const r = e.currentTarget.getBoundingClientRect()
     onSeek(clamp((e.clientX - r.left) / r.width, 0, 1) * total)
   }
   const trackRows = [
@@ -126,7 +127,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
           const Icon = row.icon
           return <div key={row.id} className="flex min-h-[48px] items-stretch gap-2">
             <div className="flex w-[54px] shrink-0 flex-col justify-center gap-1 rounded-lg bg-white/[0.035] px-1.5 text-[9px] text-white/50"><Icon size={13} /><span>{row.label}</span></div>
-            <div onClick={trackClick} className={'relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.07] ' + row.color}>
+            <div ref={row.id === 'video' ? trackRef : undefined} onClick={trackClick} className={'relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.07] ' + row.color}>
               {row.id === 'video' && clips.map((c, i) => {
                 const d = clipLen(c)
                 return <button key={c.id} type="button" onClick={e => { e.stopPropagation(); onSelect(c.id); onSeek(clips.slice(0, i).reduce((s, x) => s + clipLen(x), 0)) }} className={'relative min-w-0 overflow-hidden border-r border-black/35 ' + (c.id === activeId ? 'ring-2 ring-inset ring-cyan-300' : '')} style={{ width: (d / Math.max(total, .1) * 100) + '%' }}>
@@ -134,6 +135,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
                   <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-[8px] text-white">{i + 1} · {fmt(d)}</span>
                 </button>
               })}
+              {row.id === 'video' && active && <><div onPointerDown={e => startDrag(e, 'in')} className="absolute bottom-0 top-0 z-10 w-2 cursor-ew-resize border-l-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart) + '%' }} aria-label="Kéo điểm đầu clip" /><div onPointerDown={e => startDrag(e, 'out')} className="absolute bottom-0 top-0 z-10 w-2 cursor-ew-resize border-r-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart + clipLen(active)) + '%' }} aria-label="Kéo điểm cuối clip" /></>}
               {row.id === 'audio' && <div className="flex h-12 w-full items-center gap-[2px] overflow-hidden px-1.5">{Array.from({ length: 96 }, (_, i) => <span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/80" style={{ height: (18 + ((i * 17 + 11) % 25)) + '%' }} />)}{!row.visible && <span className="absolute inset-0 grid place-items-center bg-[#1b1925]/80 text-[10px] text-white/35">+ Thêm âm thanh</span>}{row.visible && <span className="absolute left-2 top-1 rounded bg-black/35 px-1.5 py-0.5 text-[9px] text-violet-100">{settings.audioTrackTitle || 'Âm thanh gốc'}</span>}</div>}
               {row.id === 'text' && <div className="flex h-12 w-full items-center px-1.5">{row.visible ? <div className="flex h-6 w-full items-center rounded-md border border-amber-200/30 bg-amber-300/25 px-2 text-[10px] text-amber-50">{settings.sticker ? settings.sticker + ' ' : ''}{settings.overlayText || 'Nhãn dán'}</div> : <span className="w-full text-center text-[10px] text-white/35">+ Thêm văn bản</span>}</div>}
             </div>
@@ -161,7 +163,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
   </div>
 }
 
-export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false, storyMode = false, onExport, onPublishStory, onContinuePost }) {
+export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, onCloseEditor, trimModeActive = false, storyMode = false, onExport, onPublishStory, onContinuePost }) {
   const initialFiles = (filesProp && filesProp.length ? filesProp : file ? [file] : []).filter(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/')))
   const [clips, setClips] = useState(() => initialFiles.map(makeClip))
   const [activeId, setActiveId] = useState(null)
@@ -283,7 +285,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const rangeClass = 'w-full accent-cyan-300'
   return <section className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#08090d] text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-3">
-      <button type="button" onClick={() => onOpenTool && onOpenTool('close')} aria-label="Đóng trình chỉnh sửa" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-white/10"><ArrowLeft size={21} /></button>
+      <button type="button" onClick={() => onCloseEditor ? onCloseEditor() : setActiveTool('')} aria-label="Đóng trình chỉnh sửa" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-white/10"><ArrowLeft size={21} /></button>
       <div className="min-w-0 flex-1"><div className="text-sm font-bold tracking-wide">D-Social Studio</div><div className="text-[10px] text-white/45">Trình chỉnh sửa video</div></div>
       <div className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[10px] font-semibold text-white/70">{totalLabel}</div>
       <button type="button" disabled={exporting || !clips.length} onClick={() => exportAction()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-cyan-300 px-4 text-xs font-extrabold text-black disabled:opacity-40"><Check size={15} /> {exporting ? 'Đang xuất' : 'Xuất'}</button>
