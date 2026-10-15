@@ -91,7 +91,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [clips,setClips]=useState(()=>initialFiles.map(makeClip)),[activeId,setActiveId]=useState(null),[playhead,setPlayhead]=useState(0),[error,setError]=useState(''),[exporting,setExporting]=useState(false),[exportedFile,setExportedFile]=useState(null)
   const selected=settings||{},active=clips.find(c=>c.id===activeId)||clips[0]
   const total=clips.reduce((s,c)=>s+clipLen(c),0), activeIndex=clips.findIndex(c=>c.id===active?.id),activeStart=clips.slice(0,Math.max(0,activeIndex)).reduce((s,c)=>s+clipLen(c),0)
-  const update=patch=>onChange?.({...selected,...patch})
+  const update=patch=>{setExportedFile(null);onChange?.({...selected,...patch})}
   useEffect(()=>{if(!activeId&&clips[0])setActiveId(clips[0].id)},[clips,activeId])
   useEffect(()=>{
     let cancelled=false
@@ -107,11 +107,11 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   },[active?.id,videoRef,activeStart,total])
   useEffect(()=>{const v=videoRef?.current;if(!v||!active||active.kind!=='video')return;const t=clamp(playhead-activeStart+active.in,active.in,active.out||active.sourceDuration||0);if(Number.isFinite(t)&&Math.abs(v.currentTime-t)>.035){try{v.currentTime=t}catch{}}},[playhead,active?.id,activeStart,active?.in,active?.out,videoRef])
   const seek=t=>setPlayhead(clamp(t,0,total))
-  const changeClips=next=>{setClips(next);const c=next.find(x=>x.id===activeId);if(c)update({trimStart:c.in,trimEnd:c.out,timelineClips:next})}
-  const addFiles=picked=>{const imgs=picked.filter(f=>f.type.startsWith('image/')),vids=picked.filter(f=>f.type.startsWith('video/'));const haveVideo=clips.some(c=>c.kind==='video');const accepted=[...imgs,...(haveVideo?[]:vids.slice(0,1))].map(makeClip);if(!accepted.length){setError('Chỉ hỗ trợ ảnh và tối đa một video trong phiên này.');return}setClips(prev=>[...prev,...accepted]);setError('')}
-  const split=()=>{if(!active||active.kind!=='video'){setError('Chọn một video để tách.');return}const local=active.in+playhead-activeStart;if(local<=active.in+.15||local>=active.out-.15){setError('Đưa playhead vào giữa clip rồi chọn Tách.');return}const a={...active,id:makeClip(active.file).id,out:local},b={...active,id:makeClip(active.file).id,in:local};setClips(prev=>[...prev.slice(0,activeIndex),a,b,...prev.slice(activeIndex+1)]);setActiveId(b.id);setError('')}
-  const remove=()=>{if(!active)return;const next=clips.filter(c=>c.id!==active.id);setClips(next);setActiveId(next[0]?.id||null);setPlayhead(0)}
-  const move=delta=>{const i=clips.findIndex(c=>c.id===activeId),j=i+delta;if(i<0||j<0||j>=clips.length)return;const next=clips.slice();[next[i],next[j]]=[next[j],next[i]];setClips(next)}
+  const changeClips=next=>{setExportedFile(null);setClips(next);const c=next.find(x=>x.id===activeId);if(c)update({trimStart:c.in,trimEnd:c.out,timelineClips:next})}
+  const addFiles=picked=>{setExportedFile(null);const imgs=picked.filter(f=>f.type.startsWith('image/')),vids=picked.filter(f=>f.type.startsWith('video/'));const haveVideo=clips.some(c=>c.kind==='video');const accepted=[...imgs,...(haveVideo?[]:vids.slice(0,1))].map(makeClip);if(!accepted.length){setError('Chỉ hỗ trợ ảnh và tối đa một video trong phiên này.');return}setClips(prev=>[...prev,...accepted]);setError('')}
+  const split=()=>{setExportedFile(null);if(!active||active.kind!=='video'){setError('Chọn một video để tách.');return}const local=active.in+playhead-activeStart;if(local<=active.in+.15||local>=active.out-.15){setError('Đưa playhead vào giữa clip rồi chọn Tách.');return}const a={...active,id:makeClip(active.file).id,out:local},b={...active,id:makeClip(active.file).id,in:local};setClips(prev=>[...prev.slice(0,activeIndex),a,b,...prev.slice(activeIndex+1)]);setActiveId(b.id);setError('')}
+  const remove=()=>{setExportedFile(null);if(!active)return;const next=clips.filter(c=>c.id!==active.id);setClips(next);setActiveId(next[0]?.id||null);setPlayhead(0)}
+  const move=delta=>{setExportedFile(null);const i=clips.findIndex(c=>c.id===activeId),j=i+delta;if(i<0||j<0||j>=clips.length)return;const next=clips.slice();[next[i],next[j]]=[next[j],next[i]];setClips(next)}
   const exportAction=async({forStory=false}={})=>{
     if(!clips.length){setError('Hãy chọn ảnh hoặc video.');return null}
     if((forStory||storyMode)&&total>60){setError('Tin 24 giờ chỉ được dài tối đa 60 giây. Hãy trim timeline rồi thử lại.');return null}
@@ -137,7 +137,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     <Toolbar onOpenTool={onOpenTool} onSplit={split} onDelete={remove} onMoveUp={()=>move(-1)} onMoveDown={()=>move(1)} onExport={exportAction} exporting={exporting}/>
     {error&&<p role="alert" className="break-words rounded-lg border border-red-400/30 bg-red-500/10 p-2 text-xs text-red-100">{error}</p>}
     {exportedFile&&<p className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 p-2 text-xs text-emerald-100">Đã xuất video ({(exportedFile.size/1024/1024).toFixed(1)} MB). Anh có thể xuất lại sau khi chỉnh sửa.</p>}
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3"><button type="button" disabled={exporting||!clips.length||(storyMode&&total>60)} onClick={()=>exportAction()} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold disabled:opacity-40">{exporting?'Đang xuất…':'Xuất video'}</button><button type="button" disabled={exporting||!clips.length||total>60} onClick={publishStory} className="rounded-lg bg-cyan-400 px-3 py-3 text-sm font-bold text-black disabled:opacity-40">{exporting?'Đang xử lý…':'Đăng tin 24h'}</button><button type="button" disabled={exporting||!clips.length} onClick={continuePost} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold disabled:opacity-40">{exporting?'Đang xử lý…':'Tiếp → / Đăng bài viết'}</button></div>
+    <div className={storyMode?"grid grid-cols-2 gap-2":"grid grid-cols-1 gap-2 sm:grid-cols-3"}><button type="button" disabled={exporting||!clips.length||(storyMode&&total>60)} onClick={()=>exportAction()} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold disabled:opacity-40">{exporting?'Đang xuất…':'Xuất video'}</button><button type="button" disabled={exporting||!clips.length||total>60} onClick={publishStory} className="rounded-lg bg-cyan-400 px-3 py-3 text-sm font-bold text-black disabled:opacity-40">{exporting?'Đang xử lý…':'Đăng tin 24h'}</button>{!storyMode&&<button type="button" disabled={exporting||!clips.length} onClick={continuePost} className="rounded-lg border border-white/15 px-3 py-3 text-sm font-semibold disabled:opacity-40">{exporting?'Đang xử lý…':'Tiếp → / Đăng bài viết'}</button>}</div>
     <p className="text-[10px] leading-4 text-white/40">Video được kết xuất thành WebM/MP4 trong trình duyệt. Âm thanh nền hiện chưa được trộn vào tệp kết xuất.</p>
   </section>
 }
