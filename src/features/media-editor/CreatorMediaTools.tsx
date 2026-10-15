@@ -18,7 +18,7 @@ const STICKER_GROUPS = [
   { label: 'Du lịch & hoạt động', items: ['✈️','🚗','🚲','🏖️','🏝️','⛰️','🏕️','🏙️','⚽','🏀','🎮','🎧','📷','🎬','🎨','🛍️','💻','📱','💌','🫶'] },
 ]
 
-export function CreatorMediaTools({ file, files, settings, onChange, mode = 'post', storyMode = false, videoRef, isPlaying = false, onTogglePlayback }) {
+export function CreatorMediaTools({ file, files, settings, onChange, mode = 'post', storyMode = false, videoRef, isPlaying = false, onTogglePlayback, onPublishStory, onContinuePost }) {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState([])
   const [loading, setLoading] = useState(false)
@@ -264,7 +264,7 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
       {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
     </div>}
     {isVideo && videoRef && <div className="absolute bottom-[max(88px,calc(env(safe-area-inset-bottom)+82px))] left-0 right-0 z-30 pointer-events-none">
-      <VideoTimelineEditor file={file} files={files} storyMode={storyMode} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} trimModeActive={activeTool === 'trim'} onOpenTool={tool => { if (tool === 'trim') { setActiveTool('trim'); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
+      <VideoTimelineEditor file={file} files={files} storyMode={storyMode} onPublishStory={onPublishStory} onContinuePost={onContinuePost} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} trimModeActive={activeTool === 'trim'} onOpenTool={tool => { if (tool === 'trim') { setActiveTool('trim'); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
     </div>}
   </div>
 
