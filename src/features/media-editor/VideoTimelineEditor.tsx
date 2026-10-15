@@ -63,7 +63,7 @@ export function Toolbar({ onOpenTool, onSplit, onDelete, onMoveUp, onMoveDown, o
 
 export function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, storyMode = false }) {
   const rail=useRef(null), drag=useRef(null)
-  const urls=useMemo(()=>new Map(clips.filter(c=>c.kind==='video').map(c=>[c.id,URL.createObjectURL(c.file)])),[clips.map(c=>c.id).join('|')])
+  const urls=useMemo(()=>new Map(clips.filter(c=>c.file).map(c=>[c.id,URL.createObjectURL(c.file)])),[clips.map(c=>c.id+':'+c.file?.name+':'+c.file?.lastModified).join('|')])
   useEffect(()=>()=>urls.forEach(url=>URL.revokeObjectURL(url)),[urls])
   const active=clips.find(c=>c.id===activeId)||clips[0], total=clips.reduce((s,c)=>s+clipLen(c),0)
   const idx=clips.findIndex(c=>c.id===active?.id), activeStart=clips.slice(0,Math.max(0,idx)).reduce((s,c)=>s+clipLen(c),0)
@@ -80,7 +80,7 @@ export function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, o
   }
   return <div className="space-y-2"><div className="flex items-center justify-between gap-2 text-[11px]"><span className="font-mono">{fmt(playhead,true)} / {fmt(total)}</span><span className="text-white/45">Nguồn: {fmt(clips.reduce((m,c)=>Math.max(m,c.sourceDuration||0),0))}</span></div>
     <div ref={rail} onPointerMove={pointerMove} onPointerUp={()=>drag.current=null} onPointerCancel={()=>drag.current=null} onClick={e=>{if(drag.current)return;const r=rail.current.getBoundingClientRect();onSeek(clamp((e.clientX-r.left)/r.width,0,1)*total)}} className="relative flex h-[76px] touch-none select-none overflow-visible rounded-md bg-[#252730]">
-      {clips.map((c,i)=>{const d=clipLen(c);return <button key={c.id} type="button" onClick={e=>{e.stopPropagation();onSelect(c.id);onSeek(clips.slice(0,i).reduce((s,x)=>s+clipLen(x),0))}} className={`relative min-w-0 overflow-hidden border-r border-black/50 text-left ${c.id===activeId?'ring-2 ring-inset ring-amber-300':''}`} style={{width:`${d/Math.max(total,.1)*100}%`}}>{c.kind==='image'?<div className="flex h-full items-center justify-center bg-[#343744] text-[10px] text-white/75"><ImagePlus size={15}/></div>:<video muted playsInline preload="metadata" src={urls.get(c.id)} className="h-full w-full object-cover opacity-75"/>}<span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-[9px]">{i+1} · {fmt(d)}</span></button>})}
+      {clips.map((c,i)=>{const d=clipLen(c);return <button key={c.id} type="button" onClick={e=>{e.stopPropagation();onSelect(c.id);onSeek(clips.slice(0,i).reduce((s,x)=>s+clipLen(x),0))}} className={`relative min-w-0 overflow-hidden border-r border-black/50 text-left ${c.id===activeId?'ring-2 ring-inset ring-amber-300':''}`} style={{width:`${d/Math.max(total,.1)*100}%`}}>{c.kind==='image'?<img alt={c.file?.name||'Ảnh trên timeline'} src={urls.get(c.id)} className="h-full w-full object-cover"/>:<video muted playsInline preload="metadata" src={urls.get(c.id)} className="h-full w-full object-cover opacity-75"/>}<span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-[9px]">{i+1} · {fmt(d)}</span></button>})}
       {active&&<><div onPointerDown={e=>startDrag(e,'in')} role="slider" aria-label="Trim start" aria-valuenow={active.in} tabIndex={0} className="absolute inset-y-0 z-20 w-3 cursor-ew-resize rounded-l border-2 border-amber-200 bg-amber-300 touch-none" style={{left:`${activeStart/Math.max(total,.1)*100}%`}}/><div onPointerDown={e=>startDrag(e,'out')} role="slider" aria-label="Trim end" aria-valuenow={active.out} tabIndex={0} className="absolute inset-y-0 z-20 w-3 cursor-ew-resize rounded-r border-2 border-amber-200 bg-amber-300 touch-none" style={{left:`${(activeStart+clipLen(active))/Math.max(total,.1)*100}%`}}/></>}
       <div onPointerDown={e=>startDrag(e,'playhead')} role="slider" aria-label="Playhead" aria-valuemin={0} aria-valuemax={total} aria-valuenow={clamp(playhead,0,total)} tabIndex={0} className="absolute inset-y-[-3px] z-30 w-4 -translate-x-1/2 cursor-ew-resize touch-none" style={{left:`${clamp(playhead/Math.max(total,.1),0,1)*100}%`}}><div className="mx-auto h-full w-[2px] bg-white shadow-[0_0_4px_black]"/></div>
     </div>{storyMode&&total>60&&<p role="alert" className="text-xs text-amber-200">Story dài {fmt(total)}. Hãy cắt xuống tối đa 01:00 trước khi xuất.</p>}</div>
@@ -88,8 +88,17 @@ export function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, o
 
 export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, trimModeActive = false, storyMode = false, onExport, onPublishStory, onContinuePost }) {
   const initialFiles=(filesProp?.length?filesProp:file?[file]:[]).filter(f=>f?.type?.startsWith('image/')||f?.type?.startsWith('video/'))
+  const incomingSignature=initialFiles.map(f=>[f.name,f.size,f.lastModified,f.type].join(':')).join('|')
   const [clips,setClips]=useState(()=>initialFiles.map(makeClip)),[activeId,setActiveId]=useState(null),[playhead,setPlayhead]=useState(0),[error,setError]=useState(''),[exporting,setExporting]=useState(false),[exportedFile,setExportedFile]=useState(null)
+  const lastIncomingSignature=useRef(incomingSignature)
   const selected=settings||{},active=clips.find(c=>c.id===activeId)||clips[0]
+  useEffect(()=>{
+    if(lastIncomingSignature.current===incomingSignature)return
+    lastIncomingSignature.current=incomingSignature
+    const existing=new Set(clips.map(c=>[c.file?.name,c.file?.size,c.file?.lastModified,c.file?.type].join(':')))
+    const additions=initialFiles.filter(f=>!existing.has([f.name,f.size,f.lastModified,f.type].join(':')))
+    if(additions.length){setClips(prev=>[...prev,...additions.map(makeClip)]);setExportedFile(null);setError('')}
+  },[incomingSignature])
   const total=clips.reduce((s,c)=>s+clipLen(c),0), activeIndex=clips.findIndex(c=>c.id===active?.id),activeStart=clips.slice(0,Math.max(0,activeIndex)).reduce((s,c)=>s+clipLen(c),0)
   const update=patch=>{setExportedFile(null);onChange?.({...selected,...patch})}
   useEffect(()=>{if(!activeId&&clips[0])setActiveId(clips[0].id)},[clips,activeId])
