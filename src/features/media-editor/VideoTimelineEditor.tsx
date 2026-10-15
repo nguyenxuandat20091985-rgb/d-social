@@ -27,6 +27,7 @@ const TOOL_ITEMS = [
   { id: 'filter', label: 'Bộ lọc', icon: Palette },
   { id: 'adjust', label: 'Tùy chỉnh', icon: SlidersHorizontal },
   { id: 'ratio', label: 'Tỷ lệ', icon: Crop },
+  { id: 'export', label: 'Xuất file', icon: Download },
   { id: 'background', label: 'Nền', icon: RectangleHorizontal },
   { id: 'avatar', label: 'Ảnh đại diện AI', icon: UserRound },
 ]
@@ -362,6 +363,31 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
           {activeTool === 'adjust' && <div className="space-y-3"><div className="flex items-center justify-between"><span>Thu phóng · {Number(selected.zoom || 1).toFixed(1)}×</span><button type="button" onClick={() => update({ zoom: 1, panX: 0, panY: 0, rotation: 0, brightness: 0, contrast: 100, saturation: 100, hue: 0 })} className="flex items-center gap-1 text-white/55"><RotateCcw size={12} /> Đặt lại</button></div><input aria-label="Thu phóng" className={rangeClass} type="range" min="1" max="3" step=".1" value={selected.zoom || 1} onChange={e => update({ zoom: Number(e.target.value) })} /><label className="block text-white/65">Di chuyển ngang · {selected.panX || 0}%<input className={rangeClass} type="range" min="-50" max="50" value={selected.panX || 0} onChange={e => update({ panX: Number(e.target.value) })} /></label><label className="block text-white/65">Di chuyển dọc · {selected.panY || 0}%<input className={rangeClass} type="range" min="-50" max="50" value={selected.panY || 0} onChange={e => update({ panY: Number(e.target.value) })} /></label><div className="grid grid-cols-2 gap-3"><label className="text-white/65">Độ sáng · {selected.brightness || 0}<input className={rangeClass} type="range" min="-50" max="50" value={selected.brightness || 0} onChange={e => update({ brightness: Number(e.target.value) })} /></label><label className="text-white/65">Tương phản · {selected.contrast ?? 100}<input className={rangeClass} type="range" min="50" max="180" value={selected.contrast ?? 100} onChange={e => update({ contrast: Number(e.target.value) })} /></label><label className="text-white/65">Bão hòa · {selected.saturation ?? 100}<input className={rangeClass} type="range" min="0" max="200" value={selected.saturation ?? 100} onChange={e => update({ saturation: Number(e.target.value) })} /></label><label className="text-white/65">Xoay · {selected.rotation || 0}°<input className={rangeClass} type="range" min="-180" max="180" step="90" value={selected.rotation || 0} onChange={e => update({ rotation: Number(e.target.value) })} /></label></div></div>}
           {activeTool === 'ratio' && <div className="grid grid-cols-4 gap-2">{['9:16', '16:9', '1:1', '4:5'].map(r => <button key={r} type="button" onClick={() => update({ aspectRatio: r })} className={'rounded-lg border px-2 py-3 font-semibold ' + ((selected.aspectRatio || '9:16') === r ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04]')}>{r}</button>)}</div>}
           {activeTool === 'background' && <div className="flex flex-wrap items-center gap-2">{[{ value: '#000000', label: 'Đen' }, { value: '#ffffff', label: 'Trắng' }, { value: '#172554', label: 'Xanh' }, { value: '#581c87', label: 'Tím' }, { value: '#166534', label: 'Xanh lá' }].map(b => <button key={b.value} type="button" onClick={() => update({ backgroundColor: b.value })} className={'rounded-lg border px-3 py-2 ' + ((selected.backgroundColor || '#000000') === b.value ? 'border-cyan-300' : 'border-white/10')}>{b.label}</button>)}<input aria-label="Màu nền tùy chỉnh" type="color" value={selected.backgroundColor || '#000000'} onChange={e => update({ backgroundColor: e.target.value })} className="h-9 w-10 rounded bg-transparent" /></div>}
+          {activeTool === 'export' && <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-white/70">Độ phân giải
+                <select value={selected.exportResolution || 1080} onChange={e => update({ exportResolution: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
+                  <option value="720">720p · nhẹ</option><option value="1080">1080p · Full HD</option><option value="1440">1440p · 2K</option><option value="2160">2160p · 4K</option>
+                </select>
+              </label>
+              <label className="text-white/70">Tốc độ khung hình
+                <select value={selected.frameRate || 30} onChange={e => update({ frameRate: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
+                  <option value="24">24 FPS · Điện ảnh</option><option value="30">30 FPS · Chuẩn</option><option value="60">60 FPS · Mượt</option>
+                </select>
+              </label>
+              <label className="text-white/70">Bitrate
+                <select value={selected.exportBitrateMbps || 8} onChange={e => update({ exportBitrateMbps: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
+                  <option value="4">4 Mbps · Nhẹ</option><option value="8">8 Mbps · Cân bằng</option><option value="16">16 Mbps · Cao</option><option value="35">35 Mbps · Rất cao</option>
+                </select>
+              </label>
+              <label className="text-white/70">Định dạng
+                <select value={selected.exportFormat || 'auto'} onChange={e => update({ exportFormat: e.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
+                  <option value="auto">Tự động theo trình duyệt</option><option value="webm">WebM</option><option value="mp4" disabled={typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported?.('video/mp4')}>MP4 {typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.('video/mp4') ? '' : '(thiết bị chưa hỗ trợ)'}</option>
+                </select>
+              </label>
+            </div>
+            <p className="text-[10px] text-amber-100/75">4K/60 FPS/bitrate cao có thể quá tải điện thoại hoặc làm tệp rất lớn. GIF chưa được hỗ trợ xuất trực tiếp. MP4 chỉ khả dụng khi trình duyệt báo hỗ trợ; Tự động là lựa chọn tương thích hơn.</p>
+          </div>}
           {activeTool === 'avatar' && <p className="text-white/60">Ảnh đại diện AI chưa có dịch vụ tạo ảnh kết nối. Công cụ được đánh dấu rõ ràng thay vì giả lập hoạt động.</p>}
         </div>
       </div>}
