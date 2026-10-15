@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, AudioLines, Check, ChevronDown, ChevronUp, CircleHelp, Clapperboard,
   Copy, Crop, Download, Film, ImagePlus, Layers, Music2, Pause, Play, Plus, RotateCcw,
-  Scissors, SlidersHorizontal, Sparkles, Sticker, Trash2, Type, Volume2, WandSparkles,
+  Scissors, SlidersHorizontal, Sparkles, Sticker, Trash2, Type, Undo2, Redo2, Volume2, WandSparkles,
   X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound
 } from 'lucide-react'
 import { exportToBlob, blobToVideoFile } from './timelineExport'
@@ -172,6 +172,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportedFile, setExportedFile] = useState(null)
+  const undoStack = useRef([]), redoStack = useRef([])
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
   const [showMore, setShowMore] = useState(false)
   const selected = settings || {}
@@ -180,6 +181,26 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const activeIndex = clips.findIndex(c => c.id === active?.id)
   const activeStart = clips.slice(0, Math.max(0, activeIndex)).reduce((s, c) => s + clipLen(c), 0)
   const update = patch => { setExportedFile(null); onChange && onChange({ ...selected, ...patch }) }
+  const recordClips = next => {
+    undoStack.current.push(clips)
+    if (undoStack.current.length > 50) undoStack.current.shift()
+    redoStack.current = []
+    setClips(next); setExportedFile(null)
+  }
+  const undo = () => {
+    if (!undoStack.current.length) return
+    const previous = undoStack.current.pop()
+    redoStack.current.push(clips)
+    setClips(previous); setExportedFile(null); setError('')
+    if (!previous.some(c => c.id === activeId)) setActiveId(previous[0] ? previous[0].id : null)
+  }
+  const redo = () => {
+    if (!redoStack.current.length) return
+    const next = redoStack.current.pop()
+    undoStack.current.push(clips)
+    setClips(next); setExportedFile(null); setError('')
+    if (!next.some(c => c.id === activeId)) setActiveId(next[0] ? next[0].id : null)
+  }
   const incomingSignature = initialFiles.map(f => [f.name, f.size, f.lastModified, f.type].join(':')).join('|')
   const lastIncomingSignature = useRef(incomingSignature)
   useEffect(() => {
@@ -231,7 +252,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     }
   }
   const changeClips = next => {
-    setExportedFile(null); setClips(next)
+    recordClips(next)
     const c = next.find(x => x.id === activeId)
     if (c) update({ trimStart: c.in, trimEnd: c.out, timelineClips: next })
   }
@@ -239,7 +260,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     setExportedFile(null)
     const accepted = picked.filter(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/'))).map(makeClip)
     if (!accepted.length) { setError('Hãy chọn ảnh hoặc video hợp lệ.'); return }
-    setClips(prev => [...prev, ...accepted]); setError('')
+    recordClips([...clips, ...accepted]); setError('')
   }
   const split = () => {
     setExportedFile(null)
@@ -248,26 +269,26 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     if (local <= active.in + .15 || local >= active.out - .15) { setError('Đưa playhead vào giữa clip rồi chọn Tách.'); return }
     const a = { ...active, id: makeClip(active.file).id, out: local }
     const b = { ...active, id: makeClip(active.file).id, in: local }
-    setClips(prev => [...prev.slice(0, activeIndex), a, b, ...prev.slice(activeIndex + 1)])
+    recordClips([...clips.slice(0, activeIndex), a, b, ...clips.slice(activeIndex + 1)])
     setActiveId(b.id); setError('')
   }
   const remove = () => {
     setExportedFile(null)
     if (!active) return
     const next = clips.filter(c => c.id !== active.id)
-    setClips(next); setActiveId(next[0] ? next[0].id : null); setPlayhead(0)
+    recordClips(next); setActiveId(next[0] ? next[0].id : null); setPlayhead(0)
   }
   const duplicate = () => {
     if (!active) return
     const copy = { ...active, id: makeClip(active.file).id }
     const next = [...clips.slice(0, activeIndex + 1), copy, ...clips.slice(activeIndex + 1)]
-    setClips(next); setActiveId(copy.id); setPlayhead(activeStart + clipLen(active)); setExportedFile(null); setError('')
+    recordClips(next); setActiveId(copy.id); setPlayhead(activeStart + clipLen(active)); setError('')
   }
   const move = delta => {
     setExportedFile(null)
     const i = clips.findIndex(c => c.id === activeId), j = i + delta
     if (i < 0 || j < 0 || j >= clips.length) return
-    const next = clips.slice(); [next[i], next[j]] = [next[j], next[i]]; setClips(next)
+    const next = clips.slice(); [next[i], next[j]] = [next[j], next[i]]; recordClips(next)
   }
   const exportAction = async ({ forStory = false } = {}) => {
     if (!clips.length) { setError('Hãy chọn ảnh hoặc video.'); return null }
@@ -324,7 +345,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
       </div>
 
       <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-3 pb-2 pt-2.5">
-        <div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-bold"><Clapperboard size={15} className="text-cyan-300" /> Timeline</div><div className="flex items-center gap-1.5"><button type="button" disabled={activeIndex <= 0} onClick={() => move(-1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip lên trước"><ChevronUp size={15} /></button><button type="button" disabled={activeIndex < 0 || activeIndex >= clips.length - 1} onClick={() => move(1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip ra sau"><ChevronDown size={15} /></button><button type="button" disabled={!active} onClick={split} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Tách clip"><Scissors size={14} /></button><button type="button" disabled={!active} onClick={duplicate} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Sao chép clip"><Copy size={14} /></button><button type="button" disabled={!active} onClick={remove} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] text-red-200 disabled:opacity-25" aria-label="Xóa clip"><Trash2 size={14} /></button><MediaPicker onFiles={addFiles} disabled={exporting} /></div></div>
+        <div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-bold"><Clapperboard size={15} className="text-cyan-300" /> Timeline</div><div className="flex items-center gap-1.5"><button type="button" disabled={!undoStack.current.length} onClick={undo} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Hoàn tác"><Undo2 size={14} /></button><button type="button" disabled={!redoStack.current.length} onClick={redo} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Làm lại"><Redo2 size={14} /></button><button type="button" disabled={activeIndex <= 0} onClick={() => move(-1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip lên trước"><ChevronUp size={15} /></button><button type="button" disabled={activeIndex < 0 || activeIndex >= clips.length - 1} onClick={() => move(1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip ra sau"><ChevronDown size={15} /></button><button type="button" disabled={!active} onClick={split} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Tách clip"><Scissors size={14} /></button><button type="button" disabled={!active} onClick={duplicate} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Sao chép clip"><Copy size={14} /></button><button type="button" disabled={!active} onClick={remove} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] text-red-200 disabled:opacity-25" aria-label="Xóa clip"><Trash2 size={14} /></button><MediaPicker onFiles={addFiles} disabled={exporting} /></div></div>
         <Timeline clips={clips} activeId={active && active.id} onSelect={id => { setActiveId(id); setError('') }} onChangeClips={changeClips} playhead={playhead} onSeek={seek} settings={selected} storyMode={storyMode} />
       </div>
 
