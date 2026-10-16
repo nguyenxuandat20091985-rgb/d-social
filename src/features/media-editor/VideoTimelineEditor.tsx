@@ -124,6 +124,7 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
 }
 
 function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, settings, storyMode }) {
+  const [timelineZoom, setTimelineZoom] = useState(1)
   const rail = useRef(null)
   const trackRef = useRef(null)
   const drag = useRef(null)
@@ -158,10 +159,10 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
     { id: 'text', label: 'Văn bản', icon: Type, color: 'bg-amber-300/15', visible: !!(settings.overlayText || settings.sticker) },
   ]
   return <div className="space-y-2.5">
-    <div className="flex items-center justify-between text-[11px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><span>{clips.length} đoạn · {fmt(total)}</span></div>
+    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><div className="flex items-center gap-2"><label className="flex items-center gap-1.5">Zoom timeline <input aria-label="Thu phóng timeline" type="range" min="1" max="4" step="0.25" value={timelineZoom} onChange={e => setTimelineZoom(Number(e.target.value))} className="w-20 accent-cyan-300" /><span className="w-8 text-right">{timelineZoom.toFixed(2)}×</span></label><span>{clips.length} đoạn · {fmt(total)}</span></div></div>
     <div className="relative">
       <div className="mb-1 flex items-center gap-2 pl-1 text-[10px] text-white/35"><span className="w-[54px] shrink-0">TRACK</span><span className="flex-1">KÉO ĐỂ TUA · CHỌN ĐOẠN ĐỂ SỬA</span></div>
-      <div ref={rail} className="relative space-y-1.5 touch-none select-none" onPointerMove={pointerMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
+      <div className="overflow-x-auto overscroll-x-contain rounded-lg" style={{ touchAction: 'pan-x' }}><div ref={rail} className="relative space-y-1.5 touch-none select-none" style={{ minWidth: (100 * timelineZoom) + '%' }} onPointerMove={pointerMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
         {trackRows.map(row => {
           const Icon = row.icon
           return <div key={row.id} className="flex min-h-[48px] items-stretch gap-2">
@@ -185,7 +186,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
             <div className="absolute -left-[3px] -top-1 h-2 w-2 rounded-sm bg-white" />
           </div>
         </div>
-      </div>
+      </div></div>
       {active && <div className="mt-2 flex items-center gap-2">
         <span className="w-[54px] shrink-0 text-[9px] text-white/40">CẮT</span>
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/[0.035] px-2 py-1.5">
