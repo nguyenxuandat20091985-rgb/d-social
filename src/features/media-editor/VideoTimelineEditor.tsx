@@ -55,18 +55,16 @@ async function readProject() {
 }
 
 const TOOL_ITEMS = [
-  { id: 'trim', label: 'Chỉnh sửa', icon: Scissors },
+  { id: 'template', label: 'Mẫu', icon: Clapperboard },
   { id: 'music', label: 'Âm thanh', icon: Music2 },
   { id: 'text', label: 'Văn bản', icon: Type },
   { id: 'sticker', label: 'Nhãn dán', icon: Sticker },
-  { id: 'overlay', label: 'Lớp phủ', icon: Layers },
   { id: 'effects', label: 'Hiệu ứng', icon: Sparkles },
   { id: 'filter', label: 'Bộ lọc', icon: Palette },
-  { id: 'adjust', label: 'Tùy chỉnh', icon: SlidersHorizontal },
   { id: 'ratio', label: 'Tỷ lệ', icon: Crop },
-  { id: 'export', label: 'Xuất file', icon: Download },
+  { id: 'export', label: 'Định dạng', icon: Download },
+  { id: 'adjust', label: 'Điều chỉnh', icon: SlidersHorizontal },
   { id: 'background', label: 'Nền', icon: RectangleHorizontal },
-  { id: 'avatar', label: 'Ảnh đại diện AI', icon: UserRound },
 ]
 const FILTERS = [
   { id: 'none', label: 'Gốc', css: 'none' },
@@ -157,8 +155,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
     { id: 'video', label: 'Video', icon: Film, color: 'bg-emerald-400/15', visible: true },
     { id: 'audio', label: 'Âm thanh', icon: AudioLines, color: 'bg-violet-400/15', visible: !!(settings.audioTrackTitle || settings.audioTrackFile || settings.audioTrackUrl || settings.audioSource === 'pixabay') },
     { id: 'text', label: 'Văn bản', icon: Type, color: 'bg-amber-300/15', visible: !!(settings.overlayText || settings.sticker) },
-  ]
-  return <div className="space-y-2.5">
+  ]  return <div className="space-y-2.5">
     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><div className="flex items-center gap-2"><label className="flex items-center gap-1.5">Zoom timeline <input aria-label="Thu phóng timeline" type="range" min="1" max="4" step="0.25" value={timelineZoom} onChange={e => setTimelineZoom(Number(e.target.value))} className="w-20 accent-cyan-300" /><span className="w-8 text-right">{timelineZoom.toFixed(2)}×</span></label><span>{clips.length} đoạn · {fmt(total)}</span></div></div>
     <div className="relative">
       <div className="mb-1 flex items-center gap-2 pl-1 text-[10px] text-white/35"><span className="w-[54px] shrink-0">TRACK</span><span className="flex-1">KÉO ĐỂ TUA · CHỌN ĐOẠN ĐỂ SỬA</span></div>
@@ -170,12 +167,12 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
             <div ref={row.id === 'video' ? trackRef : undefined} onClick={trackClick} className={'relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.07] ' + row.color}>
               {row.id === 'video' && clips.map((c, i) => {
                 const d = clipLen(c)
-                return <button key={c.id} type="button" onClick={e => { e.stopPropagation(); onSelect(c.id); onSeek(clips.slice(0, i).reduce((s, x) => s + clipLen(x), 0)) }} className={'relative min-w-0 overflow-hidden border-r border-black/35 ' + (c.id === activeId ? 'ring-2 ring-inset ring-cyan-300' : '')} style={{ width: (d / Math.max(total, .1) * 100) + '%' }}>
+                return <button key={c.id} type="button" onClick={e => { e.stopPropagation(); onSelect(c.id); onSeek(clips.slice(0, i).reduce((s, x) => s + clipLen(x), 0)) }} className={'relative min-w-0 overflow-hidden border-r border-black/35 ' + (c.id === activeId ? 'ring-[3px] ring-inset ring-white' : '')} style={{ width: (d / Math.max(total, .1) * 100) + '%' }}>
                   {c.kind === 'image' ? <img src={urls.get(c.id)} alt="" className="h-full w-full object-cover" /> : <video muted playsInline preload="metadata" src={urls.get(c.id)} className="h-full w-full object-cover" />}
                   <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-[8px] text-white">{i + 1} · {fmt(d)}</span>
                 </button>
               })}
-              {row.id === 'video' && active && <><div onPointerDown={e => startDrag(e, 'in')} className="absolute bottom-0 top-0 z-10 w-2 cursor-ew-resize border-l-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart) + '%' }} aria-label="Kéo điểm đầu clip" /><div onPointerDown={e => startDrag(e, 'out')} className="absolute bottom-0 top-0 z-10 w-2 cursor-ew-resize border-r-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart + clipLen(active)) + '%' }} aria-label="Kéo điểm cuối clip" /></>}
+              {row.id === 'video' && active && <><div onPointerDown={e => startDrag(e, 'in')} className="absolute bottom-0 top-0 z-10 w-3 cursor-ew-resize border-l-[3px] border-white bg-white/45 shadow-[0_0_5px_rgba(255,255,255,.55)]" style={{ left: pct(activeStart) + '%' }} aria-label="Kéo điểm đầu clip" /><div onPointerDown={e => startDrag(e, 'out')} className="absolute bottom-0 top-0 z-10 w-3 cursor-ew-resize border-r-[3px] border-white bg-white/45 shadow-[0_0_5px_rgba(255,255,255,.55)]" style={{ left: pct(activeStart + clipLen(active)) + '%' }} aria-label="Kéo điểm cuối clip" /></>}
               {row.id === 'audio' && <div className="flex h-12 w-full items-center gap-[2px] overflow-hidden px-1.5">{Array.from({ length: 96 }, (_, i) => <span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/80" style={{ height: (18 + ((i * 17 + 11) % 25)) + '%' }} />)}{!row.visible && <span className="absolute inset-0 grid place-items-center bg-[#1b1925]/80 text-[10px] text-white/35">+ Thêm âm thanh</span>}{row.visible && <span className="absolute left-2 top-1 rounded bg-black/35 px-1.5 py-0.5 text-[9px] text-violet-100">{settings.audioTrackTitle || 'Âm thanh gốc'}</span>}</div>}
               {row.id === 'text' && <div className="flex h-12 w-full items-center px-1.5">{row.visible ? <div className="flex h-6 w-full items-center rounded-md border border-amber-200/30 bg-amber-300/25 px-2 text-[10px] text-amber-50">{settings.sticker ? settings.sticker + ' ' : ''}{settings.overlayText || 'Nhãn dán'}</div> : <span className="w-full text-center text-[10px] text-white/35">+ Thêm văn bản</span>}</div>}
             </div>
@@ -215,6 +212,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const undoStack = useRef([]), redoStack = useRef([])
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
   const [showMore, setShowMore] = useState(false)
+  const [toolbarMode, setToolbarMode] = useState('clip')
   const selected = settings || {}
   const active = clips.find(c => c.id === activeId) || clips[0]
   const total = clips.reduce((s, c) => s + clipLen(c), 0)
@@ -317,8 +315,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     if (!active) return
     const next = clips.filter(c => c.id !== active.id)
     recordClips(next); setActiveId(next[0] ? next[0].id : null); setPlayhead(0)
-  }
-  const duplicate = () => {
+  }  const duplicate = () => {
     if (!active) return
     const copy = { ...active, id: makeClip(active.file).id }
     const next = [...clips.slice(0, activeIndex + 1), copy, ...clips.slice(activeIndex + 1)]
@@ -477,13 +474,35 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
       </div>}
 
       <nav className="shrink-0 border-t border-white/10 bg-[#101116] pb-1 pt-1.5">
-        <div className="flex gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TOOL_ITEMS.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => toolClick(item.id)} aria-pressed={activeTool === item.id} className={'flex min-w-[66px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] ' + (activeTool === item.id ? 'bg-cyan-300/15 text-cyan-200' : 'text-white/65 hover:bg-white/[0.05]')}><Icon size={19} /><span className="whitespace-nowrap">{item.label}</span></button> })}
-        </div>
+        {active && toolbarMode === 'clip' ? <>
+          <div className="mb-1 flex items-center justify-between px-3 pt-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Công cụ clip · {activeIndex + 1}</span>
+            <button type="button" onClick={() => setToolbarMode('main')} className="min-h-9 rounded-full border border-white/15 px-3 text-[11px] font-semibold text-white/80">Tất cả công cụ ↗</button>
+          </div>
+          <div className="flex gap-1 overflow-x-auto px-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button type="button" onClick={split} className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/85"><Scissors size={19}/><span>Tách</span></button>
+            <button type="button" disabled className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/35" title="Tốc độ clip chưa được hỗ trợ trong bộ xuất hiện tại"><MoveHorizontal size={19}/><span>Tốc độ</span></button>
+            <button type="button" onClick={() => toolClick('music')} className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/85"><Volume2 size={19}/><span>Âm lượng</span></button>
+            <button type="button" onClick={() => toolClick('effects')} className="flex min-w-[76px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/85"><Sparkles size={19}/><span>Hiệu ứng vào/ra</span></button>
+            <button type="button" disabled className="flex min-w-[68px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/35" title="Xóa nền cần mô hình xử lý nền riêng"><WandSparkles size={19}/><span>Xóa nền</span></button>
+            <button type="button" onClick={() => toolClick('filter')} className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/85"><Palette size={19}/><span>Bộ lọc</span></button>
+            <button type="button" onClick={() => toolClick('adjust')} className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/85"><SlidersHorizontal size={19}/><span>Điều chỉnh</span></button>
+            <button type="button" onClick={duplicate} className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-white/85"><Copy size={19}/><span>Nhân bản</span></button>
+            <button type="button" onClick={remove} className="flex min-w-[62px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] text-red-200"><Trash2 size={19}/><span>Xóa</span></button>
+          </div>
+        </> : <>
+          <div className="mb-1 flex items-center justify-between px-3 pt-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Công cụ chỉnh sửa</span>
+            {active && <button type="button" onClick={() => setToolbarMode('clip')} className="min-h-9 rounded-full border border-white/15 px-3 text-[11px] font-semibold text-white/80">Công cụ clip ↗</button>}
+          </div>
+          <div className="flex gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {TOOL_ITEMS.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => { if (item.id === 'template') { setError('Thư viện mẫu chưa được kết nối trong phiên bản hiện tại.'); return } toolClick(item.id) }} aria-pressed={activeTool === item.id} className={'flex min-w-[66px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] ' + (activeTool === item.id ? 'bg-white/15 text-white' : 'text-white/65 hover:bg-white/[0.05]')}><Icon size={19} /><span className="whitespace-nowrap">{item.label}</span></button> })}
+          </div>
+        </>}
         <div className={'grid gap-2 px-3 pb-2 pt-1.5 ' + (storyMode ? 'grid-cols-2' : 'grid-cols-3')}>
           <button type="button" disabled={exporting || !clips.length || (storyMode && total > 60)} onClick={() => exportAction({ forStory: false })} className={actionButton + ' border border-white/15 bg-white/[0.04]'}><Download size={15} /> {exporting ? 'Đang xuất…' : 'Xuất video'}</button>
-          <button type="button" disabled={exporting || !clips.length || total > 60} onClick={publishStory} className={actionButton + ' border border-cyan-300/40 bg-cyan-300/10 text-cyan-100'}>{exporting ? 'Đang xử lý…' : 'Đăng tin 24h'}</button>
-          {!storyMode && <button type="button" disabled={exporting || !clips.length} onClick={continuePost} className={actionButton + ' bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : 'Tiếp → Đăng bài'}</button>}
+          <button type="button" disabled={exporting || !clips.length || total > 60} onClick={publishStory} className={actionButton + ' border border-white/20 bg-white/[0.07] text-white'}>{exporting ? 'Đang xử lý…' : 'Đăng tin 24h'}</button>
+          {!storyMode && <button type="button" disabled={exporting || !clips.length} onClick={continuePost} className={actionButton + ' bg-white text-black'}>{exporting ? 'Đang xử lý…' : 'Tiếp → Đăng bài'}</button>}
         </div>
       </nav>
     </div>
