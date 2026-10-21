@@ -18,7 +18,7 @@ const STICKER_GROUPS = [
   { label: 'Du lịch & hoạt động', items: ['✈️','🚗','🚲','🏖️','🏝️','⛰️','🏕️','🏙️','⚽','🏀','🎮','🎧','📷','🎬','🎨','🛍️','💻','📱','💌','🫶'] },
 ]
 
-export function CreatorMediaTools({ file, files, settings, onChange, mode = 'post', storyMode = false, videoRef, isPlaying = false, onTogglePlayback, onPublishStory, onContinuePost }) {
+export function CreatorMediaTools({ file, files, settings, onChange, mode = 'post', storyMode = false, videoRef, isPlaying = false, onTogglePlayback, onPublishStory, onContinuePost, onCloseEditor }) {
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState([])
   const [loading, setLoading] = useState(false)
@@ -263,8 +263,8 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
       {activeTool === 'text' && <div className="mt-3 border-t border-white/10 pt-3"><p className="mb-2 text-xs font-semibold">Mẫu chữ nghệ thuật</p><div className="flex flex-wrap gap-2">{[{label:'Đậm',font:'Roboto, Arial, sans-serif',color:'#ffffff'},{label:'Cổ điển',font:'Georgia, serif',color:'#ffe4b5'},{label:'Neon',font:'monospace',color:'#67e8f9'}].map(preset=><button key={preset.label} type="button" onClick={()=>update({overlayFont:preset.font,overlayColor:preset.color,overlayText:selected.overlayText||preset.label})} className="rounded-lg border border-white/20 px-3 py-2 text-xs">{preset.label}</button>)}</div><button type="button" disabled className="mt-2 w-full cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Phụ đề tự động · Chưa có dịch vụ nhận dạng giọng nói</button><p className="mt-2 text-[11px] text-white/55">Phụ đề tự động cần dịch vụ nhận dạng giọng nói; hiện chưa được kết nối.</p></div>}
       {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
     </div>}
-    {(isVideo || file?.type?.startsWith('image/')) && <div className="absolute bottom-[max(88px,calc(env(safe-area-inset-bottom)+82px))] left-0 right-0 z-30 pointer-events-auto">
-      <VideoTimelineEditor file={file} files={files} storyMode={storyMode} onPublishStory={onPublishStory} onContinuePost={onContinuePost} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} trimModeActive={activeTool === 'trim'} onOpenTool={tool => { if (tool === 'trim') { setActiveTool('trim'); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
+    {(isVideo || (files || []).some(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/')))) && <div className="absolute bottom-[max(88px,calc(env(safe-area-inset-bottom)+82px))] left-0 right-0 z-30 pointer-events-auto">
+      <VideoTimelineEditor file={file} files={files} storyMode={storyMode} onPublishStory={onPublishStory} onContinuePost={onContinuePost} onCloseEditor={onCloseEditor} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} trimModeActive={activeTool === 'trim'} onOpenTool={tool => { if (tool === 'trim') { setActiveTool('trim'); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
     </div>}
   </div>
 

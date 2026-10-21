@@ -2,9 +2,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, AudioLines, Check, ChevronDown, ChevronUp, CircleHelp, Clapperboard,
-  Copy, Crop, Download, Film, ImagePlus, Layers, Music2, Pause, Play, Plus, RotateCcw,
-  Scissors, SlidersHorizontal, Sparkles, Sticker, Trash2, Type, Undo2, Redo2, Volume2, WandSparkles,
-  X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound, Save, FolderOpen
+  Crop, Download, Film, ImagePlus, Layers, Music2, Pause, Play, Plus, RotateCcw,
+  Scissors, SlidersHorizontal, Sparkles, Sticker, Trash2, Type, Volume2, WandSparkles,
+  X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound
 } from 'lucide-react'
 import { exportToBlob, blobToVideoFile } from './timelineExport'
 
@@ -17,43 +17,6 @@ const fmt = (seconds, tenths = false) => {
 const makeClip = file => ({ id: String(Date.now()) + '-' + Math.random().toString(36).slice(2), file, kind: file && file.type && file.type.startsWith('image/') ? 'image' : 'video', sourceDuration: file && file.type && file.type.startsWith('image/') ? 3 : 0, in: 0, out: file && file.type && file.type.startsWith('image/') ? 3 : 0 })
 const clipLen = c => Math.max(0.1, (Number(c.out) || Number(c.sourceDuration) || 3) - (Number(c.in) || 0))
 
-const PROJECT_DB = 'd-social-video-editor'
-const PROJECT_STORE = 'projects'
-function openProjectDb() {
-  return new Promise((resolve, reject) => {
-    if (!('indexedDB' in window)) { reject(new Error('Trình duyệt không hỗ trợ lưu bản dựng cục bộ.')); return }
-    const request = indexedDB.open(PROJECT_DB, 1)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(PROJECT_STORE)) db.createObjectStore(PROJECT_STORE, { keyPath: 'id' })
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(new Error('Không mở được kho lưu bản dựng trên thiết bị.'))
-  })
-}
-async function storeProject(project) {
-  const db = await openProjectDb()
-  try {
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(PROJECT_STORE, 'readwrite')
-      tx.objectStore(PROJECT_STORE).put(project)
-      tx.oncomplete = resolve
-      tx.onerror = () => reject(new Error('Không lưu được bản dựng. Có thể thiết bị đã hết dung lượng.'))
-      tx.onabort = () => reject(new Error('Lưu bản dựng đã bị hủy.'))
-    })
-  } finally { db.close() }
-}
-async function readProject() {
-  const db = await openProjectDb()
-  try {
-    return await new Promise((resolve, reject) => {
-      const request = db.transaction(PROJECT_STORE, 'readonly').objectStore(PROJECT_STORE).get('latest')
-      request.onsuccess = () => resolve(request.result || null)
-      request.onerror = () => reject(new Error('Không đọc được bản dựng đã lưu.'))
-    })
-  } finally { db.close() }
-}
-
 const TOOL_ITEMS = [
   { id: 'trim', label: 'Chỉnh sửa', icon: Scissors },
   { id: 'music', label: 'Âm thanh', icon: Music2 },
@@ -64,7 +27,6 @@ const TOOL_ITEMS = [
   { id: 'filter', label: 'Bộ lọc', icon: Palette },
   { id: 'adjust', label: 'Tùy chỉnh', icon: SlidersHorizontal },
   { id: 'ratio', label: 'Tỷ lệ', icon: Crop },
-  { id: 'export', label: 'Xuất file', icon: Download },
   { id: 'background', label: 'Nền', icon: RectangleHorizontal },
   { id: 'avatar', label: 'Ảnh đại diện AI', icon: UserRound },
 ]
@@ -124,7 +86,6 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
 }
 
 function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, settings, storyMode }) {
-  const [timelineZoom, setTimelineZoom] = useState(1)
   const rail = useRef(null)
   const trackRef = useRef(null)
   const drag = useRef(null)
@@ -159,10 +120,10 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
     { id: 'text', label: 'Văn bản', icon: Type, color: 'bg-amber-300/15', visible: !!(settings.overlayText || settings.sticker) },
   ]
   return <div className="space-y-2.5">
-    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><div className="flex items-center gap-2"><label className="flex items-center gap-1.5">Zoom timeline <input aria-label="Thu phóng timeline" type="range" min="1" max="4" step="0.25" value={timelineZoom} onChange={e => setTimelineZoom(Number(e.target.value))} className="w-20 accent-cyan-300" /><span className="w-8 text-right">{timelineZoom.toFixed(2)}×</span></label><span>{clips.length} đoạn · {fmt(total)}</span></div></div>
+    <div className="flex items-center justify-between text-[11px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><span>{clips.length} đoạn · {fmt(total)}</span></div>
     <div className="relative">
       <div className="mb-1 flex items-center gap-2 pl-1 text-[10px] text-white/35"><span className="w-[54px] shrink-0">TRACK</span><span className="flex-1">KÉO ĐỂ TUA · CHỌN ĐOẠN ĐỂ SỬA</span></div>
-      <div className="overflow-x-auto overscroll-x-contain rounded-lg" style={{ touchAction: 'pan-x' }}><div ref={rail} className="relative space-y-1.5 touch-none select-none" style={{ minWidth: (100 * timelineZoom) + '%' }} onPointerMove={pointerMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
+      <div ref={rail} className="relative space-y-1.5 touch-none select-none" onPointerMove={pointerMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
         {trackRows.map(row => {
           const Icon = row.icon
           return <div key={row.id} className="flex min-h-[48px] items-stretch gap-2">
@@ -186,7 +147,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
             <div className="absolute -left-[3px] -top-1 h-2 w-2 rounded-sm bg-white" />
           </div>
         </div>
-      </div></div>
+      </div>
       {active && <div className="mt-2 flex items-center gap-2">
         <span className="w-[54px] shrink-0 text-[9px] text-white/40">CẮT</span>
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/[0.035] px-2 py-1.5">
@@ -211,8 +172,6 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportedFile, setExportedFile] = useState(null)
-  const [projectBusy, setProjectBusy] = useState(false)
-  const undoStack = useRef([]), redoStack = useRef([])
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
   const [showMore, setShowMore] = useState(false)
   const selected = settings || {}
@@ -221,35 +180,6 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const activeIndex = clips.findIndex(c => c.id === active?.id)
   const activeStart = clips.slice(0, Math.max(0, activeIndex)).reduce((s, c) => s + clipLen(c), 0)
   const update = patch => { setExportedFile(null); onChange && onChange({ ...selected, ...patch }) }
-  const recordClips = next => {
-    undoStack.current.push(clips)
-    if (undoStack.current.length > 50) undoStack.current.shift()
-    redoStack.current = []
-    setClips(next); setExportedFile(null)
-  }
-  const undo = () => {
-    if (!undoStack.current.length) return
-    const previous = undoStack.current.pop()
-    redoStack.current.push(clips)
-    setClips(previous); setExportedFile(null); setError('')
-    if (!previous.some(c => c.id === activeId)) setActiveId(previous[0] ? previous[0].id : null)
-  }
-  const redo = () => {
-    if (!redoStack.current.length) return
-    const next = redoStack.current.pop()
-    undoStack.current.push(clips)
-    setClips(next); setExportedFile(null); setError('')
-    if (!next.some(c => c.id === activeId)) setActiveId(next[0] ? next[0].id : null)
-  }
-  const incomingSignature = initialFiles.map(f => [f.name, f.size, f.lastModified, f.type].join(':')).join('|')
-  const lastIncomingSignature = useRef(incomingSignature)
-  useEffect(() => {
-    if (lastIncomingSignature.current === incomingSignature) return
-    lastIncomingSignature.current = incomingSignature
-    const existing = new Set(clips.map(c => [c.file && c.file.name, c.file && c.file.size, c.file && c.file.lastModified, c.file && c.file.type].join(':')))
-    const additions = initialFiles.filter(f => !existing.has([f.name, f.size, f.lastModified, f.type].join(':')))
-    if (additions.length) { setClips(prev => [...prev, ...additions.map(makeClip)]); setExportedFile(null); setError('') }
-  }, [incomingSignature])
 
   useEffect(() => { if (!activeId && clips[0]) setActiveId(clips[0].id) }, [clips, activeId])
   useEffect(() => {
@@ -292,87 +222,39 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     }
   }
   const changeClips = next => {
-    recordClips(next)
+    setExportedFile(null); setClips(next)
     const c = next.find(x => x.id === activeId)
     if (c) update({ trimStart: c.in, trimEnd: c.out, timelineClips: next })
   }
   const addFiles = picked => {
     setExportedFile(null)
-    const accepted = picked.filter(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/'))).map(makeClip)
-    if (!accepted.length) { setError('Hãy chọn ảnh hoặc video hợp lệ.'); return }
-    recordClips([...clips, ...accepted]); setError('')
+    const imgs = picked.filter(f => f.type.startsWith('image/')), vids = picked.filter(f => f.type.startsWith('video/'))
+    const accepted = [...imgs, ...vids].map(makeClip)
+    if (!accepted.length) { setError('Hãy chọn ít nhất một ảnh hoặc video hợp lệ.'); return }
+    setClips(prev => [...prev, ...accepted]); setError('')
   }
   const split = () => {
     setExportedFile(null)
-    if (!active) { setError('Chọn một clip để tách.'); return }
+    if (!active || active.kind !== 'video') { setError('Chọn một video để tách.'); return }
     const local = active.in + playhead - activeStart
     if (local <= active.in + .15 || local >= active.out - .15) { setError('Đưa playhead vào giữa clip rồi chọn Tách.'); return }
     const a = { ...active, id: makeClip(active.file).id, out: local }
     const b = { ...active, id: makeClip(active.file).id, in: local }
-    recordClips([...clips.slice(0, activeIndex), a, b, ...clips.slice(activeIndex + 1)])
+    setClips(prev => [...prev.slice(0, activeIndex), a, b, ...prev.slice(activeIndex + 1)])
     setActiveId(b.id); setError('')
   }
   const remove = () => {
     setExportedFile(null)
     if (!active) return
     const next = clips.filter(c => c.id !== active.id)
-    recordClips(next); setActiveId(next[0] ? next[0].id : null); setPlayhead(0)
-  }
-  const duplicate = () => {
-    if (!active) return
-    const copy = { ...active, id: makeClip(active.file).id }
-    const next = [...clips.slice(0, activeIndex + 1), copy, ...clips.slice(activeIndex + 1)]
-    recordClips(next); setActiveId(copy.id); setPlayhead(activeStart + clipLen(active)); setError('')
+    setClips(next); setActiveId(next[0] ? next[0].id : null); setPlayhead(0)
   }
   const move = delta => {
     setExportedFile(null)
     const i = clips.findIndex(c => c.id === activeId), j = i + delta
     if (i < 0 || j < 0 || j >= clips.length) return
-    const next = clips.slice(); [next[i], next[j]] = [next[j], next[i]]; recordClips(next)
+    const next = clips.slice(); [next[i], next[j]] = [next[j], next[i]]; setClips(next)
   }
-  const saveProject = async () => {
-    if (projectBusy) return
-    setProjectBusy(true); setError('')
-    try {
-      await storeProject({
-        id: 'latest',
-        version: 1,
-        savedAt: new Date().toISOString(),
-        clips: clips.map(c => ({ ...c })),
-        settings: { ...selected },
-        playhead,
-        activeId,
-      })
-      setError('Đã lưu bản dựng trên thiết bị này.')
-    } catch (e) {
-      setError(e && e.message ? e.message : 'Không lưu được bản dựng.')
-    } finally { setProjectBusy(false) }
-  }
-  const loadProject = async () => {
-    if (projectBusy) return
-    setProjectBusy(true); setError('')
-    try {
-      const project = await readProject()
-      if (!project || !Array.isArray(project.clips)) {
-        setError('Chưa có bản dựng nào được lưu trên thiết bị này.')
-        return
-      }
-      if (!project.clips.every(c => c && c.file instanceof Blob)) {
-        setError('Bản dựng lưu không đầy đủ hoặc tệp media không còn khả dụng.')
-        return
-      }
-      setClips(project.clips)
-      setActiveId(project.clips.some(c => c.id === project.activeId) ? project.activeId : (project.clips[0]?.id || null))
-      setPlayhead(clamp(project.playhead || 0, 0, project.clips.reduce((sum, c) => sum + clipLen(c), 0)))
-      undoStack.current = []; redoStack.current = []
-      setExportedFile(null)
-      if (project.settings && onChange) onChange(project.settings)
-      setError('Đã mở bản dựng đã lưu.')
-    } catch (e) {
-      setError(e && e.message ? e.message : 'Không mở được bản dựng.')
-    } finally { setProjectBusy(false) }
-  }
-
   const exportAction = async ({ forStory = false } = {}) => {
     if (!clips.length) { setError('Hãy chọn ảnh hoặc video.'); return null }
     if ((forStory || storyMode) && total > 60) { setError('Tin 24 giờ chỉ được dài tối đa 60 giây. Hãy cắt timeline rồi thử lại.'); return null }
@@ -414,9 +296,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
       <button type="button" onClick={() => onCloseEditor ? onCloseEditor() : setActiveTool('')} aria-label="Đóng trình chỉnh sửa" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-white/10"><ArrowLeft size={21} /></button>
       <div className="min-w-0 flex-1"><div className="text-sm font-bold tracking-wide">D-Social Studio</div><div className="text-[10px] text-white/45">Trình chỉnh sửa video</div></div>
       <div className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[10px] font-semibold text-white/70">{totalLabel}</div>
-      <button type="button" disabled={projectBusy || exporting} onClick={saveProject} title="Lưu bản dựng trên thiết bị" aria-label="Lưu bản dựng" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.07] text-white disabled:opacity-40"><Save size={16} /></button>
-      <button type="button" disabled={projectBusy || exporting} onClick={loadProject} title="Mở bản dựng đã lưu trên thiết bị" aria-label="Mở bản dựng đã lưu" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/[0.07] text-white disabled:opacity-40"><FolderOpen size={16} /></button>
-      <button type="button" disabled={exporting || !clips.length} onClick={() => exportAction()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-cyan-300 px-3 text-xs font-extrabold text-black disabled:opacity-40"><Check size={15} /> {exporting ? 'Đang xuất' : 'Xuất'}</button>
+      <button type="button" disabled={exporting || !clips.length} onClick={() => exportAction()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-cyan-300 px-4 text-xs font-extrabold text-black disabled:opacity-40"><Check size={15} /> {exporting ? 'Đang xuất' : 'Xuất'}</button>
     </header>
 
     <div className="flex min-h-0 flex-1 flex-col">
@@ -429,49 +309,24 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-3 pb-2 pt-2.5">
-        <div className="mb-2 flex items-center justify-between"><div className="flex items-center gap-2 text-xs font-bold"><Clapperboard size={15} className="text-cyan-300" /> Timeline</div><div className="flex items-center gap-1.5"><button type="button" disabled={!undoStack.current.length} onClick={undo} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Hoàn tác"><Undo2 size={14} /></button><button type="button" disabled={!redoStack.current.length} onClick={redo} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Làm lại"><Redo2 size={14} /></button><button type="button" disabled={activeIndex <= 0} onClick={() => move(-1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip lên trước"><ChevronUp size={15} /></button><button type="button" disabled={activeIndex < 0 || activeIndex >= clips.length - 1} onClick={() => move(1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip ra sau"><ChevronDown size={15} /></button><button type="button" disabled={!active} onClick={split} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Tách clip"><Scissors size={14} /></button><button type="button" disabled={!active} onClick={duplicate} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Sao chép clip"><Copy size={14} /></button><button type="button" disabled={!active} onClick={remove} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] text-red-200 disabled:opacity-25" aria-label="Xóa clip"><Trash2 size={14} /></button><MediaPicker onFiles={addFiles} disabled={exporting} /></div></div>
+      <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-2 pb-1 pt-1.5">
+        <div className="mb-1 flex items-center justify-between"><div className="flex items-center gap-2 text-[11px] font-bold"><Clapperboard size={14} className="text-cyan-300" /> Timeline</div><div className="flex items-center gap-1.5"><button type="button" disabled={activeIndex <= 0} onClick={() => move(-1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip lên trước"><ChevronUp size={15} /></button><button type="button" disabled={activeIndex < 0 || activeIndex >= clips.length - 1} onClick={() => move(1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip ra sau"><ChevronDown size={15} /></button><button type="button" disabled={!active} onClick={split} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Tách clip"><Scissors size={14} /></button><button type="button" disabled={!active} onClick={remove} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] text-red-200 disabled:opacity-25" aria-label="Xóa clip"><Trash2 size={14} /></button><MediaPicker onFiles={addFiles} disabled={exporting} /></div></div>
         <Timeline clips={clips} activeId={active && active.id} onSelect={id => { setActiveId(id); setError('') }} onChangeClips={changeClips} playhead={playhead} onSeek={seek} settings={selected} storyMode={storyMode} />
       </div>
 
-      {activeTool && <div className="shrink-0 border-t border-white/10 bg-[#15161d] px-4 py-3">
+      {activeTool && <div className="absolute bottom-[calc(112px+env(safe-area-inset-bottom))] left-2 right-2 z-[180] max-h-[30dvh] overflow-hidden rounded-2xl border border-white/15 bg-[#15161d]/95 px-4 py-3 shadow-2xl backdrop-blur-xl">
         <div className="mb-2 flex items-center justify-between"><div className="text-xs font-bold">{activeToolData ? activeToolData.label : 'Công cụ'}</div><button type="button" onClick={() => setActiveTool('')} aria-label="Đóng công cụ" className="grid h-7 w-7 place-items-center rounded-full bg-white/10"><X size={14} /></button></div>
-        <div className="max-h-[20vh] space-y-3 overflow-y-auto text-xs">
+        <div className="max-h-[calc(30dvh-52px)] space-y-3 overflow-y-auto text-xs">
           {activeTool === 'trim' && <div className="grid grid-cols-2 gap-2"><button type="button" onClick={split} className={actionButton + ' bg-white/10'}><Scissors size={15} /> Tách tại playhead</button><button type="button" onClick={remove} className={actionButton + ' bg-red-400/10 text-red-100'}><Trash2 size={15} /> Xóa đoạn chọn</button><label className="col-span-2 flex items-center gap-2 text-white/65">Thời lượng ảnh<select disabled={!active || active.kind !== 'image'} value={active && active.kind === 'image' ? clipLen(active) : 3} onChange={e => { const d = Number(e.target.value); changeClips(clips.map(c => c.id === active.id ? { ...c, out: c.in + d, sourceDuration: c.in + d } : c)) }} className="ml-auto rounded-lg bg-white/10 px-2 py-1.5 text-white"><option value="2">2 giây</option><option value="3">3 giây</option><option value="4">4 giây</option><option value="5">5 giây</option><option value="6">6 giây</option><option value="8">8 giây</option></select></label></div>}
-          {activeTool === 'music' && <div className="space-y-3"><label className="flex items-center gap-2 rounded-lg bg-white/[0.05] p-2"><Music2 size={15} /><span className="min-w-0 flex-1 truncate">{selected.audioTrackTitle || 'Chưa chọn nhạc nền'}</span><input type="file" accept="audio/*" className="max-w-[150px] text-[10px]" onChange={e => { const f = e.currentTarget.files && e.currentTarget.files[0]; if (f) update({ audioTrackTitle: f.name, audioTrackFile: f, audioTrackUrl: URL.createObjectURL(f), audioSource: 'upload' }); e.currentTarget.value = '' }} /></label><label className="block text-white/70">Âm lượng tiếng gốc · {selected.originalVolume ?? 100}%<input className={rangeClass} type="range" min="0" max="100" value={selected.originalVolume ?? 100} onChange={e => update({ originalVolume: Number(e.target.value) })} /></label><label className="block text-white/70">Âm lượng nhạc · {selected.musicVolume ?? 30}%<input className={rangeClass} type="range" min="0" max="100" value={selected.musicVolume ?? 30} onChange={e => update({ musicVolume: Number(e.target.value) })} /></label><div className="grid grid-cols-2 gap-3"><label className="text-white/70">Nhạc vào dần · {selected.musicFadeInSec ?? 0}s<input className={rangeClass} type="range" min="0" max="5" step=".5" value={selected.musicFadeInSec ?? 0} onChange={e => update({ musicFadeInSec: Number(e.target.value) })} /></label><label className="text-white/70">Nhạc nhỏ dần · {selected.musicFadeOutSec ?? 0}s<input className={rangeClass} type="range" min="0" max="5" step=".5" value={selected.musicFadeOutSec ?? 0} onChange={e => update({ musicFadeOutSec: Number(e.target.value) })} /></label></div><p className="text-[10px] text-amber-100/70">Âm thanh gốc và nhạc nền sẽ được trộn khi trình duyệt hỗ trợ Web Audio. Nếu xuất lỗi, hãy thử Chrome Android mới nhất.</p></div>}
+          {activeTool === 'music' && <div className="space-y-3"><label className="flex items-center gap-2 rounded-lg bg-white/[0.05] p-2"><Music2 size={15} /><span className="min-w-0 flex-1 truncate">{selected.audioTrackTitle || 'Chưa chọn nhạc nền'}</span><input type="file" accept="audio/*" className="max-w-[150px] text-[10px]" onChange={e => { const f = e.currentTarget.files && e.currentTarget.files[0]; if (f) update({ audioTrackTitle: f.name, audioTrackFile: f, audioTrackUrl: URL.createObjectURL(f), audioSource: 'upload' }); e.currentTarget.value = '' }} /></label><label className="block text-white/70">Âm lượng tiếng gốc · {selected.originalVolume ?? 100}%<input className={rangeClass} type="range" min="0" max="100" value={selected.originalVolume ?? 100} onChange={e => update({ originalVolume: Number(e.target.value) })} /></label><label className="block text-white/70">Âm lượng nhạc · {selected.musicVolume ?? 30}%<input className={rangeClass} type="range" min="0" max="100" value={selected.musicVolume ?? 30} onChange={e => update({ musicVolume: Number(e.target.value) })} /></label><p className="text-[10px] text-amber-100/70">Âm thanh gốc và nhạc nền sẽ được trộn khi trình duyệt hỗ trợ Web Audio. Nếu xuất lỗi, hãy thử Chrome Android mới nhất.</p></div>}
           {activeTool === 'text' && <div className="space-y-2"><input maxLength={120} value={selected.overlayText || ''} onChange={e => update({ overlayText: e.target.value })} placeholder="Nhập văn bản trên video" className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm" /><div className="grid grid-cols-3 gap-2"><label className="text-white/60">Màu chữ<input type="color" value={selected.overlayColor || '#ffffff'} onChange={e => update({ overlayColor: e.target.value })} className="mt-1 h-8 w-full rounded bg-transparent" /></label><label className="text-white/60">Cỡ chữ<select value={selected.overlayFontSize || 28} onChange={e => update({ overlayFontSize: Number(e.target.value) })} className="mt-1 w-full rounded bg-white/10 px-2 py-2 text-white"><option value="18">18</option><option value="24">24</option><option value="28">28</option><option value="36">36</option><option value="48">48</option></select></label><label className="text-white/60">Kiểu chữ<select value={selected.overlayFont || 'Arial,sans-serif'} onChange={e => update({ overlayFont: e.target.value })} className="mt-1 w-full rounded bg-white/10 px-2 py-2 text-white"><option value="Arial,sans-serif">Đậm</option><option value="Georgia,serif">Cổ điển</option><option value="monospace">Neon</option></select></label></div></div>}
           {activeTool === 'sticker' && <div className="flex flex-wrap gap-2">{['❤️', '✨', '🔥', '⭐', '😂', '🥰', '🎉', '🌈', '🎵', '💯', '🐱', '🌸'].map(s => <button key={s} type="button" onClick={() => update({ sticker: selected.sticker === s ? '' : s })} className={'grid h-10 w-10 place-items-center rounded-lg border text-xl ' + (selected.sticker === s ? 'border-cyan-300 bg-cyan-300/15' : 'border-white/10 bg-white/[0.04]')}>{s}</button>)}</div>}
           {activeTool === 'overlay' && <div className="space-y-2"><p className="text-white/65">Lớp phủ video/ảnh bổ sung chưa được kết nối với bộ xuất. Anh vẫn có thể thêm chữ hoặc nhãn dán ở các công cụ tương ứng.</p><button type="button" onClick={() => setActiveTool('text')} className={actionButton + ' bg-white/10'}><Type size={15} /> Thêm văn bản</button></div>}
           {activeTool === 'effects' && <div className="space-y-2"><p className="text-white/65">Hiệu ứng màu có thể chọn tại đây. Hiệu ứng AI/chuyển cảnh nâng cao chưa được kết nối.</p><div className="flex flex-wrap gap-2">{FILTERS.filter(x => x.id !== 'none').map(f => <button key={f.id} type="button" onClick={() => update({ colorFilter: f.id })} className={'rounded-lg border px-3 py-2 ' + (selected.colorFilter === f.id ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04]')}>{f.label}</button>)}</div></div>}
           {activeTool === 'filter' && <div className="flex flex-wrap gap-2">{FILTERS.map(f => <button key={f.id} type="button" onClick={() => update({ colorFilter: f.id })} className={'rounded-lg border px-3 py-2 ' + ((selected.colorFilter || 'none') === f.id ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04]')}>{f.label}</button>)}</div>}
-          {activeTool === 'adjust' && <div className="space-y-3"><div className="flex items-center justify-between"><span>Thu phóng · {Number(selected.zoom || 1).toFixed(1)}×</span><button type="button" onClick={() => update({ zoom: 1, panX: 0, panY: 0, rotation: 0, brightness: 0, contrast: 100, saturation: 100, hue: 0 })} className="flex items-center gap-1 text-white/55"><RotateCcw size={12} /> Đặt lại</button></div><input aria-label="Thu phóng" className={rangeClass} type="range" min="1" max="3" step=".1" value={selected.zoom || 1} onChange={e => update({ zoom: Number(e.target.value) })} /><label className="block text-white/65">Di chuyển ngang · {selected.panX || 0}%<input className={rangeClass} type="range" min="-50" max="50" value={selected.panX || 0} onChange={e => update({ panX: Number(e.target.value) })} /></label><label className="block text-white/65">Di chuyển dọc · {selected.panY || 0}%<input className={rangeClass} type="range" min="-50" max="50" value={selected.panY || 0} onChange={e => update({ panY: Number(e.target.value) })} /></label><div className="grid grid-cols-2 gap-3"><label className="text-white/65">Độ sáng · {selected.brightness || 0}<input className={rangeClass} type="range" min="-50" max="50" value={selected.brightness || 0} onChange={e => update({ brightness: Number(e.target.value) })} /></label><label className="text-white/65">Tương phản · {selected.contrast ?? 100}<input className={rangeClass} type="range" min="50" max="180" value={selected.contrast ?? 100} onChange={e => update({ contrast: Number(e.target.value) })} /></label><label className="text-white/65">Bão hòa · {selected.saturation ?? 100}<input className={rangeClass} type="range" min="0" max="200" value={selected.saturation ?? 100} onChange={e => update({ saturation: Number(e.target.value) })} /></label><label className="text-white/65">Xoay · {selected.rotation || 0}°<input className={rangeClass} type="range" min="-180" max="180" step="90" value={selected.rotation || 0} onChange={e => update({ rotation: Number(e.target.value) })} /></label></div><button type="button" onClick={() => update({ flipHorizontal: !selected.flipHorizontal })} aria-pressed={!!selected.flipHorizontal} className={'rounded-lg border px-3 py-2 text-sm ' + (selected.flipHorizontal ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04]')}>Lật ngang {selected.flipHorizontal ? '✓' : ''}</button></div>}
+          {activeTool === 'adjust' && <div className="space-y-3"><div className="flex items-center justify-between"><span>Thu phóng · {Number(selected.zoom || 1).toFixed(1)}×</span><button type="button" onClick={() => update({ zoom: 1, panX: 0, panY: 0, rotation: 0, brightness: 0, contrast: 100, saturation: 100, hue: 0 })} className="flex items-center gap-1 text-white/55"><RotateCcw size={12} /> Đặt lại</button></div><input aria-label="Thu phóng" className={rangeClass} type="range" min="1" max="3" step=".1" value={selected.zoom || 1} onChange={e => update({ zoom: Number(e.target.value) })} /><label className="block text-white/65">Di chuyển ngang · {selected.panX || 0}%<input className={rangeClass} type="range" min="-50" max="50" value={selected.panX || 0} onChange={e => update({ panX: Number(e.target.value) })} /></label><label className="block text-white/65">Di chuyển dọc · {selected.panY || 0}%<input className={rangeClass} type="range" min="-50" max="50" value={selected.panY || 0} onChange={e => update({ panY: Number(e.target.value) })} /></label><div className="grid grid-cols-2 gap-3"><label className="text-white/65">Độ sáng · {selected.brightness || 0}<input className={rangeClass} type="range" min="-50" max="50" value={selected.brightness || 0} onChange={e => update({ brightness: Number(e.target.value) })} /></label><label className="text-white/65">Tương phản · {selected.contrast ?? 100}<input className={rangeClass} type="range" min="50" max="180" value={selected.contrast ?? 100} onChange={e => update({ contrast: Number(e.target.value) })} /></label><label className="text-white/65">Bão hòa · {selected.saturation ?? 100}<input className={rangeClass} type="range" min="0" max="200" value={selected.saturation ?? 100} onChange={e => update({ saturation: Number(e.target.value) })} /></label><label className="text-white/65">Xoay · {selected.rotation || 0}°<input className={rangeClass} type="range" min="-180" max="180" step="90" value={selected.rotation || 0} onChange={e => update({ rotation: Number(e.target.value) })} /></label></div></div>}
           {activeTool === 'ratio' && <div className="grid grid-cols-4 gap-2">{['9:16', '16:9', '1:1', '4:5'].map(r => <button key={r} type="button" onClick={() => update({ aspectRatio: r })} className={'rounded-lg border px-2 py-3 font-semibold ' + ((selected.aspectRatio || '9:16') === r ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-white/[0.04]')}>{r}</button>)}</div>}
           {activeTool === 'background' && <div className="flex flex-wrap items-center gap-2">{[{ value: '#000000', label: 'Đen' }, { value: '#ffffff', label: 'Trắng' }, { value: '#172554', label: 'Xanh' }, { value: '#581c87', label: 'Tím' }, { value: '#166534', label: 'Xanh lá' }].map(b => <button key={b.value} type="button" onClick={() => update({ backgroundColor: b.value })} className={'rounded-lg border px-3 py-2 ' + ((selected.backgroundColor || '#000000') === b.value ? 'border-cyan-300' : 'border-white/10')}>{b.label}</button>)}<input aria-label="Màu nền tùy chỉnh" type="color" value={selected.backgroundColor || '#000000'} onChange={e => update({ backgroundColor: e.target.value })} className="h-9 w-10 rounded bg-transparent" /></div>}
-          {activeTool === 'export' && <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-white/70">Độ phân giải
-                <select value={selected.exportResolution || 1080} onChange={e => update({ exportResolution: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
-                  <option value="720">720p · nhẹ</option><option value="1080">1080p · Full HD</option><option value="1440">1440p · 2K</option><option value="2160">2160p · 4K</option>
-                </select>
-              </label>
-              <label className="text-white/70">Tốc độ khung hình
-                <select value={selected.frameRate || 30} onChange={e => update({ frameRate: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
-                  <option value="24">24 FPS · Điện ảnh</option><option value="30">30 FPS · Chuẩn</option><option value="60">60 FPS · Mượt</option>
-                </select>
-              </label>
-              <label className="text-white/70">Bitrate
-                <select value={selected.exportBitrateMbps || 8} onChange={e => update({ exportBitrateMbps: Number(e.target.value) })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
-                  <option value="4">4 Mbps · Nhẹ</option><option value="8">8 Mbps · Cân bằng</option><option value="16">16 Mbps · Cao</option><option value="35">35 Mbps · Rất cao</option>
-                </select>
-              </label>
-              <label className="text-white/70">Định dạng
-                <select value={selected.exportFormat || 'auto'} onChange={e => update({ exportFormat: e.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-[#202127] px-3 py-2 text-sm text-white">
-                  <option value="auto">Tự động theo trình duyệt</option><option value="webm">WebM</option><option value="mp4" disabled={typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported?.('video/mp4')}>MP4 {typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.('video/mp4') ? '' : '(thiết bị chưa hỗ trợ)'}</option>
-                </select>
-              </label>
-            </div>
-            <p className="text-[10px] text-amber-100/75">4K/60 FPS/bitrate cao có thể quá tải điện thoại hoặc làm tệp rất lớn. GIF chưa được hỗ trợ xuất trực tiếp. MP4 chỉ khả dụng khi trình duyệt báo hỗ trợ; Tự động là lựa chọn tương thích hơn.</p>
-          </div>}
           {activeTool === 'avatar' && <p className="text-white/60">Ảnh đại diện AI chưa có dịch vụ tạo ảnh kết nối. Công cụ được đánh dấu rõ ràng thay vì giả lập hoạt động.</p>}
         </div>
       </div>}
