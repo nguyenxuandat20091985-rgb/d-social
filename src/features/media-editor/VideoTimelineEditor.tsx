@@ -155,7 +155,8 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
     { id: 'video', label: 'Video', icon: Film, color: 'bg-emerald-400/15', visible: true },
     { id: 'audio', label: 'Âm thanh', icon: AudioLines, color: 'bg-violet-400/15', visible: !!(settings.audioTrackTitle || settings.audioTrackFile || settings.audioTrackUrl || settings.audioSource === 'pixabay') },
     { id: 'text', label: 'Văn bản', icon: Type, color: 'bg-amber-300/15', visible: !!(settings.overlayText || settings.sticker) },
-  ]  return <div className="space-y-2.5">
+  ]
+  return <div className="space-y-2.5">
     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><div className="flex items-center gap-2"><label className="flex items-center gap-1.5">Zoom timeline <input aria-label="Thu phóng timeline" type="range" min="1" max="4" step="0.25" value={timelineZoom} onChange={e => setTimelineZoom(Number(e.target.value))} className="w-20 accent-cyan-300" /><span className="w-8 text-right">{timelineZoom.toFixed(2)}×</span></label><span>{clips.length} đoạn · {fmt(total)}</span></div></div>
     <div className="relative">
       <div className="mb-1 flex items-center gap-2 pl-1 text-[10px] text-white/35"><span className="w-[54px] shrink-0">TRACK</span><span className="flex-1">KÉO ĐỂ TUA · CHỌN ĐOẠN ĐỂ SỬA</span></div>
@@ -315,7 +316,8 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     if (!active) return
     const next = clips.filter(c => c.id !== active.id)
     recordClips(next); setActiveId(next[0] ? next[0].id : null); setPlayhead(0)
-  }  const duplicate = () => {
+  }
+  const duplicate = () => {
     if (!active) return
     const copy = { ...active, id: makeClip(active.file).id }
     const next = [...clips.slice(0, activeIndex + 1), copy, ...clips.slice(activeIndex + 1)]
