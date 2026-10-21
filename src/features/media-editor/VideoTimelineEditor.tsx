@@ -46,7 +46,7 @@ export function MediaPicker({ onFiles, disabled = false }) {
       const picked = Array.from(e.currentTarget.files || [])
       const images = picked.filter(f => f.type.startsWith('image/'))
       const videos = picked.filter(f => f.type.startsWith('video/'))
-      onFiles && onFiles([...images, ...videos.slice(0, 1)])
+      onFiles && onFiles([...images, ...videos])
       e.currentTarget.value = ''
     }} />
     <button type="button" disabled={disabled} onClick={() => input.current && input.current.click()} aria-label="Thêm ảnh hoặc video" className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-white hover:bg-white/15 disabled:opacity-40"><Plus size={20} /></button>
@@ -229,9 +229,8 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const addFiles = picked => {
     setExportedFile(null)
     const imgs = picked.filter(f => f.type.startsWith('image/')), vids = picked.filter(f => f.type.startsWith('video/'))
-    const haveVideo = clips.some(c => c.kind === 'video')
-    const accepted = [...imgs, ...(haveVideo ? [] : vids.slice(0, 1))].map(makeClip)
-    if (!accepted.length) { setError('Chỉ hỗ trợ ảnh và tối đa một video trong phiên này.'); return }
+    const accepted = [...imgs, ...vids].map(makeClip)
+    if (!accepted.length) { setError('Hãy chọn ít nhất một ảnh hoặc video hợp lệ.'); return }
     setClips(prev => [...prev, ...accepted]); setError('')
   }
   const split = () => {
