@@ -1,3 +1,4 @@
+export const config = { api: { bodyParser: false } }
 // Configurable provider wrapper. Configure IMAGE_TO_VIDEO_ENDPOINT and IMAGE_TO_VIDEO_API_KEY in Vercel.
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
