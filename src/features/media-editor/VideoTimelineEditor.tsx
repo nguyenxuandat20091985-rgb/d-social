@@ -7,6 +7,7 @@ import {
   X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound
 } from 'lucide-react'
 import { exportToBlob, blobToVideoFile } from './timelineExport'
+import { StudioCreationTools } from './StudioCreationTools'
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(n)) ? Number(n) : min))
 const fmt = (seconds, tenths = false) => {
@@ -174,6 +175,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [exportedFile, setExportedFile] = useState(null)
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
   const [toolbarMode, setToolbarMode] = useState('clip')
+  const [studioOpen, setStudioOpen] = useState(false)
   const selected = settings || {}
   const active = clips.find(c => c.id === activeId) || clips[0]
   const total = clips.reduce((s, c) => s + clipLen(c), 0)
@@ -225,6 +227,33 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     setExportedFile(null); setClips(next)
     const c = next.find(x => x.id === activeId)
     if (c) update({ trimStart: c.in, trimEnd: c.out, timelineClips: next })
+  }
+  const insertGenerated = async generatedFile => {
+    setExportedFile(null)
+    const generated = makeClip(generatedFile)
+    const list = clips.slice()
+    let elapsed = 0, targetIndex = list.length, local = 0
+    for (let i = 0; i < list.length; i++) {
+      const end = elapsed + clipLen(list[i])
+      if (playhead <= end + 0.001) { targetIndex = i; local = clamp(playhead - elapsed, 0, clipLen(list[i])); break }
+      elapsed = end
+    }
+    let next = list
+    if (targetIndex < list.length && local > 0.05 && local < clipLen(list[targetIndex]) - 0.05) {
+      const current = list[targetIndex]
+      const splitAt = clamp((Number(current.in) || 0) + local, (Number(current.in) || 0) + 0.05, (Number(current.out) || Number(current.sourceDuration) || 3) - 0.05)
+      const left = { ...current, id: makeClip(current.file).id, out: splitAt }
+      const right = { ...current, id: makeClip(current.file).id, in: splitAt }
+      next = [...list.slice(0, targetIndex), left, generated, right, ...list.slice(targetIndex + 1)]
+    } else {
+      next = [...list.slice(0, targetIndex), generated, ...list.slice(targetIndex)]
+    }
+    const insertAt = next.findIndex(c => c.id === generated.id)
+    setClips(next); setActiveId(generated.id)
+    const before = next.slice(0, insertAt).reduce((sum, c) => sum + clipLen(c), 0)
+    setPlayhead(before)
+    setToolbarMode('clip'); setActiveTool(''); setError('')
+    update({ timelineClips: next })
   }
   const addFiles = picked => {
     setExportedFile(null)
@@ -354,6 +383,8 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
             <button type="button" onClick={() => setToolbarMode('main')} className="flex min-w-[58px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-white/10 px-1.5 py-1 text-[9px] text-white/75"><Layers size={18}/><span>Thêm</span></button>
           </> : <>
             {TOOL_ITEMS.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => toolClick(item.id)} aria-pressed={activeTool === item.id} className={'flex min-w-[60px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] ' + (activeTool === item.id ? 'bg-cyan-300/15 text-cyan-200' : 'text-white/65 hover:bg-white/[0.05]')}><Icon size={18} /><span className="whitespace-nowrap">{item.label}</span></button> })}
+            <button type="button" onClick={() => setStudioOpen(true)} className="flex min-w-[72px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[9px] text-cyan-100"><Sparkles size={18}/><span className="whitespace-nowrap">Tạo video AI</span></button>
+            <button type="button" onClick={() => { setStudioOpen(true); }} className="flex min-w-[66px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-white/10 px-2 py-1 text-[9px] text-white/80"><Film size={18}/><span className="whitespace-nowrap">Mẫu Video</span></button>
             <button type="button" onClick={() => setToolbarMode('clip')} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-white/10 px-1.5 py-1 text-[9px] text-white/75"><Film size={18}/><span>Clip</span></button>
           </>}
         </div>
@@ -367,6 +398,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         </div>
       </nav>
     </div>
+    {studioOpen && <StudioCreationTools onInsert={insertGenerated} onClose={() => setStudioOpen(false)} />}
     {error && <div role="alert" className="absolute left-3 right-3 top-16 z-[220] rounded-xl border border-red-300/30 bg-[#321b20] px-3 py-2 text-xs text-red-100 shadow-lg">{error}<button type="button" onClick={() => setError('')} className="ml-2 underline">Đóng</button></div>}
     {exportedFile && <div className="absolute left-3 right-3 top-16 z-[210] rounded-xl border border-emerald-300/25 bg-[#12251e] px-3 py-2 text-xs text-emerald-100">Đã xuất video · {(exportedFile.size / 1024 / 1024).toFixed(1)} MB</div>}
   </section>
