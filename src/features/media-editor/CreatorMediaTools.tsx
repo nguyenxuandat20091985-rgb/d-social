@@ -157,12 +157,9 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
   }
 
   if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
-    <div className="absolute left-4 top-[max(12px,env(safe-area-inset-top))] pointer-events-auto">
-      {activeTool !== '' && activeTool !== 'trim' && <button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-black/55 px-3 py-2 text-xs font-semibold text-white">Đóng công cụ</button>}
-    </div>
     {activeTool === 'adjust' && <div
       aria-label="Kéo một ngón để di chuyển khung hình; chụm hoặc tách hai ngón để phóng to, thu nhỏ"
-      className="absolute left-0 top-0 z-10 h-[55dvh] w-full touch-none pointer-events-auto"
+      className="absolute left-0 top-0 z-10 h-[52dvh] w-full touch-none pointer-events-auto"
       style={{ touchAction: 'none' }}
       onPointerDown={handleZoomPointerDown}
       onPointerMove={handleZoomPointerMove}
@@ -175,97 +172,23 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
         Kéo để di chuyển · Chụm 2 ngón để zoom
       </span>
     </div>}
-    {activeTool && activeTool !== 'trim' && <div className="absolute z-20 bottom-[calc(max(88px,env(safe-area-inset-bottom)+82px)+225px)] left-3 right-3 mx-auto max-h-[min(42dvh,calc(100dvh-180px))] w-auto max-w-md overflow-y-auto rounded-t-3xl rounded-b-2xl border border-white/20 bg-black/90 p-3.5 text-white shadow-2xl backdrop-blur-md pointer-events-auto">
-      <div className="sticky top-0 z-10 -mx-1 mb-3 flex items-center justify-between gap-3 border-b border-white/10 bg-black/95 px-1 pb-3 pt-1"><div><div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/30"/><strong>{({music:'Âm thanh',theme:'Chỉnh sửa',text:'Văn bản',sticker:'Nhãn dán',overlay:'Lớp phủ',effects:'Hiệu ứng',filter:'Bộ lọc',adjust:'Tùy chỉnh AI',ratio:'Tỷ lệ khung hình',background:'Nền video',avatar:'Chỉnh sửa AI',volume:'Chỉnh âm lượng'})[activeTool]}</strong></div><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/15 px-3 py-1 text-sm">Đóng</button></div>
-      {activeTool === 'music' && <div className="space-y-3">
-        <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-xl bg-white/10 px-3 py-2 text-white placeholder:text-white/55" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…"/><button type="button" disabled={loading} onClick={searchAudio} className="rounded-xl bg-white px-3 text-black"><Search size={17}/></button></div>
-        <button type="button" onClick={() => update({audioSource:'original',audioTrackId:null,audioTrackTitle:null,audioTrackUrl:null,isMuted:false})} className="rounded-lg border border-white/25 px-3 py-2 text-sm">Dùng âm thanh gốc</button>
-        <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => update({originalVolume:Number(selected.originalVolume??100)>0?0:100})} className="rounded-lg border border-white/20 px-3 py-2 text-xs">{Number(selected.originalVolume??100)>0?'Tắt tiếng gốc':'Bật tiếng gốc'}</button><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Trích xuất âm thanh · Chưa bật</button><button type="button" disabled className="col-span-2 cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Ghi âm voiceover · Chưa có module ghi âm</button></div>
-        {loading && <p className="text-xs text-white/70">Đang tìm nhạc…</p>}{audioError && <p role="status" className="text-xs text-amber-300">{audioError}</p>}
-        {hits.map(track => (
-          <div key={track.id} className="flex items-center gap-2 rounded-xl bg-white/10 p-2">
-            <button
-              type="button"
-              onClick={() => toggleTrackPreview(track)}
-              className="rounded-full bg-white/15 p-2"
-              aria-label={playingId === track.id ? 'Dừng nghe thử' : 'Nghe thử'}
-            >
-              {playingId === track.id ? <Pause size={15} /> : <Play size={15} />}
-            </button>
-            <audio id={'pixabay-preview-' + track.id} data-pixabay-preview src={track.previewUrl} preload="none" className="hidden"/>
-            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{track.title}</div><div className="text-xs text-white/60">{track.artist}</div></div>
-            <button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button>
-          </div>
-        ))}
-        {selected.audioTrackTitle && <p className="text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
-        <p className="text-[11px] text-white/60">Có sẵn nhạc mẫu miễn phí. Mỗi bài hiển thị tác giả và giấy phép; hãy giữ thông tin ghi công khi giấy phép yêu cầu.</p>
-      </div>}
-
-      {activeTool === 'text' && <div className="space-y-3">
-        <input className="w-full rounded-xl bg-white/10 px-3 py-2.5 text-white placeholder:text-white/50" maxLength={120} value={selected.overlayText||''} onChange={e=>update({overlayText:e.target.value})} placeholder="Nhập chữ hiển thị trên media"/>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-xs text-white/75">Font chữ
-            <select className="mt-1 w-full rounded-lg bg-white/10 px-2 py-2 text-white" value={selected.overlayFont||'Roboto, Arial, sans-serif'} onChange={e=>update({overlayFont:e.target.value})}>
-              <option className="text-black" value="Roboto, Arial, sans-serif">Roboto</option>
-              <option className="text-black" value="Arial, Helvetica, sans-serif">Sans-serif</option>
-              <option className="text-black" value="Georgia, serif">Playfair / Serif</option>
-              <option className="text-black" value="'Trebuchet MS', sans-serif">Trebuchet</option>
-              <option className="text-black" value="monospace">Monospace</option>
-            </select>
-          </label>
-          <label className="text-xs text-white/75">Màu chữ
-            <span className="mt-1 flex items-center gap-2 rounded-lg bg-white/10 p-1.5">
-              <input aria-label="Chọn màu chữ" className="h-8 w-10 cursor-pointer rounded border-0 bg-transparent" type="color" value={selected.overlayColor||'#ffffff'} onChange={e=>update({overlayColor:e.target.value})}/>
-              <span className="text-xs">{(selected.overlayColor||'#ffffff').toUpperCase()}</span>
-            </span>
-          </label>
-        </div>
-        <p className="text-[11px] text-white/65">Kéo trực tiếp dòng chữ trên ảnh/video để đổi vị trí.</p>
-      </div>}
-      {activeTool === 'sticker' && <div className="space-y-3">
-        {STICKER_GROUPS.map(group => <section key={group.label} className="space-y-1.5">
-          <div className="text-xs font-semibold text-white/70">{group.label}</div>
-          <div className="flex flex-wrap gap-1.5">{group.items.map(sticker=><button key={sticker} type="button" aria-label={'Sticker '+sticker} onClick={()=>update({sticker:selected.sticker===sticker?'':sticker})} className={`rounded-lg border px-2 py-1.5 text-xl ${selected.sticker===sticker?'border-white bg-white/20':'border-white/15 bg-white/5'}`}>{sticker}</button>)}</div>
-        </section>)}
-        <button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Ghép hình · Chưa bật</button>
-      </div>}
-
-      {activeTool === 'theme' && <div className="space-y-3"><p className="text-xs text-white/60">Các chỉnh sửa hỗ trợ sẽ áp dụng lên bản xem trước và file xuất. Điều chỉnh AI tự động chưa có dịch vụ kết nối; các thanh kéo bên dưới là điều chỉnh thủ công.</p><button type="button" onClick={() => setActiveTool('trim')} className="flex w-full items-center gap-2 rounded-xl border border-amber-300/35 bg-amber-300/10 px-3 py-2.5 text-sm font-semibold text-amber-100"><Scissors size={16}/> Cắt trực tiếp trên Timeline</button><label className="block text-xs">Tốc độ phát khi xem trước và xuất file được khóa ở 1.0× để giữ đúng thời gian gốc.</label><label className="block text-xs">Xoay: {selected.rotation||0}°<input className="mt-2 w-full" type="range" min="-180" max="180" step="90" value={selected.rotation||0} onChange={e=>update({rotation:Number(e.target.value)})}/></label><div className="flex flex-wrap gap-2">{FILTERS.map(filter=><button key={filter.id} type="button" onClick={() => update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${(selected.colorFilter||'none')===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div><div className="grid grid-cols-2 gap-2"><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Tách clip · Chưa bật</button><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Cắt bằng AI · Chưa có dịch vụ</button></div><p className="text-[11px] text-white/55">Tách clip và cắt bằng AI cần bộ xử lý clip riêng; em không giả lập hai chức năng này như thể đã hoạt động.</p></div>}{activeTool === 'filter' && <div className="flex flex-wrap gap-2">{FILTERS.map(filter=><button key={filter.id} type="button" onClick={()=>update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${(selected.colorFilter||'none')===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div>}
-      {activeTool === 'adjust' && <div className="space-y-3">
-        <section className="space-y-3 rounded-xl border border-white/15 bg-white/5 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div><p className="text-sm font-semibold">Thu phóng khung hình</p><p className="text-[11px] text-white/55">Áp dụng cho cả ảnh và video · 1× đến 3×</p></div>
-            <div className="flex items-center gap-2">
-              <button type="button" aria-label="Thu nhỏ" disabled={Number(selected.zoom ?? 1) <= 1} onClick={() => update({zoom:Math.max(1,Math.round((Number(selected.zoom ?? 1)-0.1)*10)/10)})} className="grid h-9 w-9 place-items-center rounded-lg border border-white/20 text-lg disabled:opacity-35">−</button>
-              <span className="w-10 text-center text-sm font-bold tabular-nums">{Number(selected.zoom ?? 1).toFixed(1)}×</span>
-              <button type="button" aria-label="Phóng to" disabled={Number(selected.zoom ?? 1) >= 3} onClick={() => update({zoom:Math.min(3,Math.round((Number(selected.zoom ?? 1)+0.1)*10)/10)})} className="grid h-9 w-9 place-items-center rounded-lg border border-white/20 text-lg disabled:opacity-35">+</button>
-            </div>
-          </div>
-          <input aria-label="Mức thu phóng" className="w-full" type="range" min="1" max="3" step="0.1" value={Math.max(1,Math.min(3,Number(selected.zoom ?? 1)))} onChange={e=>update({zoom:Number(e.target.value)})}/>
-          <label className="block text-xs">Di chuyển ngang: {Number(selected.panX ?? 0)}%
-            <input aria-label="Di chuyển ngang khung hình" className="mt-1 w-full" type="range" min="-50" max="50" step="1" value={Number(selected.panX ?? 0)} onChange={e=>update({panX:Number(e.target.value)})}/>
-          </label>
-          <label className="block text-xs">Di chuyển dọc: {Number(selected.panY ?? 0)}%
-            <input aria-label="Di chuyển dọc khung hình" className="mt-1 w-full" type="range" min="-50" max="50" step="1" value={Number(selected.panY ?? 0)} onChange={e=>update({panY:Number(e.target.value)})}/>
-          </label>
-          <button type="button" onClick={()=>update({zoom:1,panX:0,panY:0})} className="w-full rounded-lg border border-white/20 px-3 py-2 text-xs font-semibold">Đặt lại zoom và vị trí</button>
-        </section>
-
-        {[['brightness','Độ sáng',-50,50,0],['contrast','Độ tương phản',50,180,100],['saturation','Bão hòa',0,200,100],['hue','HSL / Sắc độ',-180,180,0]].map(([key,label,min,max,initial])=><label key={key} className="block text-xs">{label}: {Number(selected[key] ?? initial)}{key==='hue'?'°':'%'}<input className="mt-1.5 w-full" type="range" min={min} max={max} value={selected[key] ?? initial} onChange={e=>update({[key]:Number(e.target.value)})}/></label>)}
-        <button type="button" onClick={()=>update({brightness:0,contrast:100,saturation:100,hue:0})} className="rounded-lg border border-white/20 px-3 py-2 text-xs">Đặt lại màu</button>
-        <p className="text-[11px] text-white/55">AI tự động chưa được kết nối; các thanh kéo độ sáng, tương phản, bão hòa và sắc độ bên trên hoạt động thủ công.</p>
-      </div>}
-      {activeTool === 'ratio' && <div className="space-y-3"><p className="text-xs text-white/60">Chọn tỷ lệ đầu ra và cách lấp đầy khung hình.</p><div className="grid grid-cols-4 gap-2">{['9:16','16:9','1:1','4:5'].map(ratio=><button key={ratio} type="button" onClick={()=>update({aspectRatio:ratio})} className={`rounded-lg border px-2 py-3 text-sm font-semibold ${(selected.aspectRatio||'9:16')===ratio?'border-sky-300 bg-sky-400/20 text-sky-100':'border-white/20'}`}>{ratio}</button>)}</div><div className="flex gap-2"><button type="button" onClick={()=>update({cropMode:'contain'})} className={`flex-1 rounded-lg border px-3 py-2 text-xs ${(selected.cropMode||'contain')==='contain'?'border-white bg-white/15':'border-white/20'}`}>Vừa khung</button><button type="button" onClick={()=>update({cropMode:'cover'})} className={`flex-1 rounded-lg border px-3 py-2 text-xs ${selected.cropMode==='cover'?'border-white bg-white/15':'border-white/20'}`}>Lấp đầy / Crop</button></div></div>}
-      {activeTool === 'background' && <div className="space-y-3"><p className="text-xs text-white/60">Chọn màu nền của khung xem trước và file xuất.</p><div className="flex flex-wrap gap-2">{[{value:'#000000',label:'Đen'},{value:'#ffffff',label:'Trắng'},{value:'#172554',label:'Xanh đậm'},{value:'#7c2d12',label:'Nâu'},{value:'#581c87',label:'Tím'},{value:'#166534',label:'Xanh lá'}].map(bg=><button key={bg.value} type="button" onClick={()=>update({backgroundColor:bg.value})} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${(selected.backgroundColor||'#000000')===bg.value?'border-white':'border-white/20'}`}><span className="h-4 w-4 rounded-full border border-white/30" style={{background:bg.value}}/>{bg.label}</button>)}</div><label className="flex items-center gap-2 text-xs">Màu tùy chỉnh <input type="color" value={selected.backgroundColor||'#000000'} onChange={e=>update({backgroundColor:e.target.value})} className="h-9 w-12 rounded bg-transparent"/></label><div className="flex gap-2"><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Nền mờ · Chưa bật</button><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Mẫu nền · Chưa có thư viện</button></div><p className="text-[11px] text-white/55">Nền mờ và thư viện mẫu nền chưa được nối với bộ xử lý nền riêng.</p></div>}
-      {activeTool === 'overlay' && <div className="space-y-2"><p className="text-sm font-semibold">Lớp phủ / Picture-in-Picture</p><p className="text-xs text-white/65">Chức năng nhập video/ảnh lớp phủ chưa được nối vào luồng kết xuất hiện tại. Em không bật nút giả để tránh xuất file thiếu lớp.</p><button type="button" onClick={()=>setActiveTool('text')} className="rounded-lg border border-white/20 px-3 py-2 text-xs">Dùng lớp chữ / sticker đang hỗ trợ</button></div>}
-      {activeTool === 'effects' && <div className="space-y-3"><p className="text-xs text-white/60">Hiệu ứng màu áp dụng ngay; chuyển cảnh và hiệu ứng cơ thể cần pipeline nhiều clip/AI riêng.</p><div className="flex flex-wrap gap-2">{FILTERS.filter(x=>x.id!=='none').map(filter=><button key={filter.id} type="button" onClick={()=>update({colorFilter:filter.id})} className={`rounded-lg border px-3 py-2 text-sm ${selected.colorFilter===filter.id?'border-white bg-white/20':'border-white/20'}`}>{filter.label}</button>)}</div><div className="flex flex-wrap gap-2"><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Hiệu ứng cơ thể · Chưa bật</button><button type="button" disabled className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Chuyển cảnh · Cần nhiều clip</button></div><p className="text-[11px] text-white/55">Chuyển cảnh / hiệu ứng cơ thể: chưa khả dụng trong bộ xuất một clip.</p></div>}
-      {activeTool === 'avatar' && <div className="space-y-2"><p className="text-sm font-semibold">Ảnh đại diện AI / Nhân vật ảo</p><p className="text-xs text-white/65">Chưa có dịch vụ tạo avatar AI kết nối với D-Social. Mục này được hiển thị rõ trạng thái thay vì tạo ảnh giả hoặc báo thành công sai.</p><button type="button" disabled className="w-full cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Tạo Avatar AI · Chưa có dịch vụ</button></div>}
-      {activeTool === 'text' && <div className="mt-3 border-t border-white/10 pt-3"><p className="mb-2 text-xs font-semibold">Mẫu chữ nghệ thuật</p><div className="flex flex-wrap gap-2">{[{label:'Đậm',font:'Roboto, Arial, sans-serif',color:'#ffffff'},{label:'Cổ điển',font:'Georgia, serif',color:'#ffe4b5'},{label:'Neon',font:'monospace',color:'#67e8f9'}].map(preset=><button key={preset.label} type="button" onClick={()=>update({overlayFont:preset.font,overlayColor:preset.color,overlayText:selected.overlayText||preset.label})} className="rounded-lg border border-white/20 px-3 py-2 text-xs">{preset.label}</button>)}</div><button type="button" disabled className="mt-2 w-full cursor-not-allowed rounded-lg border border-white/10 px-3 py-2 text-xs text-white/35">Phụ đề tự động · Chưa có dịch vụ nhận dạng giọng nói</button><p className="mt-2 text-[11px] text-white/55">Phụ đề tự động cần dịch vụ nhận dạng giọng nói; hiện chưa được kết nối.</p></div>}
-      {activeTool === 'volume' && <div className="space-y-4"><label className="block text-sm">Âm lượng tiếng gốc: {selected.originalVolume??100}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.originalVolume??100} onChange={e=>update({originalVolume:Number(e.target.value)})}/></label><label className="block text-sm">Âm lượng nhạc nền: {selected.musicVolume??30}%<input className="mt-2 w-full" type="range" min="0" max="100" value={selected.musicVolume??30} onChange={e=>update({musicVolume:Number(e.target.value)})}/></label></div>}
+    {activeTool === 'music' && <div className="pointer-events-auto absolute bottom-[calc(190px+env(safe-area-inset-bottom))] left-3 right-3 z-30 mx-auto max-h-[min(28dvh,calc(100dvh-250px))] max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-[#101116]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
+      <div className="mb-2 flex items-center justify-between gap-2"><strong className="text-sm">Thư viện âm thanh</strong><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/10 px-3 py-1 text-xs">Đóng</button></div>
+      <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/50" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…" /><button type="button" disabled={loading} onClick={searchAudio} className="rounded-lg bg-white px-3 text-black disabled:opacity-50"><Search size={16}/></button></div>
+      <button type="button" onClick={() => { update({audioSource:'original',audioTrackId:null,audioTrackTitle:null,audioTrackUrl:null,isMuted:false}); setActiveTool('') }} className="mt-2 rounded-lg border border-white/20 px-3 py-2 text-xs">Dùng âm thanh gốc</button>
+      {loading && <p className="mt-2 text-xs text-white/65">Đang tìm nhạc…</p>}
+      {audioError && <p role="status" className="mt-2 text-xs text-amber-300">{audioError}</p>}
+      <div className="mt-2 space-y-2">
+        {hits.map(track => <div key={track.id} className="flex items-center gap-2 rounded-xl bg-white/[0.07] p-2">
+          <button type="button" onClick={() => toggleTrackPreview(track)} className="rounded-full bg-white/10 p-2" aria-label={playingId === track.id ? 'Dừng nghe thử' : 'Nghe thử'}>{playingId === track.id ? <Pause size={14}/> : <Play size={14}/>}</button>
+          <audio id={'pixabay-preview-' + track.id} data-pixabay-preview src={track.previewUrl} preload="none" className="hidden"/>
+          <div className="min-w-0 flex-1"><div className="truncate text-xs font-semibold">{track.title}</div><div className="truncate text-[10px] text-white/55">{track.artist}</div></div>
+          <button type="button" onClick={() => selectTrack(track)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-black">Chọn</button>
+        </div>)}
+      </div>
+      {selected.audioTrackTitle && <p className="mt-2 text-xs text-emerald-300">Đã chọn: {selected.audioTrackTitle}</p>}
     </div>}
-    {(isVideo || (files || []).some(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/')))) && <div className="absolute bottom-[max(88px,calc(env(safe-area-inset-bottom)+82px))] left-0 right-0 z-30 pointer-events-auto">
-      <VideoTimelineEditor file={file} files={files} storyMode={storyMode} onPublishStory={onPublishStory} onContinuePost={onContinuePost} onCloseEditor={onCloseEditor} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} trimModeActive={activeTool === 'trim'} onOpenTool={tool => { if (tool === 'trim') { setActiveTool('trim'); return } setActiveTool(current => current === tool ? '' : tool); if (tool === 'music' && !hits.length && !loading) searchAudio() }} />
-    </div>}
+    {(file?.type?.startsWith('image/') || file?.type?.startsWith('video/') || (files || []).some(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/')))) && <VideoTimelineEditor file={file} files={files} storyMode={storyMode} onPublishStory={onPublishStory} onContinuePost={onContinuePost} onCloseEditor={onCloseEditor} settings={selected} onChange={onChange} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} trimModeActive={activeTool === 'trim'} onOpenTool={tool => { if (tool === 'trim') { setActiveTool('trim'); return } if (tool === 'music' && !hits.length && !loading) searchAudio(); if (tool === 'adjust') setActiveTool(current => current === tool ? '' : tool) }} />}
   </div>
 
   return <div className="mt-4 rounded-2xl border p-3 space-y-4" style={{ borderColor: 'var(--d-border)', background: 'var(--d-surface-2)' }}>
