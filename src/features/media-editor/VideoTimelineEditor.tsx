@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowLeft, AudioLines, Check, ChevronDown, ChevronUp, CircleHelp, Clapperboard, Copy,
   Crop, Download, Film, ImagePlus, Layers, Music2, Pause, Play, Plus, RotateCcw,
@@ -288,7 +289,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   }
   const actionButton = 'flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-xs font-bold disabled:opacity-40'
   const rangeClass = 'w-full accent-cyan-300'
-  return <section className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#08090d] text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+  return createPortal(<><section className="pointer-events-auto fixed inset-0 z-[9999] flex flex-col overflow-hidden bg-[#08090d] text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
     <header className="relative z-30 flex h-14 shrink-0 items-center gap-1.5 border-b border-white/10 px-2">
       <button type="button" onClick={() => onCloseEditor ? onCloseEditor() : setActiveTool('')} aria-label="Đóng trình chỉnh sửa" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-white/10"><ArrowLeft size={21} /></button>
       <div className="min-w-0 flex-1"><div className="text-[13px] font-bold tracking-wide">D-Social Studio</div><div className="text-[9px] text-white/45">Trình chỉnh sửa video</div></div>
@@ -338,17 +339,17 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
 
       <nav className="relative z-20 shrink-0 border-t border-white/10 bg-[#101116] px-1 pb-2 pt-2">
         <div className="grid grid-cols-6 gap-1">
-          <button type="button" onClick={()=>setActiveTool('trim')} className={'flex touch-manipulation flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='trim'?'bg-white/10 text-white':'text-white/55')}><Scissors size={19}/><span>Chỉnh sửa</span></button>
-          <button type="button" onClick={()=>toolClick('music')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='music'?'bg-white/10 text-white':'text-white/55')}><Music2 size={19}/><span>Âm thanh</span></button>
-          <button type="button" onClick={()=>toolClick('text')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='text'?'bg-white/10 text-white':'text-white/55')}><Type size={19}/><span>Văn bản</span></button>
-          <button type="button" onClick={()=>toolClick('effects')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='effects'?'bg-white/10 text-white':'text-white/55')}><Sparkles size={19}/><span>Hiệu ứng</span></button>
-          <button type="button" onClick={()=>setStudioOpen(true)} className="flex touch-manipulation flex-col items-center gap-1 rounded-xl py-2 text-[9px] text-cyan-200"><WandSparkles size={19}/><span>Video AI</span></button>
-          <button type="button" onClick={()=>setStudioOpen(true)} className="flex touch-manipulation flex-col items-center gap-1 rounded-xl py-2 text-[9px] text-white/55"><Film size={19}/><span>Mẫu</span></button>
+          <button type="button" onClick={()=>{setToolbarMode('clip');setActiveTool('trim')}} className={'flex touch-manipulation min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] '+(activeTool==='trim'?'bg-white/10 text-white':'text-white/55')}><Scissors size={19}/><span>Chỉnh sửa</span></button>
+          <button type="button" onClick={()=>toolClick('music')} className={'flex touch-manipulation min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] '+(activeTool==='music'?'bg-white/10 text-white':'text-white/55')}><Music2 size={19}/><span>Âm thanh</span></button>
+          <button type="button" onClick={()=>toolClick('text')} className={'flex touch-manipulation min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] '+(activeTool==='text'?'bg-white/10 text-white':'text-white/55')}><Type size={19}/><span>Văn bản</span></button>
+          <button type="button" onClick={()=>toolClick('effects')} className={'flex touch-manipulation min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] '+(activeTool==='effects'?'bg-white/10 text-white':'text-white/55')}><Sparkles size={19}/><span>Hiệu ứng</span></button>
+          <button type="button" onClick={()=>setStudioOpen(true)} className="flex touch-manipulation min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] text-cyan-200"><WandSparkles size={19}/><span>Video AI</span></button>
+          <button type="button" onClick={()=>setStudioOpen(true)} className="flex touch-manipulation min-h-11 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10px] text-white/55"><Film size={19}/><span>Mẫu</span></button>
         </div>
       </nav>
     </div>
     {studioOpen && <StudioCreationTools initialImage={active?.kind === 'image' ? active.file : null} onInsert={insertGenerated} onClose={() => setStudioOpen(false)} />}
     {error && <div role="alert" className="absolute left-3 right-3 top-16 z-[220] rounded-xl border border-red-300/30 bg-[#321b20] px-3 py-2 text-xs text-red-100 shadow-lg">{error}<button type="button" onClick={() => setError('')} className="ml-2 underline">Đóng</button></div>}
     {exportedFile && <div className="absolute left-3 right-3 top-16 z-[210] rounded-xl border border-emerald-300/25 bg-[#12251e] px-3 py-2 text-xs text-emerald-100">Đã xuất video · {(exportedFile.size / 1024 / 1024).toFixed(1)} MB</div>}
-  </section>
+  </section></>, document.body)
 }
