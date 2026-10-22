@@ -398,7 +398,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         </div>
       </nav>
     </div>
-    {studioOpen && <StudioCreationTools onInsert={insertGenerated} onClose={() => setStudioOpen(false)} />}
+    {studioOpen && <StudioCreationTools initialImage={active?.kind === 'image' ? active.file : null} onInsert={insertGenerated} onClose={() => setStudioOpen(false)} />}
     {error && <div role="alert" className="absolute left-3 right-3 top-16 z-[220] rounded-xl border border-red-300/30 bg-[#321b20] px-3 py-2 text-xs text-red-100 shadow-lg">{error}<button type="button" onClick={() => setError('')} className="ml-2 underline">Đóng</button></div>}
     {exportedFile && <div className="absolute left-3 right-3 top-16 z-[210] rounded-xl border border-emerald-300/25 bg-[#12251e] px-3 py-2 text-xs text-emerald-100">Đã xuất video · {(exportedFile.size / 1024 / 1024).toFixed(1)} MB</div>}
   </section>
