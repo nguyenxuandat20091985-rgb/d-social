@@ -149,17 +149,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
           </div>
         </div>
       </div>
-      {active && <div className="mt-2 flex items-center gap-2">
-        <span className="w-[54px] shrink-0 text-[9px] text-white/40">CẮT</span>
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg bg-white/[0.035] px-2 py-1.5">
-          <span className="text-[10px] text-white/45">Đầu</span>
-          <input aria-label="Điểm bắt đầu clip" type="range" min="0" max={Math.max(.25, active.sourceDuration || active.out || 3)} step=".05" value={active.in} onChange={e => { const next = clips.map(c => c.id === active.id ? { ...c, in: Math.min(Number(e.target.value), c.out - .25) } : c); onChangeClips(next) }} className="min-w-0 flex-1 accent-cyan-300" />
-          <span className="w-10 text-right font-mono text-[10px]">{fmt(active.in, true)}</span>
-          <span className="text-[10px] text-white/45">Cuối</span>
-          <input aria-label="Điểm kết thúc clip" type="range" min={active.in + .25} max={Math.max(active.in + .25, active.sourceDuration || active.out || 3)} step=".05" value={Math.min(active.out || active.sourceDuration || 3, active.sourceDuration || active.out || 3)} onChange={e => onChangeClips(clips.map(c => c.id === active.id ? { ...c, out: Number(e.target.value) } : c))} className="min-w-0 flex-1 accent-cyan-300" />
-          <span className="w-10 text-right font-mono text-[10px]">{fmt(active.out, true)}</span>
-        </div>
-      </div>}
+
     </div>
     {storyMode && total > 60 && <p role="alert" className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-100">Tin 24 giờ tối đa 60 giây. Timeline hiện dài {fmt(total)}.</p>}
   </div>
