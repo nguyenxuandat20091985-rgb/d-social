@@ -80,7 +80,7 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
       {file && file.type && file.type.startsWith('video/') ? <video key={sourceUrl} ref={videoRef} src={sourceUrl} playsInline preload="auto" onPlay={() => setLocalPlaying(true)} onPause={() => setLocalPlaying(false)} className="h-full w-full" style={visualStyle} /> : sourceUrl ? <img src={sourceUrl} alt="Xem trước video" className="h-full w-full" style={visualStyle} /> : <div className="grid h-full place-items-center text-sm text-white/45">Thêm video hoặc ảnh để bắt đầu</div>}
       {settings.sticker && <div className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 text-4xl drop-shadow-lg">{settings.sticker}</div>}
       {settings.overlayText && <div onPointerDown={e => { drag.current = true; e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId) }} onPointerMove={moveText} onPointerUp={() => { drag.current = false }} onPointerCancel={() => { drag.current = false }} className="absolute max-w-[90%] cursor-move select-none rounded px-2 py-1 text-center font-bold drop-shadow-lg touch-none" style={{ left: position.x + '%', top: position.y + '%', transform: 'translate(-50%,-50%)', color: settings.overlayColor || '#ffffff', fontSize: clamp(settings.overlayFontSize || 28, 12, 72) + 'px', fontFamily: settings.overlayFont || 'Arial,sans-serif', textShadow: '0 2px 5px #000' }}>{settings.overlayText}</div>}
-      <button type="button" onClick={() => { const v = videoRef && videoRef.current; if (v && file && file.type && file.type.startsWith('video/')) { if (v.paused) v.play().catch(() => {}); else v.pause() } else if (onTogglePlayback) onTogglePlayback() }} className="absolute bottom-3 left-3 grid h-10 w-10 place-items-center rounded-full bg-black/65 text-white backdrop-blur" aria-label={localPlaying ? 'Tạm dừng' : 'Phát'}>{localPlaying ? <Pause size={19} /> : <Play size={19} fill="currentColor" />}</button>
+      
       <div className="absolute bottom-3 right-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-semibold text-white/80 backdrop-blur">Xem trước</div>
     </div>
   </div>
@@ -294,7 +294,9 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-3">
       <button type="button" onClick={() => onCloseEditor ? onCloseEditor() : setActiveTool('')} aria-label="Đóng trình chỉnh sửa" className="grid h-10 w-10 shrink-0 place-items-center rounded-full hover:bg-white/10"><ArrowLeft size={21} /></button>
       <div className="min-w-0 flex-1"><div className="text-sm font-bold tracking-wide">D-Social Studio</div><div className="text-[10px] text-white/45">Trình chỉnh sửa video</div></div>
-      <div className="rounded-lg bg-white/[0.06] px-2.5 py-1.5 text-[10px] font-semibold text-white/70">{totalLabel}</div>
+      <div className="rounded-lg bg-white/[0.06] px-2 py-1.5 text-[10px] font-semibold text-white/70">{totalLabel}</div>
+      <button type="button" disabled={exporting || !clips.length || total>60} onClick={publishStory} aria-label="Đăng tin 24h" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.06] text-white/80"><Clock size={16}/></button>
+      <button type="button" disabled={exporting || !clips.length} onClick={continuePost} aria-label="Tiếp tục đăng bài" className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/[0.06] text-white/80"><Send size={16}/></button>
       <button type="button" disabled={exporting || !clips.length} onClick={() => exportAction()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-cyan-300 px-4 text-xs font-extrabold text-black disabled:opacity-40"><Check size={15} /> {exporting ? 'Đang xuất' : 'Xuất'}</button>
     </header>
 
@@ -302,15 +304,12 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
       <div className="relative flex min-h-0 flex-[1_1_0%] items-center justify-center overflow-hidden px-2 py-1">
         <div className="pointer-events-none absolute inset-0 opacity-60" style={{ background: 'radial-gradient(ellipse at center, #242630 0%, #111217 48%, #08090d 78%)' }} />
         <div className="relative z-10 h-full w-full"><PreviewPlayer file={active ? active.file : file} videoRef={videoRef} isPlaying={isPlaying} onTogglePlayback={onTogglePlayback} settings={selected} onSettingsChange={update} /></div>
-        <div className="absolute bottom-3 left-4 right-4 z-20 flex items-center justify-between">
-          <div className="rounded-full bg-black/45 px-2.5 py-1 text-[10px] text-white/65 backdrop-blur">{active ? active.file.name : 'Chưa chọn media'}</div>
-          <div className="flex items-center gap-1.5"><button type="button" onClick={() => update({ zoom: 1, panX: 0, panY: 0, rotation: 0 })} className="grid h-8 w-8 place-items-center rounded-full bg-black/45 text-white/80" aria-label="Đặt lại khung hình"><RotateCcw size={14} /></button><span className="rounded-full bg-black/45 px-2 py-1 text-[10px] text-white/65">{selected.aspectRatio || '9:16'}</span></div>
-        </div>
+        <div className="absolute bottom-2 left-3 right-3 z-20 truncate text-[10px] text-white/50">{active ? active.file.name : 'Chưa chọn media'}</div>
       </div>
 
       <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-2 pb-2 pt-1">
         <div className="mb-2 flex h-8 items-center justify-center gap-5 border-b border-white/[.06]">
-          <button type="button" onClick={onTogglePlayback} aria-label={isPlaying?'Tạm dừng':'Phát'} className="grid h-8 w-8 place-items-center rounded-full text-white/90"><Play size={15} fill={isPlaying?'currentColor':'none'} /></button>
+          <button type="button" onClick={onTogglePlayback} aria-label={isPlaying?'Tạm dừng':'Phát'} className="grid h-8 w-8 place-items-center rounded-full text-white/90">{isPlaying ? <Pause size={15}/> : <Play size={15} fill="currentColor"/>}</button>
           <button type="button" onClick={undoClips} disabled={!historyRef.current.past.length} aria-label="Hoàn tác" className="grid h-8 w-8 place-items-center text-white/70 disabled:opacity-25"><Undo2 size={17}/></button>
           <button type="button" onClick={redoClips} disabled={!historyRef.current.future.length} aria-label="Làm lại" className="grid h-8 w-8 place-items-center text-white/70 disabled:opacity-25"><Redo2 size={17}/></button>
           <button type="button" onClick={toggleFullscreen} aria-label="Toàn màn hình" className="grid h-8 w-8 place-items-center text-white/70"><Maximize2 size={16}/></button>
