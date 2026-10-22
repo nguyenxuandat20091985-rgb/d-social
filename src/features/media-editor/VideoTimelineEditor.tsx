@@ -129,7 +129,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
           const Icon = row.icon
           return <div key={row.id} className="flex min-h-[48px] items-stretch gap-2">
             <div className="flex w-[54px] shrink-0 flex-col justify-center gap-1 rounded-lg bg-white/[0.035] px-1.5 text-[9px] text-white/50"><Icon size={13} /><span>{row.label}</span></div>
-            <div ref={row.id === 'video' ? trackRef : undefined} onClick={trackClick} className={'relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.07] ' + row.color}>
+            <div ref={row.id === 'video' ? trackRef : undefined} onClick={trackClick} className={'relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.07] ' + row.color} onPointerDown={e => { if (row.id !== 'video') return; drag.current = 'playhead'; e.currentTarget.setPointerCapture?.(e.pointerId); const r = e.currentTarget.getBoundingClientRect(); onSeek(clamp((e.clientX-r.left)/r.width,0,1)*total) }}>
               {row.id === 'video' && clips.map((c, i) => {
                 const d = clipLen(c)
                 return <button key={c.id} type="button" onClick={e => { e.stopPropagation(); onSelect(c.id); onSeek(clips.slice(0, i).reduce((s, x) => s + clipLen(x), 0)) }} className={'relative min-w-0 overflow-hidden border-r border-black/35 ' + (c.id === activeId ? 'ring-2 ring-inset ring-cyan-300' : '')} style={{ width: (d / Math.max(total, .1) * 100) + '%' }}>
@@ -137,7 +137,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
                   <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-[8px] text-white">{i + 1} · {fmt(d)}</span>
                 </button>
               })}
-              {row.id === 'video' && active && <><div onPointerDown={e => startDrag(e, 'in')} className="absolute bottom-0 top-0 z-10 w-2 cursor-ew-resize border-l-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart) + '%' }} aria-label="Kéo điểm đầu clip" /><div onPointerDown={e => startDrag(e, 'out')} className="absolute bottom-0 top-0 z-10 w-2 cursor-ew-resize border-r-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart + clipLen(active)) + '%' }} aria-label="Kéo điểm cuối clip" /></>}
+              {row.id === 'video' && active && <><div onPointerDown={e => startDrag(e, 'in')} className="absolute bottom-0 top-0 z-30 w-11 cursor-ew-resize touch-none border-l-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart) + '%', transform: 'translateX(-50%)' }} aria-label="Kéo điểm đầu clip" /><div onPointerDown={e => startDrag(e, 'out')} className="absolute bottom-0 top-0 z-30 w-11 cursor-ew-resize touch-none border-r-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart + clipLen(active)) + '%', transform: 'translateX(-50%)' }} aria-label="Kéo điểm cuối clip" /></>}
               {row.id === 'audio' && <div className="flex h-12 w-full items-center gap-[2px] overflow-hidden px-1.5">{Array.from({ length: 96 }, (_, i) => <span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/80" style={{ height: (18 + ((i * 17 + 11) % 25)) + '%' }} />)}{!row.visible && <span className="absolute inset-0 grid place-items-center bg-[#1b1925]/80 text-[10px] text-white/35">+ Thêm âm thanh</span>}{row.visible && <span className="absolute left-2 top-1 rounded bg-black/35 px-1.5 py-0.5 text-[9px] text-violet-100">{settings.audioTrackTitle || 'Âm thanh gốc'}</span>}</div>}
               {row.id === 'text' && <div className="flex h-12 w-full items-center px-1.5">{row.visible ? <div className="flex h-6 w-full items-center rounded-md border border-amber-200/30 bg-amber-300/25 px-2 text-[10px] text-amber-50">{settings.sticker ? settings.sticker + ' ' : ''}{settings.overlayText || 'Nhãn dán'}</div> : <span className="w-full text-center text-[10px] text-white/35">+ Thêm văn bản</span>}</div>}
             </div>
@@ -174,7 +174,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [exporting, setExporting] = useState(false)
   const [exportedFile, setExportedFile] = useState(null)
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
-  const [toolbarMode, setToolbarMode] = useState('clip')
+  const [toolbarMode, setToolbarMode] = useState('main')
   const [studioOpen, setStudioOpen] = useState(false)
   const selected = settings || {}
   const active = clips.find(c => c.id === activeId) || clips[0]
@@ -348,7 +348,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
 
       <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-2 pb-1 pt-1">
         <div className="mb-1 flex items-center justify-between"><div className="flex items-center gap-2 text-[11px] font-bold"><Clapperboard size={14} className="text-cyan-300" /> Timeline</div><div className="flex items-center gap-1.5"><button type="button" disabled={activeIndex <= 0} onClick={() => move(-1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip lên trước"><ChevronUp size={15} /></button><button type="button" disabled={activeIndex < 0 || activeIndex >= clips.length - 1} onClick={() => move(1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip ra sau"><ChevronDown size={15} /></button><button type="button" disabled={!active} onClick={split} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Tách clip"><Scissors size={14} /></button><button type="button" disabled={!active} onClick={remove} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] text-red-200 disabled:opacity-25" aria-label="Xóa clip"><Trash2 size={14} /></button><MediaPicker onFiles={addFiles} disabled={exporting} /></div></div>
-        <Timeline clips={clips} activeId={active && active.id} onSelect={id => { setActiveId(id); setError('') }} onChangeClips={changeClips} playhead={playhead} onSeek={seek} settings={selected} storyMode={storyMode} />
+        <Timeline clips={clips} activeId={active && active.id} onSelect={id => { setActiveId(id); setToolbarMode('clip'); setError('') }} onChangeClips={changeClips} playhead={playhead} onSeek={seek} settings={selected} storyMode={storyMode} />
       </div>
 
       {activeTool && <div className="absolute bottom-[calc(90px+env(safe-area-inset-bottom))] left-2 right-2 z-[180] max-h-[min(24dvh,calc(100dvh-210px))] overflow-hidden rounded-2xl border border-white/15 bg-[#15161d]/95 px-3 py-2 shadow-2xl backdrop-blur-xl">
