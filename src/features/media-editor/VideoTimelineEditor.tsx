@@ -4,7 +4,7 @@ import {
   ArrowLeft, AudioLines, Check, ChevronDown, ChevronUp, CircleHelp, Clapperboard, Copy,
   Crop, Download, Film, ImagePlus, Layers, Music2, Pause, Play, Plus, RotateCcw,
   Scissors, SlidersHorizontal, Sparkles, Sticker, Trash2, Type, Volume2, WandSparkles,
-  X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound
+  X, MoveHorizontal, Clock3, Palette, RectangleHorizontal, UserRound, Undo2, Redo2, Maximize2, Send, Clock
 } from 'lucide-react'
 import { exportToBlob, blobToVideoFile } from './timelineExport'
 import { StudioCreationTools } from './StudioCreationTools'
@@ -132,6 +132,8 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [activeTool, setActiveTool] = useState(trimModeActive ? 'trim' : '')
   const [toolbarMode, setToolbarMode] = useState('main')
   const [studioOpen, setStudioOpen] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
+  const historyRef = useRef({ past: [], future: [], last: null, ignore: false })
   const selected = settings || {}
   const active = clips.find(c => c.id === activeId) || clips[0]
   const total = clips.reduce((s, c) => s + clipLen(c), 0)
@@ -140,6 +142,10 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const update = patch => { setExportedFile(null); onChange && onChange({ ...selected, ...patch }) }
 
   useEffect(() => { if (!activeId && clips[0]) setActiveId(clips[0].id) }, [clips, activeId])
+  useEffect(() => { const h=historyRef.current; if(h.last && h.last!==clips && !h.ignore){h.past.push(h.last);if(h.past.length>30)h.past.shift();h.future=[]}h.last=clips;h.ignore=false },[clips])
+  const undoClips=()=>{const h=historyRef.current;if(!h.past.length)return;h.future.push(clips);const prev=h.past.pop();h.ignore=true;h.last=prev;setClips(prev);setExportedFile(null)}
+  const redoClips=()=>{const h=historyRef.current;if(!h.future.length)return;h.past.push(clips);const next=h.future.pop();h.ignore=true;h.last=next;setClips(next);setExportedFile(null)}
+  const toggleFullscreen=async()=>{try{if(!document.fullscreenElement){await document.documentElement.requestFullscreen?.();setFullscreen(true)}else{await document.exitFullscreen?.();setFullscreen(false)}}catch{setFullscreen(false)}}
   useEffect(() => {
     let cancelled = false
     clips.filter(c => c.kind === 'video' && !c.sourceDuration).forEach(c => {
@@ -302,11 +308,15 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-2 pb-1 pt-1">
-        <div className="mb-1 flex items-center justify-between"><div className="flex items-center gap-2 text-[11px] font-bold"><Clapperboard size={14} className="text-cyan-300" /> Timeline</div><div className="flex items-center gap-1.5"><button type="button" disabled={activeIndex <= 0} onClick={() => move(-1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip lên trước"><ChevronUp size={15} /></button><button type="button" disabled={activeIndex < 0 || activeIndex >= clips.length - 1} onClick={() => move(1)} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Di chuyển clip ra sau"><ChevronDown size={15} /></button><button type="button" disabled={!active} onClick={split} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] disabled:opacity-25" aria-label="Tách clip"><Scissors size={14} /></button><button type="button" disabled={!active} onClick={remove} className="grid h-7 w-7 place-items-center rounded-md bg-white/[0.06] text-red-200 disabled:opacity-25" aria-label="Xóa clip"><Trash2 size={14} /></button><MediaPicker onFiles={addFiles} disabled={exporting} /></div></div>
+      <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-2 pb-2 pt-1">
+        <div className="mb-2 flex h-8 items-center justify-center gap-5 border-b border-white/[.06]">
+          <button type="button" onClick={onTogglePlayback} aria-label={isPlaying?'Tạm dừng':'Phát'} className="grid h-8 w-8 place-items-center rounded-full text-white/90"><Play size={15} fill={isPlaying?'currentColor':'none'} /></button>
+          <button type="button" onClick={undoClips} disabled={!historyRef.current.past.length} aria-label="Hoàn tác" className="grid h-8 w-8 place-items-center text-white/70 disabled:opacity-25"><Undo2 size={17}/></button>
+          <button type="button" onClick={redoClips} disabled={!historyRef.current.future.length} aria-label="Làm lại" className="grid h-8 w-8 place-items-center text-white/70 disabled:opacity-25"><Redo2 size={17}/></button>
+          <button type="button" onClick={toggleFullscreen} aria-label="Toàn màn hình" className="grid h-8 w-8 place-items-center text-white/70"><Maximize2 size={16}/></button>
+        </div>
         <Timeline clips={clips} activeId={active && active.id} onSelect={id => { setActiveId(id); setToolbarMode('clip'); setError('') }} onChangeClips={changeClips} playhead={playhead} onSeek={seek} settings={selected} storyMode={storyMode} />
       </div>
-
       {activeTool && <div className="absolute bottom-[calc(220px+env(safe-area-inset-bottom))] left-2 right-2 z-[180] max-h-[min(20dvh,calc(100dvh-320px))] overflow-hidden rounded-2xl border border-white/15 bg-[#15161d]/95 px-3 py-2 shadow-2xl backdrop-blur-xl">
         <div className="mb-2 flex items-center justify-between"><div className="text-xs font-bold">{activeToolData ? activeToolData.label : 'Công cụ'}</div><button type="button" onClick={() => setActiveTool('')} aria-label="Đóng công cụ" className="grid h-7 w-7 place-items-center rounded-full bg-white/10"><X size={14} /></button></div>
         <div className="max-h-[calc(20dvh-44px)] space-y-2 overflow-y-auto text-xs">
@@ -324,38 +334,14 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
         </div>
       </div>}
 
-      <nav className="shrink-0 border-t border-white/10 bg-[#101116] pb-1 pt-1">
-        <div className="flex items-center gap-0.5 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {active && toolbarMode === 'clip' ? <>
-            <button type="button" onClick={split} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/85"><Scissors size={18}/><span>Tách</span></button>
-            <button type="button" disabled className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/35" title="Tốc độ chưa được hỗ trợ trong bộ xuất hiện tại"><MoveHorizontal size={18}/><span>Tốc độ</span></button>
-            <button type="button" onClick={() => toolClick('music')} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/85"><Volume2 size={18}/><span>Âm lượng</span></button>
-            <button type="button" onClick={() => toolClick('effects')} className="flex min-w-[62px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[9px] text-white/85"><Sparkles size={18}/><span>Hiệu ứng</span></button>
-            <button type="button" disabled className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1 py-1 text-[9px] text-white/35" title="Xóa nền cần mô hình xử lý nền riêng"><WandSparkles size={18}/><span>Xóa nền</span></button>
-            <button type="button" onClick={() => toolClick('filter')} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/85"><Palette size={18}/><span>Bộ lọc</span></button>
-            <button type="button" onClick={() => toolClick('adjust')} className="flex min-w-[60px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/85"><SlidersHorizontal size={18}/><span>Điều chỉnh</span></button>
-            <button type="button" onClick={duplicate} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/85"><Copy size={18}/><span>Nhân bản</span></button>
-            <button type="button" onClick={remove} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-red-200"><Trash2 size={18}/><span>Xóa</span></button>
-            <button type="button" onClick={() => setToolbarMode('main')} className="flex min-w-[58px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-white/10 px-1.5 py-1 text-[9px] text-white/75"><Layers size={18}/><span>Thêm</span></button>
-          </> : <>
-            <div className="flex min-w-[58px] shrink-0 flex-col items-center gap-0.5 px-1 py-1"><MediaPicker onFiles={addFiles} disabled={exporting}/><span className="whitespace-nowrap text-[9px] text-white/65">Thêm Video</span></div>
-            <button type="button" onClick={() => setStudioOpen(true)} className="flex min-w-[68px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-white/10 px-1.5 py-1 text-[9px] text-white/80"><Film size={18}/><span className="whitespace-nowrap">Mẫu Video</span></button>
-            <button type="button" onClick={() => toolClick('music')} className="flex min-w-[56px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/75"><Music2 size={18}/><span>Âm thanh</span></button>
-            <button type="button" onClick={() => toolClick('text')} className="flex min-w-[56px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/75"><Type size={18}/><span>Phụ đề</span></button>
-            <button type="button" onClick={() => toolClick('effects')} className="flex min-w-[56px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/75"><Sparkles size={18}/><span>Hiệu ứng</span></button>
-            <button type="button" onClick={() => setStudioOpen(true)} className="flex min-w-[70px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-1.5 py-1 text-[9px] text-cyan-100"><Sparkles size={18}/><span className="whitespace-nowrap">Tạo video AI</span></button>
-            <button type="button" onClick={() => toolClick('ratio')} className="flex min-w-[48px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] text-white/75"><Crop size={18}/><span>Tỉ lệ</span></button>
-                        {TOOL_ITEMS.map(item => { const Icon = item.icon; return <button key={item.id} type="button" onClick={() => toolClick(item.id)} aria-pressed={activeTool === item.id} className={'flex min-w-[60px] shrink-0 flex-col items-center gap-0.5 rounded-lg px-1.5 py-1 text-[9px] ' + (activeTool === item.id ? 'bg-cyan-300/15 text-cyan-200' : 'text-white/65 hover:bg-white/[0.05]')}><Icon size={18} /><span className="whitespace-nowrap">{item.label}</span></button> })}
-            <button type="button" onClick={() => setToolbarMode('clip')} className="flex min-w-[52px] shrink-0 flex-col items-center gap-0.5 rounded-lg border border-white/10 px-1.5 py-1 text-[9px] text-white/75"><Film size={18}/><span>Clip</span></button>
-          </>}
-        </div>
-        <div className={'grid gap-1.5 px-2 pb-1 pt-1 ' + (storyMode ? 'grid-cols-1' : 'grid-cols-2')}>
-          {storyMode ? (
-            <button type="button" disabled={exporting || !clips.length || total > 60} onClick={publishStory} className={actionButton + ' min-h-9 bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : 'Đăng tin 24h'}</button>
-          ) : <>
-            <button type="button" disabled={exporting || !clips.length || total > 60} onClick={publishStory} className={actionButton + ' min-h-9 border border-white/15 bg-white/[0.04]'}>{exporting ? 'Đang xử lý…' : 'Đăng tin 24h'}</button>
-            <button type="button" disabled={exporting || !clips.length} onClick={continuePost} className={actionButton + ' min-h-9 bg-cyan-300 text-black'}>{exporting ? 'Đang xử lý…' : 'Tiếp → Đăng bài'}</button>
-          </>}
+      <nav className="shrink-0 border-t border-white/10 bg-[#101116] px-1 pb-2 pt-2">
+        <div className="grid grid-cols-6 gap-1">
+          <button type="button" onClick={()=>setActiveTool('trim')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='trim'?'bg-white/10 text-white':'text-white/55')}><Scissors size={19}/><span>Chỉnh sửa</span></button>
+          <button type="button" onClick={()=>toolClick('music')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='music'?'bg-white/10 text-white':'text-white/55')}><Music2 size={19}/><span>Âm thanh</span></button>
+          <button type="button" onClick={()=>toolClick('text')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='text'?'bg-white/10 text-white':'text-white/55')}><Type size={19}/><span>Văn bản</span></button>
+          <button type="button" onClick={()=>toolClick('effects')} className={'flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] '+(activeTool==='effects'?'bg-white/10 text-white':'text-white/55')}><Sparkles size={19}/><span>Hiệu ứng</span></button>
+          <button type="button" onClick={()=>setStudioOpen(true)} className="flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] text-cyan-200"><WandSparkles size={19}/><span>Video AI</span></button>
+          <button type="button" onClick={()=>setStudioOpen(true)} className="flex flex-col items-center gap-1 rounded-xl py-2 text-[9px] text-white/55"><Film size={19}/><span>Mẫu</span></button>
         </div>
       </nav>
     </div>
