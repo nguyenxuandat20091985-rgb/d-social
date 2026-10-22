@@ -288,7 +288,15 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
 
   const activeToolData = TOOL_ITEMS.find(x => x.id === activeTool)
   const totalLabel = fmt(total)
-  const toolClick = id => setActiveTool(current => current === id ? '' : id)
+  const toolClick = id => {
+    if (id === 'music' && onOpenTool) {
+      setActiveTool('')
+      onOpenTool('music')
+      return
+    }
+    if (id === 'adjust' && onOpenTool) onOpenTool('adjust')
+    setActiveTool(current => current === id ? '' : id)
+  }
   const actionButton = 'flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-xs font-bold disabled:opacity-40'
   const rangeClass = 'w-full accent-cyan-300'
   return <section className="pointer-events-auto fixed inset-0 z-[200] flex flex-col overflow-hidden bg-[#08090d] text-white" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
