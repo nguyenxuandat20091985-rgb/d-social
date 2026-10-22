@@ -69,6 +69,17 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
     setPosition(next)
     onSettingsChange && onSettingsChange({ overlayX: next.x, overlayY: next.y })
   }
+  useEffect(() => {
+    const video = videoRef && videoRef.current
+    if (!video || !file || !file.type || !file.type.startsWith('video/')) return
+    if (isPlaying) {
+      const result = video.play()
+      if (result && typeof result.catch === 'function') result.catch(() => setLocalPlaying(false))
+    } else {
+      video.pause()
+    }
+  }, [isPlaying, file, sourceUrl, videoRef])
+
   const ratio = settings.aspectRatio || '9:16'
   const ratioClass = ratio === '16:9' ? 'aspect-video' : ratio === '1:1' ? 'aspect-square' : ratio === '4:5' ? 'aspect-[4/5]' : 'aspect-[9/16]'
   const visualStyle = {
@@ -78,7 +89,7 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
   }
   return <div className="relative flex h-full w-full items-center justify-center">
     <div className={'relative ' + ratioClass + ' h-full max-h-full max-w-full overflow-hidden rounded-[18px] border border-white/10 shadow-2xl'} style={{ aspectRatio: ratio.replace(':', ' / '), background: settings.backgroundColor || '#000', maxWidth: '100%' }}>
-      {file && file.type && file.type.startsWith('video/') ? <video key={sourceUrl} ref={videoRef} src={sourceUrl} playsInline preload="auto" onPlay={() => setLocalPlaying(true)} onPause={() => setLocalPlaying(false)} className="h-full w-full" style={visualStyle} /> : sourceUrl ? <img src={sourceUrl} alt="Xem trước video" className="h-full w-full" style={visualStyle} /> : <div className="grid h-full place-items-center text-sm text-white/45">Thêm video hoặc ảnh để bắt đầu</div>}
+      {file && file.type && file.type.startsWith('video/') ? <video key={sourceUrl} ref={videoRef} src={sourceUrl} playsInline preload="auto" onPlay={() => setLocalPlaying(true)} onPause={() => setLocalPlaying(false)} onEnded={() => { setLocalPlaying(false); if (isPlaying && onTogglePlayback) onTogglePlayback() }} className="h-full w-full" style={visualStyle} /> : sourceUrl ? <img src={sourceUrl} alt="Xem trước video" className="h-full w-full" style={visualStyle} /> : <div className="grid h-full place-items-center text-sm text-white/45">Thêm video hoặc ảnh để bắt đầu</div>}
       {settings.sticker && <div className="pointer-events-none absolute left-1/2 top-[38%] -translate-x-1/2 -translate-y-1/2 text-4xl drop-shadow-lg">{settings.sticker}</div>}
       {settings.overlayText && <div onPointerDown={e => { drag.current = true; e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId) }} onPointerMove={moveText} onPointerUp={() => { drag.current = false }} onPointerCancel={() => { drag.current = false }} className="absolute max-w-[90%] cursor-move select-none rounded px-2 py-1 text-center font-bold drop-shadow-lg touch-none" style={{ left: position.x + '%', top: position.y + '%', transform: 'translate(-50%,-50%)', color: settings.overlayColor || '#ffffff', fontSize: clamp(settings.overlayFontSize || 28, 12, 72) + 'px', fontFamily: settings.overlayFont || 'Arial,sans-serif', textShadow: '0 2px 5px #000' }}>{settings.overlayText}</div>}
       
@@ -98,7 +109,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
   const trim=(e,kind)=>{e.preventDefault();e.stopPropagation();drag.current=kind;e.currentTarget.setPointerCapture?.(e.pointerId)}
   const pointerMove=e=>{const el=viewport.current;if(!drag.current||!el)return;if(drag.current==='scrub'){el.scrollLeft=clamp(el.scrollLeft+lastX.current-e.clientX,0,Math.max(0,width-el.clientWidth));lastX.current=e.clientX;seekCenter();return}if(!active)return;const r=el.getBoundingClientRect(),t=clamp((el.scrollLeft+e.clientX-r.left-pad)/pps,0,total),local=clamp(t-start+active.in,0,active.sourceDuration||active.out||3),next=clips.slice(),i=next.findIndex(x=>x.id===active.id);if(drag.current==='in')next[i]={...active,in:clamp(local,0,Math.max(0,active.out-.25))};if(drag.current==='out')next[i]={...active,out:clamp(local,active.in+.25,active.sourceDuration||3)};onChangeClips(next)}
   const scrollTo=t=>{const el=viewport.current;if(!el)return;suppress.current=true;el.scrollLeft=clamp(pad+t*pps-el.clientWidth/2,0,Math.max(0,width-el.clientWidth));requestAnimationFrame(()=>{suppress.current=false})}
-  const rows=[{id:'video',label:'Video',icon:Film},...(settings.audioTrackTitle||settings.audioTrackFile||settings.audioTrackUrl||settings.audioSource==='pixabay'?[{id:'audio',label:'Âm thanh',icon:AudioLines}]:[]),...(settings.overlayText||settings.sticker?[{id:'text',label:'Văn bản',icon:Type}]:[])]
+  const rows=[{id:'video',label:'Video/Ảnh',icon:Film},{id:'audio',label:'+ Âm thanh',icon:AudioLines},{id:'text',label:'+ Văn bản',icon:Type}]
   let elapsed=0;const positions=clips.map(c=>{const x=elapsed;elapsed+=clipLen(c);return x})
   return <div className="space-y-1">
     <div className="flex items-center justify-between px-1 text-[10px] text-white/55"><span className="font-mono text-white">{fmt(playhead,true)} / {fmt(total)}</span><span>{clips.length} clip</span></div>
@@ -134,6 +145,10 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [toolbarMode, setToolbarMode] = useState('main')
   const [studioOpen, setStudioOpen] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
+  const [musicQuery, setMusicQuery] = useState('')
+  const [musicHits, setMusicHits] = useState([])
+  const [musicLoading, setMusicLoading] = useState(false)
+  const [musicError, setMusicError] = useState('')
   const mediaInput = useRef(null)
   const audioInput = useRef(null)
   const historyRef = useRef({ past: [], future: [], last: null, ignore: false })
@@ -280,6 +295,25 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     try { await onContinuePost(output) } catch (e) { setError(e && e.message ? e.message : 'Không thể chuyển sang bước đăng bài.') }
   }
 
+  const searchMusic = async () => {
+    setMusicLoading(true); setMusicError('')
+    try {
+      const params = new URLSearchParams({ q: musicQuery.trim(), order: musicQuery.trim() ? 'popular' : 'latest' })
+      const response = await fetch('/api/pixabay/audio?' + params.toString())
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Không tải được kho nhạc.')
+      setMusicHits(Array.isArray(data.hits) ? data.hits : [])
+      if (!data.hits?.length) setMusicError('Không tìm thấy nhạc. Thử từ khóa khác.')
+    } catch (e) {
+      setMusicHits([]); setMusicError(e?.message || 'Kho nhạc chưa kết nối.')
+    } finally { setMusicLoading(false) }
+  }
+  const chooseMusic = track => {
+    if (!track?.previewUrl) { setMusicError('Bản nhạc này chưa có tệp nghe thử.'); return }
+    update({ audioSource:'pixabay', audioTrackId:track.id, audioTrackTitle:track.title, audioTrackArtist:track.artist, audioTrackUrl:track.previewUrl, audioTrackPageUrl:track.pageUrl, isMuted:false })
+    setMusicError('')
+  }
+
   const activeToolData = TOOL_ITEMS.find(x => x.id === activeTool)
   const totalLabel = fmt(total)
   const toolClick = id => {
@@ -324,7 +358,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
             {(activeTool === 'trim' ? [{label:'Tách clip',run:split},{label:'Tốc độ',run:()=>update({playbackSpeed: selected.playbackSpeed === 2 ? 1 : (selected.playbackSpeed || 1) + 0.25})},{label:'Âm lượng',run:()=>setActiveTool('music')},{label:'Xóa nền',run:()=>setError('Xóa nền AI cần dịch vụ xử lý ảnh/video; hiện chưa kết nối.')},{label:'Bộ lọc',run:()=>setActiveTool('filter')},{label:'Animate',run:()=>update({animate:!selected.animate})},{label:'Lật/Xoay',run:()=>update({flipHorizontal:!selected.flipHorizontal,rotation:(Number(selected.rotation||0)+90)%360})},{label:'Xóa clip',run:remove}] : activeTool === 'music' ? [{label:'Thêm nhạc nền',run:()=>audioInput.current?.click()},{label:'Ghi âm',run:()=>setError('Ghi âm voiceover chưa được cấp quyền/kết nối trong phiên bản này.')},{label:'Hiệu ứng âm thanh',run:()=>setError('Chọn tệp âm thanh trong mục Thêm nhạc nền để thêm hiệu ứng.')},{label:'Tách tiếng video',run:()=>{update({audioSource:'extract-video'});setError('Đã chọn nguồn tiếng gốc; tách thành tệp riêng cần bộ xử lý media.')}}] : activeTool === 'text' ? [{label:'Thêm chữ',run:()=>document.getElementById('studio-overlay-text')?.focus()},{label:'Phụ đề tự động',run:()=>setError('Phụ đề tự động cần dịch vụ nhận dạng giọng nói; hiện chưa kết nối.')},{label:'Chữ nghệ thuật',run:()=>update({overlayFont:'Georgia,serif',overlayFontSize:36,overlayColor:'#fef08a'})}] : activeTool === 'effects' ? [{label:'Hiệu ứng video',run:()=>setActiveTool('filter')},{label:'Hiệu ứng cơ thể',run:()=>setError('Hiệu ứng cơ thể cần mô hình AI chưa được kết nối.')},{label:'Chuyển cảnh',run:()=>update({transition:selected.transition==='fade'?'none':'fade'})}] : [] ).map(item=><button key={item.label} type="button" onClick={item.run} className="min-h-9 shrink-0 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-[10px] font-semibold text-white active:bg-white/20">{item.label}</button>)}
           </div>
           {activeTool === 'trim' && <div className="grid grid-cols-2 gap-2"><button type="button" onClick={split} className={actionButton + ' bg-white/10'}><Scissors size={15} /> Tách tại playhead</button><button type="button" onClick={remove} className={actionButton + ' bg-red-400/10 text-red-100'}><Trash2 size={15} /> Xóa đoạn chọn</button><label className="col-span-2 flex items-center gap-2 text-white/65">Thời lượng ảnh<select disabled={!active || active.kind !== 'image'} value={active && active.kind === 'image' ? clipLen(active) : 3} onChange={e => { const d = Number(e.target.value); changeClips(clips.map(c => c.id === active.id ? { ...c, out: c.in + d, sourceDuration: c.in + d } : c)) }} className="ml-auto rounded-lg bg-white/10 px-2 py-1.5 text-white"><option value="2">2 giây</option><option value="3">3 giây</option><option value="4">4 giây</option><option value="5">5 giây</option><option value="6">6 giây</option><option value="8">8 giây</option></select></label></div>}
-          {activeTool === 'music' && <div className="space-y-3"><label className="flex items-center gap-2 rounded-lg bg-white/[0.05] p-2"><Music2 size={15} /><span className="min-w-0 flex-1 truncate">{selected.audioTrackTitle || 'Chưa chọn nhạc nền'}</span><input ref={audioInput} type="file" accept="audio/*,video/*" className="max-w-[150px] text-[10px]" onChange={e => { const f = e.currentTarget.files && e.currentTarget.files[0]; if (f) update({ audioTrackTitle: f.name, audioTrackFile: f, audioTrackUrl: URL.createObjectURL(f), audioSource: f.type.startsWith('video/') ? 'extract-video' : 'upload' }); e.currentTarget.value = '' }} /></label><label className="block text-white/70">Âm lượng tiếng gốc · {selected.originalVolume ?? 100}%<input className={rangeClass} type="range" min="0" max="100" value={selected.originalVolume ?? 100} onChange={e => update({ originalVolume: Number(e.target.value) })} /></label><label className="block text-white/70">Âm lượng nhạc · {selected.musicVolume ?? 30}%<input className={rangeClass} type="range" min="0" max="100" value={selected.musicVolume ?? 30} onChange={e => update({ musicVolume: Number(e.target.value) })} /></label><p className="text-[10px] text-amber-100/70">Âm thanh gốc và nhạc nền sẽ được trộn khi trình duyệt hỗ trợ Web Audio. Nếu xuất lỗi, hãy thử Chrome Android mới nhất.</p></div>}
+          {activeTool === 'music' && <div className="space-y-3"><div className="flex gap-2"><input value={musicQuery} onChange={e=>setMusicQuery(e.target.value)} placeholder="Tìm nhạc nền: chill, piano..." className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-xs text-white"/><button type="button" disabled={musicLoading} onClick={searchMusic} className="rounded-lg bg-white px-3 text-xs font-bold text-black disabled:opacity-50">{musicLoading?'...':'Tìm'}</button></div>{musicError&&<p role="status" className="text-[10px] text-amber-200">{musicError}</p>}<div className="max-h-24 space-y-1 overflow-y-auto">{musicHits.map(track=><div key={track.id} className="flex items-center gap-2 rounded-lg bg-white/[.05] p-2"><div className="min-w-0 flex-1"><div className="truncate text-[10px] font-semibold">{track.title}</div><div className="truncate text-[9px] text-white/50">{track.artist}</div></div><button type="button" onClick={()=>{const audio=new Audio(track.previewUrl);audio.play().catch(()=>setMusicError('Không phát được bản nghe thử.'))}} className="rounded bg-white/10 px-2 py-1 text-[10px]">Nghe</button><button type="button" onClick={()=>chooseMusic(track)} className="rounded bg-cyan-300 px-2 py-1 text-[10px] font-bold text-black">Chọn</button></div>)}</div><label className="flex items-center gap-2 rounded-lg bg-white/[0.05] p-2"><Music2 size={15} /><span className="min-w-0 flex-1 truncate">{selected.audioTrackTitle || 'Chưa chọn nhạc nền'}</span><input ref={audioInput} type="file" accept="audio/*,video/*" className="max-w-[150px] text-[10px]" onChange={e => { const f = e.currentTarget.files && e.currentTarget.files[0]; if (f) update({ audioTrackTitle: f.name, audioTrackFile: f, audioTrackUrl: URL.createObjectURL(f), audioSource: f.type.startsWith('video/') ? 'extract-video' : 'upload' }); e.currentTarget.value = '' }} /></label><label className="block text-white/70">Âm lượng tiếng gốc · {selected.originalVolume ?? 100}%<input className={rangeClass} type="range" min="0" max="100" value={selected.originalVolume ?? 100} onChange={e => update({ originalVolume: Number(e.target.value) })} /></label><label className="block text-white/70">Âm lượng nhạc · {selected.musicVolume ?? 30}%<input className={rangeClass} type="range" min="0" max="100" value={selected.musicVolume ?? 30} onChange={e => update({ musicVolume: Number(e.target.value) })} /></label><p className="text-[10px] text-amber-100/70">Âm thanh gốc và nhạc nền sẽ được trộn khi trình duyệt hỗ trợ Web Audio. Nếu xuất lỗi, hãy thử Chrome Android mới nhất.</p></div>}
           {activeTool === 'text' && <div className="space-y-2"><input id="studio-overlay-text" maxLength={120} value={selected.overlayText || ''} onChange={e => update({ overlayText: e.target.value })} placeholder="Nhập văn bản trên video" className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-sm" /><div className="grid grid-cols-3 gap-2"><label className="text-white/60">Màu chữ<input type="color" value={selected.overlayColor || '#ffffff'} onChange={e => update({ overlayColor: e.target.value })} className="mt-1 h-8 w-full rounded bg-transparent" /></label><label className="text-white/60">Cỡ chữ<select value={selected.overlayFontSize || 28} onChange={e => update({ overlayFontSize: Number(e.target.value) })} className="mt-1 w-full rounded bg-white/10 px-2 py-2 text-white"><option value="18">18</option><option value="24">24</option><option value="28">28</option><option value="36">36</option><option value="48">48</option></select></label><label className="text-white/60">Kiểu chữ<select value={selected.overlayFont || 'Arial,sans-serif'} onChange={e => update({ overlayFont: e.target.value })} className="mt-1 w-full rounded bg-white/10 px-2 py-2 text-white"><option value="Arial,sans-serif">Đậm</option><option value="Georgia,serif">Cổ điển</option><option value="monospace">Neon</option></select></label></div></div>}
           {activeTool === 'sticker' && <div className="flex flex-wrap gap-2">{['❤️', '✨', '🔥', '⭐', '😂', '🥰', '🎉', '🌈', '🎵', '💯', '🐱', '🌸'].map(s => <button key={s} type="button" onClick={() => update({ sticker: selected.sticker === s ? '' : s })} className={'grid h-10 w-10 place-items-center rounded-lg border text-xl ' + (selected.sticker === s ? 'border-cyan-300 bg-cyan-300/15' : 'border-white/10 bg-white/[0.04]')}>{s}</button>)}</div>}
           {activeTool === 'overlay' && <div className="space-y-2"><p className="text-white/65">Lớp phủ video/ảnh bổ sung chưa được kết nối với bộ xuất. Anh vẫn có thể thêm chữ hoặc nhãn dán ở các công cụ tương ứng.</p><button type="button" onClick={() => setActiveTool('text')} className={actionButton + ' bg-white/10'}><Type size={15} /> Thêm văn bản</button></div>}
