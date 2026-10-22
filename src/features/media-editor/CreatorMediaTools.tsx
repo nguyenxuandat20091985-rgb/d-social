@@ -156,10 +156,10 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
     setActiveTool('')
   }
 
-  if (mode === 'fullscreen') return <div className="absolute inset-0 z-20 pointer-events-none">
+  if (mode === 'fullscreen') return <div className="contents pointer-events-none">
     {activeTool === 'adjust' && <div
       aria-label="Kéo một ngón để di chuyển khung hình; chụm hoặc tách hai ngón để phóng to, thu nhỏ"
-      className="absolute left-0 top-0 z-10 h-[52dvh] w-full touch-none pointer-events-auto"
+      className="absolute left-0 top-0 z-[210] h-[52dvh] w-full touch-none pointer-events-auto"
       style={{ touchAction: 'none' }}
       onPointerDown={handleZoomPointerDown}
       onPointerMove={handleZoomPointerMove}
@@ -172,7 +172,7 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
         Kéo để di chuyển · Chụm 2 ngón để zoom
       </span>
     </div>}
-    {activeTool === 'music' && <div className="pointer-events-auto absolute bottom-[calc(190px+env(safe-area-inset-bottom))] left-3 right-3 z-30 mx-auto max-h-[min(28dvh,calc(100dvh-250px))] max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-[#101116]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
+    {activeTool === 'music' && <div className="pointer-events-auto absolute bottom-[calc(190px+env(safe-area-inset-bottom))] left-3 right-3 z-[220] mx-auto max-h-[min(28dvh,calc(100dvh-250px))] max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-[#101116]/95 p-3 text-white shadow-2xl backdrop-blur-xl">
       <div className="mb-2 flex items-center justify-between gap-2"><strong className="text-sm">Thư viện âm thanh</strong><button type="button" onClick={() => setActiveTool('')} className="rounded-full bg-white/10 px-3 py-1 text-xs">Đóng</button></div>
       <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/50" value={query} maxLength={100} onChange={e => setQuery(e.target.value)} placeholder="Tìm nhạc: chill, piano…" /><button type="button" disabled={loading} onClick={searchAudio} className="rounded-lg bg-white px-3 text-black disabled:opacity-50"><Search size={16}/></button></div>
       <button type="button" onClick={() => { update({audioSource:'original',audioTrackId:null,audioTrackTitle:null,audioTrackUrl:null,isMuted:false}); setActiveTool('') }} className="mt-2 rounded-lg border border-white/20 px-3 py-2 text-xs">Dùng âm thanh gốc</button>
