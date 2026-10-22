@@ -87,74 +87,40 @@ function PreviewPlayer({ file, videoRef, isPlaying, onTogglePlayback, settings =
 }
 
 function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, settings, storyMode }) {
-  const rail = useRef(null)
-  const trackRef = useRef(null)
-  const drag = useRef(null)
-  const urls = useMemo(() => new Map(clips.map(c => [c.id, URL.createObjectURL(c.file)])), [clips.map(c => c.id).join('|')])
-  useEffect(() => () => urls.forEach(url => URL.revokeObjectURL(url)), [urls])
-  const active = clips.find(c => c.id === activeId) || clips[0]
-  const total = clips.reduce((s, c) => s + clipLen(c), 0)
-  const activeIndex = clips.findIndex(c => c.id === active?.id)
-  const activeStart = clips.slice(0, Math.max(0, activeIndex)).reduce((s, c) => s + clipLen(c), 0)
-  const pct = t => clamp(t / Math.max(total, .1) * 100, 0, 100)
-  const startDrag = (e, mode) => { e.preventDefault(); e.stopPropagation(); drag.current = mode; e.currentTarget.setPointerCapture && e.currentTarget.setPointerCapture(e.pointerId) }
-  const pointerMove = e => {
-    if (!drag.current || !rail.current) return
-    const r = (trackRef.current || rail.current).getBoundingClientRect()
-    const t = clamp((e.clientX - r.left) / r.width, 0, 1) * total
-    if (drag.current === 'playhead') { onSeek(t); return }
-    if (!active) return
-    const local = clamp(t - activeStart + active.in, 0, active.sourceDuration || active.out || 3)
-    const next = clips.slice(), i = next.findIndex(c => c.id === active.id)
-    if (drag.current === 'in') next[i] = { ...active, in: clamp(local, 0, Math.max(0, active.out - .25)) }
-    if (drag.current === 'out') next[i] = { ...active, out: clamp(local, active.in + .25, active.sourceDuration || 3) }
-    onChangeClips(next)
-  }
-  const trackClick = e => {
-    if (drag.current || !rail.current) return
-    const r = e.currentTarget.getBoundingClientRect()
-    onSeek(clamp((e.clientX - r.left) / r.width, 0, 1) * total)
-  }
-  const trackRows = [
-    { id: 'video', label: 'Video', icon: Film, color: 'bg-emerald-400/15', visible: true },
-    { id: 'audio', label: 'Âm thanh', icon: AudioLines, color: 'bg-violet-400/15', visible: !!(settings.audioTrackTitle || settings.audioTrackFile || settings.audioTrackUrl || settings.audioSource === 'pixabay') },
-    { id: 'text', label: 'Văn bản', icon: Type, color: 'bg-amber-300/15', visible: !!(settings.overlayText || settings.sticker) },
-  ].filter(row => row.id === 'video' || row.visible)
-  return <div className="space-y-1.5">
-    <div className="flex items-center justify-between text-[10px] text-white/65"><span className="font-mono text-white">{fmt(playhead, true)} <span className="text-white/35">/</span> {fmt(total)}</span><span>{clips.length} đoạn · {fmt(total)}</span></div>
-    <div className="relative">
-      <div className="mb-0.5 flex items-center justify-between px-1 text-[9px] text-white/35"><span>TIMELINE</span><span>KÉO ĐỂ TUA · CHỌN ĐOẠN ĐỂ SỬA</span></div>
-      <div ref={rail} className="relative space-y-1.5 touch-none select-none" onPointerMove={pointerMove} onPointerUp={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-        {trackRows.map(row => {
-          const Icon = row.icon
-          return <div key={row.id} className="flex min-h-[48px] items-stretch gap-2">
-            <div className="flex w-[54px] shrink-0 flex-col justify-center gap-1 rounded-lg bg-white/[0.035] px-1.5 text-[9px] text-white/50"><Icon size={13} /><span>{row.label}</span></div>
-            <div ref={row.id === 'video' ? trackRef : undefined} onClick={trackClick} className={'relative flex min-w-0 flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.07] ' + row.color} onPointerDown={e => { if (row.id !== 'video') return; drag.current = 'playhead'; e.currentTarget.setPointerCapture?.(e.pointerId); const r = e.currentTarget.getBoundingClientRect(); onSeek(clamp((e.clientX-r.left)/r.width,0,1)*total) }}>
-              {row.id === 'video' && clips.map((c, i) => {
-                const d = clipLen(c)
-                return <button key={c.id} type="button" onClick={e => { e.stopPropagation(); onSelect(c.id); onSeek(clips.slice(0, i).reduce((s, x) => s + clipLen(x), 0)) }} className={'relative min-w-0 overflow-hidden border-r border-black/35 ' + (c.id === activeId ? 'ring-2 ring-inset ring-cyan-300' : '')} style={{ width: (d / Math.max(total, .1) * 100) + '%' }}>
-                  {c.kind === 'image' ? <img src={urls.get(c.id)} alt="" className="h-full w-full object-cover" /> : <video muted playsInline preload="metadata" src={urls.get(c.id)} className="h-full w-full object-cover" />}
-                  <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-[8px] text-white">{i + 1} · {fmt(d)}</span>
-                </button>
-              })}
-              {row.id === 'video' && active && <><div onPointerDown={e => startDrag(e, 'in')} className="absolute bottom-0 top-0 z-30 w-11 cursor-ew-resize touch-none border-l-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart) + '%', transform: 'translateX(-50%)' }} aria-label="Kéo điểm đầu clip" /><div onPointerDown={e => startDrag(e, 'out')} className="absolute bottom-0 top-0 z-30 w-11 cursor-ew-resize touch-none border-r-2 border-cyan-100 bg-cyan-300/35" style={{ left: pct(activeStart + clipLen(active)) + '%', transform: 'translateX(-50%)' }} aria-label="Kéo điểm cuối clip" /></>}
-              {row.id === 'audio' && <div className="flex h-12 w-full items-center gap-[2px] overflow-hidden px-1.5">{Array.from({ length: 96 }, (_, i) => <span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/80" style={{ height: (18 + ((i * 17 + 11) % 25)) + '%' }} />)}{!row.visible && <span className="absolute inset-0 grid place-items-center bg-[#1b1925]/80 text-[10px] text-white/35">+ Thêm âm thanh</span>}{row.visible && <span className="absolute left-2 top-1 rounded bg-black/35 px-1.5 py-0.5 text-[9px] text-violet-100">{settings.audioTrackTitle || 'Âm thanh gốc'}</span>}</div>}
-              {row.id === 'text' && <div className="flex h-12 w-full items-center px-1.5">{row.visible ? <div className="flex h-6 w-full items-center rounded-md border border-amber-200/30 bg-amber-300/25 px-2 text-[10px] text-amber-50">{settings.sticker ? settings.sticker + ' ' : ''}{settings.overlayText || 'Nhãn dán'}</div> : <span className="w-full text-center text-[10px] text-white/35">+ Thêm văn bản</span>}</div>}
-            </div>
-          </div>
-        })}
-        <div className="pointer-events-none absolute bottom-0 left-[62px] right-0 top-0 z-20">
-          <div className="absolute bottom-0 top-0 w-[2px] bg-white shadow-[0_0_6px_rgba(255,255,255,.65)]" style={{ left: (clamp(playhead / Math.max(total, .1), 0, 1) * 100) + '%' }}>
-            <div className="absolute -left-[3px] -top-1 h-2 w-2 rounded-sm bg-white" />
+  const viewport=useRef(null),drag=useRef(null),lastX=useRef(0),suppress=useRef(false)
+  const pps=44,total=clips.reduce((s,c)=>s+clipLen(c),0),active=clips.find(c=>c.id===activeId)||clips[0]
+  const idx=clips.findIndex(c=>c.id===active?.id),start=clips.slice(0,Math.max(0,idx)).reduce((s,c)=>s+clipLen(c),0)
+  const width=Math.max(600,total*pps+180)
+  const urls=useMemo(()=>new Map(clips.map(c=>[c.id,URL.createObjectURL(c.file)])),[clips.map(c=>c.id).join('|')])
+  useEffect(()=>()=>urls.forEach(URL.revokeObjectURL),[urls])
+  const seekCenter=()=>{const el=viewport.current;if(el&&!suppress.current)onSeek(clamp((el.scrollLeft+el.clientWidth/2)/pps,0,total))}
+  const trim=(e,kind)=>{e.preventDefault();e.stopPropagation();drag.current=kind;e.currentTarget.setPointerCapture?.(e.pointerId)}
+  const pointerMove=e=>{const el=viewport.current;if(!drag.current||!el)return;if(drag.current==='scrub'){el.scrollLeft=clamp(el.scrollLeft+lastX.current-e.clientX,0,Math.max(0,width-el.clientWidth));lastX.current=e.clientX;seekCenter();return}if(!active)return;const r=el.getBoundingClientRect(),t=clamp((el.scrollLeft+e.clientX-r.left)/pps,0,total),local=clamp(t-start+active.in,0,active.sourceDuration||active.out||3),next=clips.slice(),i=next.findIndex(x=>x.id===active.id);if(drag.current==='in')next[i]={...active,in:clamp(local,0,Math.max(0,active.out-.25))};if(drag.current==='out')next[i]={...active,out:clamp(local,active.in+.25,active.sourceDuration||3)};onChangeClips(next)}
+  const scrollTo=t=>{const el=viewport.current;if(!el)return;suppress.current=true;el.scrollLeft=clamp(t*pps-el.clientWidth/2,0,Math.max(0,width-el.clientWidth));requestAnimationFrame(()=>{suppress.current=false})}
+  const rows=[{id:'video',label:'Video',icon:Film},...(settings.audioTrackTitle||settings.audioTrackFile||settings.audioTrackUrl||settings.audioSource==='pixabay'?[{id:'audio',label:'Âm thanh',icon:AudioLines}]:[]),...(settings.overlayText||settings.sticker?[{id:'text',label:'Văn bản',icon:Type}]:[])]
+  let elapsed=0;const positions=clips.map(c=>{const x=elapsed;elapsed+=clipLen(c);return x})
+  return <div className="space-y-1">
+    <div className="flex items-center justify-between px-1 text-[10px] text-white/55"><span className="font-mono text-white">{fmt(playhead,true)} / {fmt(total)}</span><span>{clips.length} clip</span></div>
+    <div className="flex gap-2">
+      <div className="w-10 shrink-0 pt-5">{rows.map(row=>{const Icon=row.icon;return <div key={row.id} className="flex h-9 flex-col items-center justify-center gap-0.5 border-b border-white/[.04] text-[8px] text-white/40"><Icon size={12}/>{row.label}</div>})}</div>
+      <div className="relative min-w-0 flex-1">
+        <div ref={viewport} onScroll={seekCenter} onPointerDown={e=>{drag.current='scrub';lastX.current=e.clientX;e.currentTarget.setPointerCapture?.(e.pointerId)}} onPointerMove={pointerMove} onPointerUp={()=>{drag.current=null}} onPointerCancel={()=>{drag.current=null}} className="overflow-x-auto overflow-y-hidden touch-pan-y select-none [scrollbar-width:thin]">
+          <div className="relative" style={{width,minHeight:rows.length*36+20}}>
+            <div className="sticky top-0 z-10 h-5 border-b border-white/10 bg-[#0e0f14]">{Array.from({length:Math.ceil(width/pps)+1},(_,i)=><span key={i} className="absolute top-0 h-5 border-l border-white/15 pl-1 text-[8px] leading-5 text-white/40" style={{left:i*pps}}>{fmt(i)}</span>)}</div>
+            {rows.map(row=><div key={row.id} className="relative h-9 border-b border-white/[.04]">
+              {row.id==='video'&&clips.map((clip,i)=>{const d=clipLen(clip),left=positions[i]*pps,w=Math.max(12,d*pps);return <button key={clip.id} type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();onSelect(clip.id);onSeek(positions[i]);scrollTo(positions[i]+d/2)}} className={'absolute inset-y-0 overflow-hidden rounded border border-white/10 '+(clip.id===activeId?'ring-1 ring-inset ring-white':'')} style={{left,width:w,background:'#20242a'}}>{clip.kind==='image'?<img src={urls.get(clip.id)} alt="" className="h-full w-full object-cover"/>:<video muted playsInline preload="metadata" src={urls.get(clip.id)} className="h-full w-full object-cover"/>}<span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-left text-[8px] leading-3 text-white">{i+1} · {fmt(d)}</span></button>})}
+              {row.id==='audio'&&<div className="absolute inset-y-1 left-0 flex items-center gap-[2px] overflow-hidden rounded bg-violet-400/15 px-1" style={{width:Math.max(0,total*pps)}}>{Array.from({length:Math.max(1,Math.floor(total*2))},(_,i)=><span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/70" style={{height:(20+(i*17)%65)+'%'}}/>)}<span className="absolute left-2 text-[8px] text-violet-100">{settings.audioTrackTitle||'Âm thanh'}</span></div>}
+              {row.id==='text'&&<div className="absolute inset-y-1 left-0 flex items-center rounded bg-amber-300/20 px-2 text-[9px] text-amber-50" style={{width:Math.max(40,total*pps)}}>{settings.sticker||''} {settings.overlayText||'Nhãn dán'}</div>}
+              {row.id==='video'&&active&&<><button type="button" onPointerDown={e=>trim(e,'in')} aria-label="Trim đầu clip" className="absolute inset-y-0 z-20 w-6 touch-none border-l-2 border-white bg-white/20" style={{left:start*pps}}/><button type="button" onPointerDown={e=>trim(e,'out')} aria-label="Trim cuối clip" className="absolute inset-y-0 z-20 w-6 touch-none border-r-2 border-white bg-white/20" style={{left:(start+clipLen(active))*pps-24}}/></>}
+            </div>)}
           </div>
         </div>
+        <div className="pointer-events-none absolute bottom-0 left-1/2 top-0 z-30 w-px bg-white shadow-[0_0_6px_rgba(255,255,255,.8)]"><span className="absolute -left-[3px] top-5 h-2 w-[7px] rounded-sm bg-white"/></div>
       </div>
-
     </div>
-    {storyMode && total > 60 && <p role="alert" className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-100">Tin 24 giờ tối đa 60 giây. Timeline hiện dài {fmt(total)}.</p>}
+    {storyMode&&total>60&&<p className="text-[10px] text-amber-100">Tin 24 giờ tối đa 60 giây.</p>}
   </div>
 }
-
 export function VideoTimelineEditor({ file, files: filesProp, settings, onChange, videoRef, isPlaying, onTogglePlayback, onOpenTool, onCloseEditor, trimModeActive = false, storyMode = false, onExport, onPublishStory, onContinuePost }) {
   const initialFiles = (filesProp && filesProp.length ? filesProp : file ? [file] : []).filter(f => f && f.type && (f.type.startsWith('image/') || f.type.startsWith('video/')))
   const [clips, setClips] = useState(() => initialFiles.map(makeClip))
