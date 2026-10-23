@@ -121,7 +121,7 @@ function Timeline({ clips, activeId, onSelect, onChangeClips, playhead, onSeek, 
             <div className="sticky top-0 z-10 h-5 border-b border-white/10 bg-[#0e0f14]">{Array.from({length:Math.ceil(width/pps)+1},(_,i)=><span key={i} className="absolute top-0 h-5 border-l border-white/15 pl-1 text-[8px] leading-5 text-white/40" style={{left:pad+i*pps}}>{fmt(i)}</span>)}</div>
             {rows.map(row=><div key={row.id} className="relative h-9 border-b border-white/[.04]">
               {row.id==='video'&&clips.map((clip,i)=>{const d=clipLen(clip),left=pad+positions[i]*pps,w=Math.max(12,d*pps);return <button key={clip.id} type="button" onPointerDown={e=>e.stopPropagation()} onClick={e=>{e.stopPropagation();onSelect(clip.id);onSeek(positions[i]);scrollTo(positions[i]+d/2)}} className={'absolute inset-y-0 overflow-hidden rounded border border-white/10 '+(clip.id===activeId?'z-[5] border-white ring-2 ring-inset ring-white shadow-[0_0_0_1px_rgba(255,255,255,.45)]':'border-white/15')} style={{left,width:w,background:'#20242a'}}>{clip.kind==='image'?<img src={urls.get(clip.id)} alt="" className="h-full w-full object-cover"/>:<video muted playsInline preload="metadata" src={urls.get(clip.id)} className="h-full w-full object-cover"/>}<span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1 text-left text-[8px] leading-3 text-white">{i+1} · {fmt(d)}</span></button>})}
-              {row.id==='audio'&&<div className="absolute inset-y-1 left-0 flex items-center gap-[2px] overflow-hidden rounded bg-violet-400/15 px-1" style={{left:pad,width:Math.max(0,total*pps)}}>{Array.from({length:Math.max(1,Math.floor(total*2))},(_,i)=><span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/70" style={{height:(20+(i*17)%65)+'%'}}/>)}<span className="absolute left-2 text-[8px] text-violet-100">{settings.audioTrackTitle||'Âm thanh'}</span></div>}
+              {row.id==='audio'&&<div className="absolute inset-y-1 left-0 flex items-center gap-[2px] overflow-hidden rounded bg-violet-400/15 px-1" style={{left:pad,width:Math.max(0,total*pps)}}>{settings.audioTrackUrl||settings.audioTrackFile ? <><span className="absolute inset-0 flex items-center gap-[2px] px-1">{Array.from({length:Math.max(1,Math.floor(total*3))},(_,i)=><span key={i} className="min-w-[2px] flex-1 rounded-sm bg-violet-300/70" style={{height:(18+Math.abs(Math.sin(i*2.1))*70)+'%'}}/>)}</span><span className="absolute left-2 top-0.5 rounded bg-violet-950/80 px-1 text-[8px] text-violet-100">{settings.audioTrackTitle||'Nhạc nền'}</span></> : <button type="button" onClick={()=>setActiveTool('music')} className="absolute inset-0 flex items-center gap-2 px-2 text-[10px] text-white/60"><Music2 size={13}/> + Thêm âm thanh</button>}</div>}
               {row.id==='text'&&<div className="absolute inset-y-1 left-0 flex items-center rounded bg-amber-300/20 px-2 text-[9px] text-amber-50" style={{left:pad,width:Math.max(40,total*pps)}}>{settings.sticker||''} {settings.overlayText||'Nhãn dán'}</div>}
               {row.id==='video'&&active&&<><button type="button" onPointerDown={e=>trim(e,'in')} aria-label="Trim đầu clip" className="absolute inset-y-0 z-20 w-6 touch-none border-l-2 border-white bg-white/20" style={{left:pad+start*pps}}/><button type="button" onPointerDown={e=>trim(e,'out')} aria-label="Trim cuối clip" className="absolute inset-y-0 z-20 w-6 touch-none border-r-2 border-white bg-white/20" style={{left:pad+(start+clipLen(active))*pps-24}}/></>}
             </div>)}
@@ -138,6 +138,12 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
   const [clips, setClips] = useState(() => initialFiles.map(makeClip))
   const [activeId, setActiveId] = useState(null)
   const [playhead, setPlayhead] = useState(0)
+  const [localPlayback, setLocalPlayback] = useState(false)
+  const playbackRef = useRef(false)
+  const playbackFrame = useRef(0)
+  const playbackStartedAt = useRef(0)
+  const playbackStartPosition = useRef(0)
+  const playbackState = Boolean(isPlaying || localPlayback)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportedFile, setExportedFile] = useState(null)
@@ -179,6 +185,21 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     return () => { cancelled = true }
   }, [clips.map(c => c.id + ':' + c.sourceDuration).join('|')])
   useEffect(() => {
+    if (!playbackState || !clips.length) return
+    playbackRef.current = true
+    playbackStartedAt.current = performance.now()
+    playbackStartPosition.current = playhead
+    const tick = now => {
+      if (!playbackRef.current) return
+      const next = playbackStartPosition.current + (now - playbackStartedAt.current) / 1000
+      if (next >= total) { setPlayhead(total); setLocalPlayback(false); playbackRef.current = false; if (isPlaying && onTogglePlayback) onTogglePlayback(); return }
+      setPlayhead(next)
+      playbackFrame.current = requestAnimationFrame(tick)
+    }
+    playbackFrame.current = requestAnimationFrame(tick)
+    return () => { playbackRef.current = false; cancelAnimationFrame(playbackFrame.current) }
+  }, [playbackState, clips.length, total])
+  useEffect(() => {
     const v = videoRef && videoRef.current
     if (!v || !active || active.kind !== 'video') return
     const sync = () => {
@@ -192,8 +213,10 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
     const v = videoRef && videoRef.current
     if (!v || !active || active.kind !== 'video') return
     const t = clamp(playhead - activeStart + active.in, active.in, active.out || active.sourceDuration || 0)
-    if (Number.isFinite(t) && Math.abs(v.currentTime - t) > .035) { try { v.currentTime = t } catch {} }
-  }, [playhead, active && active.id, activeStart, active && active.in, active && active.out, videoRef])
+    if (!playbackState && Number.isFinite(t) && Math.abs(v.currentTime - t) > .12) { try { v.currentTime = t } catch {} }
+    if (playbackState && v.paused) v.play().catch(() => { setLocalPlayback(false); playbackRef.current = false })
+    if (!playbackState && !v.paused) v.pause()
+  }, [playhead, active && active.id, activeStart, active && active.in, active && active.out, videoRef, playbackState])
   const seek = t => {
     const next = clamp(t, 0, total)
     setPlayhead(next)
@@ -344,7 +367,7 @@ export function VideoTimelineEditor({ file, files: filesProp, settings, onChange
 
       <div className="shrink-0 border-t border-white/10 bg-[#0e0f14] px-2 pb-2 pt-1">
         <div className="mb-2 flex h-8 items-center justify-center gap-5 border-b border-white/[.06]">
-          <button type="button" onClick={onTogglePlayback} aria-label={isPlaying?'Tạm dừng':'Phát'} className="grid h-8 w-8 place-items-center rounded-full text-white/90">{isPlaying ? <Pause size={15}/> : <Play size={15} fill="currentColor"/>}</button>
+          <button type="button" onClick={() => { const next = !playbackState; setLocalPlayback(next); playbackRef.current = next; if (onTogglePlayback) onTogglePlayback() }} aria-label={playbackState?'Tạm dừng':'Phát'} className="grid h-8 w-8 place-items-center rounded-full text-white/90">{playbackState ? <Pause size={15}/> : <Play size={15} fill="currentColor"/>}</button>
           <button type="button" onClick={undoClips} disabled={!historyRef.current.past.length} aria-label="Hoàn tác" className="grid h-8 w-8 place-items-center text-white/70 disabled:opacity-25"><Undo2 size={17}/></button>
           <button type="button" onClick={redoClips} disabled={!historyRef.current.future.length} aria-label="Làm lại" className="grid h-8 w-8 place-items-center text-white/70 disabled:opacity-25"><Redo2 size={17}/></button>
           <button type="button" onClick={toggleFullscreen} aria-label="Toàn màn hình" className="grid h-8 w-8 place-items-center text-white/70"><Maximize2 size={16}/></button>
