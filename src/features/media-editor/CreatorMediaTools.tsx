@@ -10,6 +10,7 @@ const FILTERS = [
   { id: 'vivid', label: 'Rực rỡ', css: 'saturate(1.45) contrast(1.05)' },
   { id: 'cool', label: 'Lạnh', css: 'saturate(.9) hue-rotate(12deg)' },
 ]
+const STICKERS = ['❤️','😍','🥰','😂','🤣','😭','🥹','😎','🥳','😘','🤗','😴','🤔','🙌','👏','💖','💔','💕','💯','✨','🔥','⭐','🌟','⚡','💫','☀️','🌈','🎉','🎊','🐱','🌸']
 const STICKER_GROUPS = [
   { label: 'Cảm xúc', items: ['❤️','😍','🥰','😂','🤣','😭','🥹','😎','🥳','😘','🤗','😴','🤔','🙌','👏','💖','💔','💕','💯','✨'] },
   { label: 'Biểu tượng', items: ['🔥','⭐','🌟','⚡','💫','☀️','🌈','☁️','🌙','☘️','🍀','🌸','🌷','🌻','🌹','💐','🎉','🎊','🎈','🎁','🏆','👑','💎','📌','💡','🎵','🎶','✅','❗','💬'] },
@@ -101,8 +102,6 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
       update({ panX: Math.round(panX), panY: Math.round(panY) })
     }
   }
-
-
 
   const searchAudio = async (event) => {
     event?.preventDefault?.()
@@ -249,6 +248,6 @@ export function CreatorMediaTools({ file, files, settings, onChange, mode = 'pos
     </section>
 
     <label className="flex items-start gap-2 text-xs leading-5"><input className="mt-1" type="checkbox" checked={!!selected.rightsConfirmed} onChange={e => update({ rightsConfirmed: e.target.checked })}/><span><ShieldCheck size={14} className="inline mr-1"/>Tôi có quyền đăng ảnh/video và âm thanh này, và có quyền sử dụng các tài nguyên đã chọn.</span></label>
-    <p className="text-[11px] d-muted">Lưu ý: các tùy chọn cắt, bộ lọc, chữ/sticker và trộn âm thanh chỉ được áp dụng vào tệp xuất khi dịch vụ xử lý media hỗ trợ tương ứng. Không khẳng định nội dung đã được làm sạch bản quyền chỉ dựa vào việc chọn nhạc.</p>
+    <p className="text-[11px] d-muted">Lưu ý: các tùy chọn cắt, bộ lọc, chữ/sticker và trộn âm thanh chỉ được áp dụng vào tệp khi xuất / đăng. Xem trước trên thiết bị có thể khác nhẹ so với bản đã xuất.</p>
   </div>
 }
